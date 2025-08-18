@@ -1,16 +1,27 @@
-// Force Node runtime (helps with streaming + req/res)
-export const config = { runtime: "nodejs" };
+// api/tts.js
+export const config = { runtime: "nodejs" }; // ensure Node runtime
 
-export default async function handler(req, res) {
-  // --- CORS ---
+function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept");
+  res.setHeader("Access-Control-Max-Age", "86400"); // cache preflight for a day
+}
+
+export default async function handler(req, res) {
+  setCors(res);
+
+  // MUST answer preflight with 204/200 and NO body
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Use POST" });
+  }
 
   try {
-    // Body can be parsed by Vercel; fall back to manual if needed
+    // Parse body (works both on Vercel and local)
     let body = req.body;
     if (!body || typeof body !== "object") {
       let raw = "";
@@ -25,7 +36,7 @@ export default async function handler(req, res) {
       text,
       voice = "alloy",
       format = "mp3",
-      model = "gpt-4o-mini-tts" // or "tts-1" / "tts-1-hd"
+      model = "gpt-4o-mini-tts"
     } = body || {};
 
     if (!text || !text.trim()) {
@@ -34,7 +45,6 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      // This is the most common cause of 401
       return res.status(401).json({ error: "Missing OPENAI_API_KEY on server" });
     }
 
@@ -44,28 +54,23 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        input: text,
-        voice,
-        response_format: format,
-      }),
+      body: JSON.stringify({ model, input: text, voice, response_format: format }),
     });
 
-    // If OpenAI returns an error, pass it through
     if (!r.ok) {
       const errTxt = await r.text();
       res.status(r.status);
-      // keep a sane content type
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       return res.send(errTxt);
     }
 
-    // Stream back MP3
+    // Stream MP3 back
     res.setHeader("Content-Type", "audio/mpeg");
+    // keep CORS on the stream response too
+    setCors(res);
     r.body.pipe(res);
   } catch (e) {
     console.error("TTS error:", e);
-    res.status(500).json({ error: e?.message || "TTS failed" });
+    return res.status(500).json({ error: e?.message || "TTS failed" });
   }
 }
