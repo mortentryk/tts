@@ -1,6 +1,4 @@
-// api/tts.js — Vercel Serverless Function (CommonJS) with health check
-// Works in plain Vercel projects (no Next.js). Streams MP3 from LMNT.
-
+// api/tts.js — Vercel Serverless Function (CommonJS) with health check + LMNT
 const LMNT_URL = "https://api.lmnt.com/v1/ai/speech/bytes";
 
 function setCors(res) {
@@ -20,10 +18,9 @@ async function readJsonBody(req) {
   try { return JSON.parse(raw || "{}"); } catch { return {}; }
 }
 
-// tiny helper: read ?health=1 on GET to verify env & CORS quickly
 function getQueryParam(req, key) {
   try {
-    const u = new URL(req.url, "http://x");
+    const u = new URL(req.url, "http://local");
     return u.searchParams.get(key);
   } catch { return null; }
 }
@@ -33,12 +30,12 @@ module.exports = async (req, res) => {
 
   if (req.method === "OPTIONS") return res.status(204).end();
 
-  // Health check: https://<your-app>.vercel.app/api/tts?health=1
+  // Health check for fast debugging: .../api/tts?health=1
   if (req.method === "GET" && getQueryParam(req, "health") === "1") {
     return res.status(200).json({
       ok: true,
-      hasKey: !!process.env.LMNT_API_KEY, // should be true
-      note: "POST JSON { text } to synthesize. CORS is enabled."
+      hasKey: !!process.env.LMNT_API_KEY,
+      note: "POST JSON { text } to synthesize. CORS enabled."
     });
   }
 
@@ -53,12 +50,11 @@ module.exports = async (req, res) => {
 
     const apiKey = process.env.LMNT_API_KEY;
     if (!apiKey) {
-      // This is the most common cause of 500s → now returned clearly
       return res.status(500).json({ error: "Missing LMNT_API_KEY on server" });
     }
 
-    // Use safe defaults that LMNT accepts; ignore client voice/model
     const body = {
+      // LMNT-safe defaults; ignore any client voice/model to avoid mismatch
       voice: "ava",
       model: "blizzard",
       language: "auto",
@@ -85,7 +81,6 @@ module.exports = async (req, res) => {
       return res.send(txt || JSON.stringify({ error: "LMNT error" }));
     }
 
-    // Success → stream MP3
     res.setHeader("Content-Type", "audio/mpeg");
     setCors(res);
     r.body.pipe(res);
