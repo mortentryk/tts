@@ -1,5 +1,9 @@
-// api/tts.js
+// api/tts.js — Vercel Serverless Function (LMNT)
+// Docs: https://docs.lmnt.com/api-reference/speech/synthesize-speech-bytes
+
 export const config = { runtime: "nodejs" };
+
+const LMNT_URL = "https://api.lmnt.com/v1/ai/speech/bytes";
 
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -18,49 +22,13 @@ async function readJsonBody(req) {
   try { return JSON.parse(raw || "{}"); } catch { return {}; }
 }
 
-async function fetchWithRetry(url, options, { retries = 3, baseDelay = 600 } = {}) {
-  let res;
+async function fetchWithRetry(url, options, { retries = 2, baseDelay = 600 } = {}) {
   for (let i = 0; i <= retries; i++) {
-    res = await fetch(url, options);
-    if (res.status !== 429) return res;
-    let delayMs = baseDelay * Math.pow(2, i);
-    const ra = res.headers.get("retry-after");
-    const raNum = ra ? Number(ra) : NaN;
-    if (!Number.isNaN(raNum) && raNum > 0) delayMs = Math.max(delayMs, raNum * 1000);
-    if (i === retries) return res;
-    await new Promise((r) => setTimeout(r, delayMs));
+    const r = await fetch(url, options);
+    if (r.status !== 429) return r;
+    // simple backoff (LMNT may rate limit briefly)
+    await new Promise((res) => setTimeout(res, baseDelay * Math.pow(2, i)));
   }
-  return res;
-}
-
-async function callOpenAI(text, voice, format, model, apiKey) {
-  return fetchWithRetry("https://api.openai.com/v1/audio/speech", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model, input: text, voice, response_format: format }),
-  }, { retries: 3, baseDelay: 600 });
-}
-
-async function callElevenLabs(text, voiceId, apiKey) {
-  // Stream MP3
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
-  return fetchWithRetry(url, {
-    method: "POST",
-    headers: {
-      "xi-api-key": apiKey,
-      "Content-Type": "application/json",
-      "Accept": "audio/mpeg",
-    },
-    body: JSON.stringify({
-      text,
-      // Basic reasonable defaults (adjust if you want)
-      model_id: "eleven_monolingual_v1",
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
-  }, { retries: 2, baseDelay: 600 });
 }
 
 export default async function handler(req, res) {
@@ -69,54 +37,48 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
 
   try {
-    const { text, voice = "alloy", format = "mp3", model = "gpt-4o-mini-tts", provider } = await readJsonBody(req);
-    if (!text || !String(text).trim()) return res.status(400).json({ error: "Missing text" });
+    const {
+      text,
+      voice = "ava",        // pick an LMNT voice
+      model = "blizzard",   // LMNT model
+      format = "mp3",
+      language = "auto",
+      sample_rate = 24000
+    } = await readJsonBody(req);
 
-    const openaiKey = process.env.OPENAI_API_KEY;
-    const elKey = process.env.ELEVENLABS_API_KEY;
-    const elVoice = process.env.ELEVENLABS_VOICE_ID;
-
-    const wantOpenAI = provider !== "11labs"; // default OpenAI unless forced
-    let r;
-
-    if (wantOpenAI && openaiKey) {
-      r = await callOpenAI(text, voice, format, model, openaiKey);
-      // If OpenAI is out of quota AND we have 11labs creds, try fallback
-      if (r && !r.ok) {
-        try {
-          const err = await r.clone().json();
-          const code = err?.error?.code;
-          if (code === "insufficient_quota" && elKey && elVoice) {
-            // fall through to 11labs
-            r = undefined;
-          }
-        } catch { /* ignore JSON parse errors */ }
-      }
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: "Missing text" });
     }
 
-    if (!r && elKey && elVoice) {
-      r = await callElevenLabs(text, elVoice, elKey);
+    const apiKey = process.env.LMNT_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Missing LMNT_API_KEY on server" });
     }
 
-    if (!r) {
-      return res.status(500).json({ error: "No TTS provider available (missing keys?)" });
-    }
+    const r = await fetchWithRetry(LMNT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey
+      },
+      body: JSON.stringify({ voice, text, model, language, format, sample_rate })
+    });
 
-    if (!r.ok) {
+    if (!r || !r.ok) {
       let body = "";
       try { body = await r.text(); } catch {}
-      res.status(r.status);
+      res.status(r ? r.status : 500);
       setCors(res);
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       return res.send(body || JSON.stringify({ error: "TTS failed" }));
     }
 
-    // Success: stream audio/mpeg
-    res.setHeader("Content-Type", "audio/mpeg");
+    // Stream MP3 back
     setCors(res);
+    res.setHeader("Content-Type", "audio/mpeg");
     r.body.pipe(res);
   } catch (e) {
-    console.error("TTS error:", e);
+    console.error("LMNT TTS error:", e);
     setCors(res);
     return res.status(500).json({ error: e?.message || "TTS failed" });
   }
