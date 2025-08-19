@@ -1,13 +1,11 @@
-// api/tts.js — Vercel Serverless Function (LMNT)
-// Docs: https://docs.lmnt.com/api-reference/speech/synthesize-speech-bytes
-
-export const config = { runtime: "nodejs" };
+// api/tts.js — Vercel Serverless Function (CommonJS) with health check
+// Works in plain Vercel projects (no Next.js). Streams MP3 from LMNT.
 
 const LMNT_URL = "https://api.lmnt.com/v1/ai/speech/bytes";
 
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept");
   res.setHeader("Access-Control-Max-Age", "86400");
 }
@@ -22,64 +20,78 @@ async function readJsonBody(req) {
   try { return JSON.parse(raw || "{}"); } catch { return {}; }
 }
 
-async function fetchWithRetry(url, options, { retries = 2, baseDelay = 600 } = {}) {
-  for (let i = 0; i <= retries; i++) {
-    const r = await fetch(url, options);
-    if (r.status !== 429) return r;
-    // simple backoff (LMNT may rate limit briefly)
-    await new Promise((res) => setTimeout(res, baseDelay * Math.pow(2, i)));
-  }
+// tiny helper: read ?health=1 on GET to verify env & CORS quickly
+function getQueryParam(req, key) {
+  try {
+    const u = new URL(req.url, "http://x");
+    return u.searchParams.get(key);
+  } catch { return null; }
 }
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   setCors(res);
+
   if (req.method === "OPTIONS") return res.status(204).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
+
+  // Health check: https://<your-app>.vercel.app/api/tts?health=1
+  if (req.method === "GET" && getQueryParam(req, "health") === "1") {
+    return res.status(200).json({
+      ok: true,
+      hasKey: !!process.env.LMNT_API_KEY, // should be true
+      note: "POST JSON { text } to synthesize. CORS is enabled."
+    });
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Use POST" });
+  }
 
   try {
-    const {
-      text,
-      voice = "ava",        // pick an LMNT voice
-      model = "blizzard",   // LMNT model
-      format = "mp3",
-      language = "auto",
-      sample_rate = 24000
-    } = await readJsonBody(req);
-
-    if (!text || !String(text).trim()) {
-      return res.status(400).json({ error: "Missing text" });
-    }
+    const { text } = await readJsonBody(req);
+    const clean = (text || "").toString().trim();
+    if (!clean) return res.status(400).json({ error: "Missing text" });
 
     const apiKey = process.env.LMNT_API_KEY;
     if (!apiKey) {
+      // This is the most common cause of 500s → now returned clearly
       return res.status(500).json({ error: "Missing LMNT_API_KEY on server" });
     }
 
-    const r = await fetchWithRetry(LMNT_URL, {
+    // Use safe defaults that LMNT accepts; ignore client voice/model
+    const body = {
+      voice: "ava",
+      model: "blizzard",
+      language: "auto",
+      format: "mp3",
+      sample_rate: 24000,
+      text: clean
+    };
+
+    const r = await fetch(LMNT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-API-Key": apiKey
       },
-      body: JSON.stringify({ voice, text, model, language, format, sample_rate })
+      body: JSON.stringify(body)
     });
 
-    if (!r || !r.ok) {
-      let body = "";
-      try { body = await r.text(); } catch {}
-      res.status(r ? r.status : 500);
+    if (!r.ok) {
+      const txt = await r.text().catch(() => "");
+      console.error("LMNT error:", r.status, txt);
+      res.status(r.status);
       setCors(res);
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.send(body || JSON.stringify({ error: "TTS failed" }));
+      return res.send(txt || JSON.stringify({ error: "LMNT error" }));
     }
 
-    // Stream MP3 back
-    setCors(res);
+    // Success → stream MP3
     res.setHeader("Content-Type", "audio/mpeg");
+    setCors(res);
     r.body.pipe(res);
   } catch (e) {
-    console.error("LMNT TTS error:", e);
+    console.error("TTS handler error:", e);
     setCors(res);
-    return res.status(500).json({ error: e?.message || "TTS failed" });
+    return res.status(500).json({ error: e?.message || "TTS failed in handler" });
   }
-}
+};
