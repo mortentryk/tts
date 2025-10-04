@@ -1,4 +1,5 @@
 // storyLoader.ts – Loader data fra Google Sheets i stedet for statisk objekt
+import { GameStats } from '../types/game';
 
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQj01dDmjG2S4sXBXeLmZJMOzoowcP-Neq7H9BVlX4qt_Hr2T8HDcu21ZYQxJifhOKjKesv8Yl-7F9x/pub?output=csv"; // Public CSV link fra Google Sheets
 
@@ -16,7 +17,7 @@ const FALLBACK_STORY = {
     id: "2",
     text: "Du går forsigtigt ind i hulen. Efter et par meter opdager du at gulvet er dækket af løse sten og skarpe klippestykker. Du må være forsigtig for ikke at snuble.",
     check: {
-      stat: "Evner",
+      stat: "Evner" as keyof GameStats,
       dc: 8,
       success: "4",
       fail: "5"
@@ -87,7 +88,7 @@ const FALLBACK_STORY = {
     id: "11",
     text: "Du går hen til tronen. Når du nærmer dig, begynder skelettet at bevæge sig! Kongen rejser sig op og stirrer på dig.",
     check: {
-      stat: "Held",
+      stat: "Held" as keyof GameStats,
       dc: 8,
       success: "12",
       fail: "13"
@@ -182,7 +183,7 @@ function buildStoryObject(rows: any[]) {
     if (row.check_stat || row.check_dc || row.check_type || row.check_success || row.check_fail) {
       scene.check = {
         type: row.check_type || "roll",
-        stat: row.check_stat || "",
+        stat: (row.check_stat || "") as keyof GameStats,
         dc: isNaN(Number(row.check_dc)) ? 0 : Number(row.check_dc),
         success: row.check_success || "",
         fail: row.check_fail || ""

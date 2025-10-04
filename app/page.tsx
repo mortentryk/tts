@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GameStats, StoryNode, SaveData } from '../types/game';
 import { loadStoryFromSheet } from '../lib/storyLoader';
 
