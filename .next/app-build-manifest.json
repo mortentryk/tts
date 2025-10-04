@@ -1,14 +1,3 @@
 {
-  "pages": {
-    "/api/tts/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/tts/route.js"
-    ],
-    "/icon/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/icon/route.js"
-    ]
-  }
+  "pages": {}
 }
