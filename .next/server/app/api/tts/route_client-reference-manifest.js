@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/tts/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"/Users/christianhjorth/tts/":[],"/Users/christianhjorth/tts/app/api/tts/route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}}
