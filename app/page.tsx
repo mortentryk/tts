@@ -23,11 +23,11 @@ function hashText(t: string): string {
 // Cache object URLs so we don't re-fetch the same audio
 const audioCache = new Map<string, string>(); // key -> objectURL
 
-// Cloud TTS for web — supports multiple providers
-async function speakViaCloud(text: string, provider: 'openai' | 'lmnt' = 'openai'): Promise<void> {
+// Cloud TTS for web — OpenAI only
+async function speakViaCloud(text: string): Promise<void> {
   if (!text || !text.trim()) return;
 
-  const key = `${provider}-${hashText(text)}`;
+  const key = `openai-${hashText(text)}`;
   if (audioCache.has(key)) {
     const cached = audioCache.get(key);
     if (cached) {
@@ -47,7 +47,7 @@ async function speakViaCloud(text: string, provider: 'openai' | 'lmnt' = 'openai
   const res = await fetch(SERVER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, provider })
+    body: JSON.stringify({ text, provider: 'openai' })
   });
 
   if (!res.ok) {
@@ -55,7 +55,7 @@ async function speakViaCloud(text: string, provider: 'openai' | 'lmnt' = 'openai
     try { 
       msg = await res.text(); 
     } catch {}
-    const e = new Error(`${provider.toUpperCase()} TTS failed (${res.status})${msg ? `: ${msg.slice(0,180)}` : ""}`);
+    const e = new Error(`OpenAI TTS failed (${res.status})${msg ? `: ${msg.slice(0,180)}` : ""}`);
     (e as any).status = res.status;
     throw e;
   }
@@ -83,44 +83,14 @@ export default function Game() {
   const [speaking, setSpeaking] = useState(false);
   const [story, setStory] = useState<Record<string, StoryNode>>({});
   const [loading, setLoading] = useState(true);
-  const [ttsProvider, setTtsProvider] = useState<'openai' | 'lmnt'>('openai');
+  // Only OpenAI TTS now
 
   const passage = story[currentId];
 
-  // --- Web Speech API ---
-  const queueRef = useRef<string[]>([]);
-  const speechSynthesis = typeof window !== 'undefined' ? window.speechSynthesis : null;
-  
+  // --- TTS Controls ---
   const stopSpeak = useCallback(() => {
-    if (speechSynthesis) {
-      speechSynthesis.cancel();
-    }
     setSpeaking(false);
-    queueRef.current = [];
-  }, [speechSynthesis]);
-
-  const speakPassage = useCallback((text: string) => {
-    if (!text || !speechSynthesis) return;
-    stopSpeak();
-    queueRef.current = text.split(/(?<=[\.!\?…])\s+/);
-    
-    const playNext = () => {
-      const next = queueRef.current.shift();
-      if (!next) { 
-        setSpeaking(false); 
-        return; 
-      }
-      setSpeaking(true);
-      
-      const utterance = new SpeechSynthesisUtterance(next);
-      utterance.lang = 'en-GB';
-      utterance.onend = playNext;
-      utterance.onerror = () => setSpeaking(false);
-      
-      speechSynthesis.speak(utterance);
-    };
-    playNext();
-  }, [stopSpeak, speechSynthesis]);
+  }, []);
 
   // Load story from Google Sheets
   useEffect(() => {
@@ -137,10 +107,7 @@ export default function Game() {
     loadStory();
   }, []);
 
-  // Auto-read on passage change (Web Speech API only)
-  useEffect(() => { 
-    if (passage && passage.text) speakPassage(passage.text); 
-  }, [currentId, speakPassage]);
+  // No auto-read - user controls when to play
 
   // --- Save/Load ---
   const saveGame = useCallback(async (id: string, s: GameStats) => {
@@ -219,12 +186,14 @@ export default function Game() {
     ttsCooldownRef.current = now;
 
     try {
-      await speakViaCloud(passage.text, ttsProvider);
+      setSpeaking(true);
+      await speakViaCloud(passage.text);
+      setSpeaking(false);
     } catch (e: any) {
-      alert(`${ttsProvider.toUpperCase()} TTS: ${e?.message || "Could not play online voice. Using local speech instead."}`);
-      speakPassage(passage.text);
+      setSpeaking(false);
+      alert(`OpenAI TTS: ${e?.message || "Could not play online voice."}`);
     }
-  }, [passage?.text, speakPassage, ttsProvider]);
+  }, [passage?.text]);
 
   const resetGame = useCallback(() => {
     localStorage.removeItem(SAVE_KEY);
@@ -276,53 +245,24 @@ export default function Game() {
       </div>
 
       <div className="border-t border-dungeon-border p-3 space-y-3">
-        {/* TTS Provider Selection */}
-        <div className="flex gap-2">
-          <button
-            className={`flex-1 p-2 rounded-lg text-center font-semibold transition-colors ${
-              ttsProvider === 'openai' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-dungeon-accent text-white hover:bg-dungeon-accent-active'
-            }`}
-            onClick={() => setTtsProvider('openai')}
-          >
-            OpenAI TTS
-          </button>
-          <button
-            className={`flex-1 p-2 rounded-lg text-center font-semibold transition-colors ${
-              ttsProvider === 'lmnt' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-dungeon-accent text-white hover:bg-dungeon-accent-active'
-            }`}
-            onClick={() => setTtsProvider('lmnt')}
-          >
-            LMNT TTS
-          </button>
-        </div>
-
         {/* TTS Controls */}
         <div className="flex gap-2.5">
-          <button
-            className={`flex-1 bg-dungeon-accent p-3 rounded-lg text-center font-semibold text-white hover:bg-dungeon-accent-active transition-colors ${
-              speaking ? 'bg-dungeon-accent-active' : ''
+          <button 
+            className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors ${
+              speaking ? 'bg-green-700' : ''
             }`}
-            onClick={() => passage?.text && speakPassage(passage.text)}
-          >
-            {speaking ? "Read Again" : "Read (Local)"}
-          </button>
-
-          <button 
-            className="flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors"
             onClick={speakCloudThrottled}
+            disabled={speaking}
           >
-            Read ({ttsProvider.toUpperCase()})
+            {speaking ? "🎙️ Playing..." : "🎙️ Read Story"}
           </button>
 
           <button 
-            className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors"
+            className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors disabled:bg-gray-600"
             onClick={stopSpeak}
+            disabled={!speaking}
           >
-            Stop
+            ⏹️ Stop
           </button>
         </div>
 
