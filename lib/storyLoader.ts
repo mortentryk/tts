@@ -63,11 +63,14 @@ const FALLBACK_STORY = {
   },
   "8": {
     id: "8",
-    text: "Du går til venstre og finder en lille grotte med en underjordisk sø. I vandet kan du se noget der glimter på bunden.",
-    choices: [
-      { label: "Dyk ned efter det glimtende", goto: "10" },
-      { label: "Gå tilbage til forgreningen", goto: "7" }
-    ]
+    text: "Du går til venstre og finder en lille grotte med en underjordisk sø. I vandet kan du se noget der glimter på bunden. Du skal bruge din Udholdenhed for at dykke ned i det kolde vand.",
+    check: {
+      type: "roll",
+      stat: "Udholdenhed" as keyof GameStats,
+      dc: 12,
+      success: "10",
+      fail: "11a"
+    }
   },
   "9": {
     id: "9",
@@ -79,9 +82,16 @@ const FALLBACK_STORY = {
   },
   "10": {
     id: "10",
-    text: "Du dykker ned og finder flere guldmønter! Når du kommer op igen, har du fundet en værdifuld skat.",
+    text: "Du dykker ned og finder flere guldmønter! Når du kommer op igen, har du fundet en værdifuld skat. Din Udholdenhed var stærk nok til at klare det kolde vand.",
     choices: [
       { label: "Fortsæt din rejse", goto: "7" }
+    ]
+  },
+  "11a": {
+    id: "11a",
+    text: "Det kolde vand er for hårdt for dig. Du mister 2 Udholdenhed point og må give op på dykkeforsøget.",
+    choices: [
+      { label: "Gå tilbage til forgreningen", goto: "7" }
     ]
   },
   "11": {
