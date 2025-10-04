@@ -94,6 +94,11 @@ export default function Game() {
     failurePassage: string;
   } | null>(null);
   
+  // Voice command state
+  const [listening, setListening] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
+  
   // Only OpenAI TTS now
 
   const passage = story[currentId];
@@ -219,6 +224,8 @@ export default function Game() {
       // Show a more user-friendly error message
       if (e?.message?.includes("API key not configured")) {
         alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
+      } else if (e?.message?.includes("Incorrect API key")) {
+        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
       } else {
         alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
       }
