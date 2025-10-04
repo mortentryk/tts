@@ -83,6 +83,17 @@ export default function Game() {
   const [speaking, setSpeaking] = useState(false);
   const [story, setStory] = useState<Record<string, StoryNode>>({});
   const [loading, setLoading] = useState(true);
+  
+  // Dice roll state
+  const [pendingDiceRoll, setPendingDiceRoll] = useState<{
+    stat: keyof GameStats;
+    roll: number;
+    total: number;
+    success: boolean;
+    successPassage: string;
+    failurePassage: string;
+  } | null>(null);
+  
   // Only OpenAI TTS now
 
   const passage = story[currentId];
@@ -144,6 +155,7 @@ export default function Game() {
   useEffect(() => {
     if (!passage || !passage.check) { 
       rolledForPassageRef.current = null; 
+      setPendingDiceRoll(null);
       return; 
     }
     if (rolledForPassageRef.current === passage.id) return;
@@ -154,6 +166,7 @@ export default function Game() {
     const total = roll + (stats[stat] || 0);
     const ok = total >= dc;
 
+    // Apply Udholdenhed penalty before showing the result
     if (!ok && stat === "Udholdenhed") {
       setStats(prev => ({ 
         ...prev, 
@@ -161,17 +174,29 @@ export default function Game() {
       }));
     }
 
-    const message = `${stat}: ${stats[stat]}  •  Roll: ${roll}  •  Total: ${total}  →  ${ok ? "Success" : "Failure"}`;
-    
-    if (window.confirm(`Dice Roll\n\n${message}\n\nClick OK to continue`)) {
-      goTo(ok ? success : fail);
-    }
+    // Set pending dice roll state instead of showing popup
+    setPendingDiceRoll({
+      stat,
+      roll,
+      total,
+      success: ok,
+      successPassage: success,
+      failurePassage: fail
+    });
   }, [currentId, stats]);
 
   const goTo = useCallback((id: string) => {
     stopSpeak();
     setCurrentId(id);
   }, [stopSpeak]);
+
+  const handleDiceRollContinue = useCallback((success: boolean) => {
+    if (!pendingDiceRoll) return;
+    
+    const targetPassage = success ? pendingDiceRoll.successPassage : pendingDiceRoll.failurePassage;
+    setPendingDiceRoll(null);
+    goTo(targetPassage);
+  }, [pendingDiceRoll, goTo]);
 
   // --- Cloud TTS throttle (avoid spamming server) ---
   const ttsCooldownRef = useRef(0);
@@ -228,6 +253,44 @@ export default function Game() {
             {passage?.text || "Story not found. Please check your Google Sheets data."}
           </p>
         </div>
+
+        {/* Dice Roll Panel */}
+        {pendingDiceRoll && (
+          <div className="mb-6 p-4 bg-dungeon-surface border-2 border-dungeon-accent rounded-lg">
+            <div className="text-center mb-4">
+              <h3 className="text-xl font-bold text-dungeon-accent mb-2">🎲 Dice Roll Result</h3>
+              <div className="text-white space-y-1">
+                <p className="text-lg">
+                  <span className="font-semibold">{pendingDiceRoll.stat}:</span> {stats[pendingDiceRoll.stat]}
+                </p>
+                <p className="text-lg">
+                  <span className="font-semibold">Roll:</span> {pendingDiceRoll.roll}
+                </p>
+                <p className="text-lg">
+                  <span className="font-semibold">Total:</span> {pendingDiceRoll.total}
+                </p>
+                <p className={`text-xl font-bold ${pendingDiceRoll.success ? 'text-green-400' : 'text-red-400'}`}>
+                  {pendingDiceRoll.success ? '✅ Success!' : '❌ Failure!'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => handleDiceRollContinue(true)}
+                className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                Continue (Success)
+              </button>
+              <button
+                onClick={() => handleDiceRollContinue(false)}
+                className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                Continue (Failure)
+              </button>
+            </div>
+          </div>
+        )}
 
         {(!passage?.check && passage?.choices) && (
           <div className="space-y-3">
