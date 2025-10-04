@@ -1,3 +1,4 @@
 {
+  "/icon/route": "app/icon/route.js",
   "/api/tts/route": "app/api/tts/route.js"
 }
