@@ -42,19 +42,17 @@ export async function POST(request: NextRequest) {
     }
 
     // OpenAI TTS only
-    const envKey = process.env.OPENAI_API_KEY;
-    const fallbackKey = "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";
-    const apiKey = envKey || fallbackKey;
-    
-    console.log("Debug - envKey exists:", !!envKey);
-    console.log("Debug - envKey length:", envKey ? envKey.length : 0);
-    console.log("Debug - using fallback:", !envKey);
-    
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ 
         error: "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable." 
       }, { status: 500 });
     }
+
+    // Debug: Log the first and last few characters of the API key
+    console.log("API Key length:", apiKey.length);
+    console.log("API Key start:", apiKey.substring(0, 10));
+    console.log("API Key end:", apiKey.substring(apiKey.length - 10));
 
     const body = {
       model: "tts-1",
