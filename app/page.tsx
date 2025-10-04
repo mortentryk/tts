@@ -338,11 +338,11 @@ export default function Game() {
     const total = roll + (stats[stat] || 0);
     const ok = total >= dc;
 
-    // Apply Udholdenhed penalty before showing the result
-    if (!ok && stat === "Udholdenhed") {
+    // Apply stat penalty for failed rolls
+    if (!ok) {
       setStats(prev => ({ 
         ...prev, 
-        Udholdenhed: Math.max(0, prev.Udholdenhed - 2) 
+        [stat]: Math.max(0, prev[stat] - 2) 
       }));
     }
 
@@ -365,10 +365,10 @@ export default function Game() {
     console.log('✅ Navigation completed to:', id);
   }, [stopSpeak, stopVoiceListening]);
 
-  const handleDiceRollContinue = useCallback((success: boolean) => {
+  const handleDiceRollContinue = useCallback(() => {
     if (!pendingDiceRoll) return;
     
-    const targetPassage = success ? pendingDiceRoll.successPassage : pendingDiceRoll.failurePassage;
+    const targetPassage = pendingDiceRoll.success ? pendingDiceRoll.successPassage : pendingDiceRoll.failurePassage;
     setPendingDiceRoll(null);
     goTo(targetPassage);
   }, [pendingDiceRoll, goTo]);
@@ -673,18 +673,16 @@ export default function Game() {
               </div>
             </div>
             
-            <div className="flex gap-3 justify-center">
+            <div className="flex justify-center">
               <button
-                onClick={() => handleDiceRollContinue(true)}
-                className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+                onClick={handleDiceRollContinue}
+                className={`px-8 py-3 text-white font-semibold rounded-lg transition-colors ${
+                  pendingDiceRoll.success 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
               >
-                Continue (Success)
-              </button>
-              <button
-                onClick={() => handleDiceRollContinue(false)}
-                className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
-              >
-                Continue (Failure)
+                {pendingDiceRoll.success ? '✅ Continue (Success)' : '❌ Continue (Failure)'}
               </button>
             </div>
           </div>
