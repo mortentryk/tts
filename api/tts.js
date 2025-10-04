@@ -1,5 +1,6 @@
-// api/tts.js — Vercel Serverless Function (CommonJS) with health check + LMNT
+// api/tts.js — Vercel Serverless Function with multiple TTS providers
 const LMNT_URL = "https://api.lmnt.com/v1/ai/speech/bytes";
+const OPENAI_URL = "https://api.openai.com/v1/audio/speech";
 
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -44,46 +45,76 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { text } = await readJsonBody(req);
+    const { text, provider = "openai" } = await readJsonBody(req);
     const clean = (text || "").toString().trim();
     if (!clean) return res.status(400).json({ error: "Missing text" });
 
-    const apiKey = process.env.LMNT_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: "Missing LMNT_API_KEY on server" });
+    let audioResponse;
+
+    if (provider === "openai") {
+      // OpenAI TTS
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Missing OPENAI_API_KEY on server" });
+      }
+
+      const body = {
+        model: "tts-1",
+        voice: "alloy", // alloy, echo, fable, onyx, nova, shimmer
+        input: clean,
+        response_format: "mp3"
+      };
+
+      audioResponse = await fetch(OPENAI_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(body)
+      });
+
+    } else if (provider === "lmnt") {
+      // LMNT TTS (fallback)
+      const apiKey = process.env.LMNT_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Missing LMNT_API_KEY on server" });
+      }
+
+      const body = {
+        voice: "ava",
+        model: "blizzard",
+        language: "auto",
+        format: "mp3",
+        sample_rate: 24000,
+        text: clean
+      };
+
+      audioResponse = await fetch(LMNT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey
+        },
+        body: JSON.stringify(body)
+      });
+
+    } else {
+      return res.status(400).json({ error: "Invalid provider. Use 'openai' or 'lmnt'" });
     }
 
-    const body = {
-      // LMNT-safe defaults; ignore any client voice/model to avoid mismatch
-      voice: "ava",
-      model: "blizzard",
-      language: "auto",
-      format: "mp3",
-      sample_rate: 24000,
-      text: clean
-    };
-
-    const r = await fetch(LMNT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKey
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      console.error("LMNT error:", r.status, txt);
-      res.status(r.status);
+    if (!audioResponse.ok) {
+      const txt = await audioResponse.text().catch(() => "");
+      console.error(`${provider.toUpperCase()} error:`, audioResponse.status, txt);
+      res.status(audioResponse.status);
       setCors(res);
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.send(txt || JSON.stringify({ error: "LMNT error" }));
+      return res.send(txt || JSON.stringify({ error: `${provider.toUpperCase()} error` }));
     }
 
     res.setHeader("Content-Type", "audio/mpeg");
     setCors(res);
-    r.body.pipe(res);
+    audioResponse.body.pipe(res);
   } catch (e) {
     console.error("TTS handler error:", e);
     setCors(res);
