@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // OpenAI TTS only
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY || "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";
     if (!apiKey) {
       return NextResponse.json({ error: "Missing OPENAI_API_KEY on server" }, { status: 500 });
     }
