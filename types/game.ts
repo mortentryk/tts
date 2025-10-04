@@ -7,6 +7,7 @@ export interface GameStats {
 export interface StoryChoice {
   label: string;
   goto: string;
+  match?: string[];
 }
 
 export interface StoryCheck {
