@@ -1,6 +1,4 @@
-# 🎮 Dungeon Story Game
-
-An interactive choose-your-own-adventure game with text-to-speech narration, dice rolling mechanics, and dynamic story loading from Google Sheets.
+# Dungeon Story Game Setup
 
 ## 🚀 Quick Start
 
@@ -24,15 +22,6 @@ An interactive choose-your-own-adventure game with text-to-speech narration, dic
 4. **Open browser:**
    Go to `http://localhost:3000`
 
-## 🎮 Features
-
-- **Interactive Story** - Choose your own adventure with branching paths
-- **Dice Rolling** - Visual skill checks with Evner, Udholdenhed, and Held stats
-- **Text-to-Speech** - High-quality voice narration using OpenAI TTS
-- **Dynamic Content** - Loads story data from Google Sheets CSV
-- **Auto-Save** - Game progress automatically saved in browser
-- **Responsive Design** - Works on desktop, tablet, and mobile
-
 ## 🔧 Environment Variables
 
 ### Required for TTS:
@@ -55,12 +44,14 @@ An interactive choose-your-own-adventure game with text-to-speech narration, dic
 - Set `OPENAI_API_KEY` environment variable
 - Deploy as normal Next.js app
 
-## 🎲 Game Mechanics
+## 🎮 Features
 
-- **Stats**: Evner (Skill), Udholdenhed (Health), Held (Luck)
-- **Dice Rolls**: 2d6 + stat modifier vs difficulty class
-- **Penalties**: Failed Udholdenhed checks reduce health by 2
-- **Choices**: Multiple story paths with different outcomes
+- **Interactive Story** - Choose your own adventure
+- **Dice Rolling** - Skill checks with visual UI
+- **Text-to-Speech** - High-quality voice narration
+- **Dynamic Content** - Loads from Google Sheets
+- **Auto-Save** - Progress saved in browser
+- **Responsive Design** - Works on all devices
 
 ## 🔧 Troubleshooting
 
@@ -84,12 +75,3 @@ The game loads story data from a Google Sheets CSV with these columns:
 - `check_dc` - Difficulty class
 - `check_success` - Success passage ID
 - `check_fail` - Failure passage ID
-
-## 🛠️ Tech Stack
-
-- **Next.js 15** - React framework
-- **TypeScript** - Type safety
-- **Tailwind CSS** - Styling
-- **OpenAI TTS** - Text-to-speech
-- **Google Sheets** - Dynamic content
-- **localStorage** - Save system
