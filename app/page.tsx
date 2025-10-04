@@ -216,7 +216,12 @@ export default function Game() {
       setSpeaking(false);
     } catch (e: any) {
       setSpeaking(false);
-      alert(`OpenAI TTS: ${e?.message || "Could not play online voice."}`);
+      // Show a more user-friendly error message
+      if (e?.message?.includes("API key not configured")) {
+        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
+      } else {
+        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+      }
     }
   }, [passage?.text]);
 
