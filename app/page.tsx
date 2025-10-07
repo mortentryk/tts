@@ -191,7 +191,7 @@ export default function Game() {
     type: 'success' | 'error' | 'info';
   } | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
-  const voiceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceMatchedRef = useRef<boolean>(false);
   
   // Only OpenAI TTS now
@@ -210,7 +210,7 @@ export default function Game() {
   }, []);
 
   // --- Voice Recognition Helpers ---
-  const startVoiceListening = useCallback((timeoutMs: number = 10000) => {
+  const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 10000) => {
     // Clear any existing timeout
     if (voiceTimeoutRef.current) {
       clearTimeout(voiceTimeoutRef.current);
@@ -257,7 +257,7 @@ export default function Game() {
   }, []);
 
   // Enhanced TTS with voice listening
-  const speakWithVoiceListening = useCallback(async (text: string) => {
+  const speakWithVoiceListening: (text: string) => Promise<void> = useCallback(async (text: string) => {
     if (!text || !text.trim()) return;
 
     // If caller already included choices, don't duplicate the prompt
@@ -268,13 +268,7 @@ export default function Game() {
 
     try {
       setSpeaking(true);
-      await speakViaCloud(enhancedText, audioRef, () => {
-        // Auto-start voice listening after TTS completes
-        if (passage?.choices && passage.choices.length > 0) {
-          console.log('TTS finished - starting voice listening for 10 seconds');
-          startVoiceListening(10000); // 10 second timeout
-        }
-      });
+      await speakViaCloud(enhancedText, audioRef);
       setSpeaking(false);
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
@@ -288,7 +282,7 @@ export default function Game() {
         alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
       }
     }
-  }, [passage?.choices, startVoiceListening]);
+  }, [passage?.choices]);
 
   // Load story from Google Sheets
   useEffect(() => {
@@ -429,7 +423,11 @@ export default function Game() {
     
     // Use enhanced TTS with voice listening
     await speakWithVoiceListening(narration);
-  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening]);
+    // After narration, start listening for a choice if available
+    if (passage?.choices && passage.choices.length > 0) {
+      startVoiceListening(10000);
+    }
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, startVoiceListening, passage?.choices]);
 
   // Auto-read new scenes when enabled
   useEffect(() => {
