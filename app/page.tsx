@@ -210,6 +210,56 @@ export default function Game() {
   }, []);
 
   // --- Voice Recognition Helpers ---
+  // Voice notification helper
+  const showVoiceNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setVoiceNotification({ message, type });
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      setVoiceNotification(null);
+    }, 3000);
+  }, []);
+
+  // Enhanced TTS with voice listening
+  const speakWithVoiceListening: (text: string) => Promise<void> = useCallback(async (text: string) => {
+    if (!text || !text.trim()) return;
+
+    // If caller already included choices, don't duplicate the prompt
+    const alreadyIncludesChoices = /Valgmuligheder:|Choices:|Hvad vælger du\?|What do you choose\?/i.test(text);
+    const enhancedText = (!alreadyIncludesChoices && passage?.choices && passage.choices.length > 0)
+      ? `${text} What do you choose?`
+      : text;
+
+    try {
+      setSpeaking(true);
+      await speakViaCloud(enhancedText, audioRef, () => {
+        // Auto-start voice listening after TTS completes
+        if (passage?.choices && passage.choices.length > 0) {
+          console.log('TTS finished - starting voice listening for 10 seconds');
+          // Use a direct call instead of the callback to avoid circular dependency
+          setTimeout(() => {
+            if (passage?.choices && passage.choices.length > 0) {
+              setListening(true);
+              setSpeechError(null);
+              voiceMatchedRef.current = false;
+            }
+          }, 100);
+        }
+      });
+      setSpeaking(false);
+    } catch (e: any) {
+      audioRef.current = null; // Clear ref on error
+      setSpeaking(false);
+      // Show a more user-friendly error message
+      if (e?.message?.includes("API key not configured")) {
+        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
+      } else if (e?.message?.includes("Incorrect API key")) {
+        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
+      } else {
+        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+      }
+    }
+  }, [passage?.choices]);
+
   const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 10000) => {
     // Clear any existing timeout
     if (voiceTimeoutRef.current) {
@@ -237,7 +287,7 @@ export default function Game() {
         console.warn('Failed to re-read choices after timeout', e);
       }
     }, timeoutMs);
-  }, [passage?.choices, speakWithVoiceListening]);
+  }, [passage?.choices]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -246,43 +296,6 @@ export default function Game() {
       voiceTimeoutRef.current = null;
     }
   }, []);
-
-  // Voice notification helper
-  const showVoiceNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setVoiceNotification({ message, type });
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
-      setVoiceNotification(null);
-    }, 3000);
-  }, []);
-
-  // Enhanced TTS with voice listening
-  const speakWithVoiceListening: (text: string) => Promise<void> = useCallback(async (text: string) => {
-    if (!text || !text.trim()) return;
-
-    // If caller already included choices, don't duplicate the prompt
-    const alreadyIncludesChoices = /Valgmuligheder:|Choices:|Hvad vælger du\?|What do you choose\?/i.test(text);
-    const enhancedText = (!alreadyIncludesChoices && passage?.choices && passage.choices.length > 0)
-      ? `${text} What do you choose?`
-      : text;
-
-    try {
-      setSpeaking(true);
-      await speakViaCloud(enhancedText, audioRef);
-      setSpeaking(false);
-    } catch (e: any) {
-      audioRef.current = null; // Clear ref on error
-      setSpeaking(false);
-      // Show a more user-friendly error message
-      if (e?.message?.includes("API key not configured")) {
-        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
-      } else if (e?.message?.includes("Incorrect API key")) {
-        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
-      } else {
-        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
-      }
-    }
-  }, [passage?.choices]);
 
   // Load story from Google Sheets
   useEffect(() => {
@@ -427,7 +440,7 @@ export default function Game() {
     if (passage?.choices && passage.choices.length > 0) {
       startVoiceListening(10000);
     }
-  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, startVoiceListening, passage?.choices]);
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, passage?.choices]);
 
   // Auto-read new scenes when enabled
   useEffect(() => {
