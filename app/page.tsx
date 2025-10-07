@@ -192,6 +192,7 @@ export default function Game() {
   } | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const voiceMatchedRef = useRef<boolean>(false);
   
   // Only OpenAI TTS now
 
@@ -218,13 +219,25 @@ export default function Game() {
     // Start listening
     setListening(true);
     setSpeechError(null);
+    voiceMatchedRef.current = false;
 
     // Set timeout to stop listening
-    voiceTimeoutRef.current = setTimeout(() => {
+    voiceTimeoutRef.current = setTimeout(async () => {
       setListening(false);
       console.log('Voice listening timeout - stopping recognition');
+      try {
+        if (passage?.choices && passage.choices.length > 0 && !voiceMatchedRef.current) {
+          const choicesText = passage.choices
+            .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
+            .join(' ');
+          const text = `Valgmuligheder: ${choicesText} Hvad vælger du?`;
+          await speakWithVoiceListening(text);
+        }
+      } catch (e) {
+        console.warn('Failed to re-read choices after timeout', e);
+      }
     }, timeoutMs);
-  }, []);
+  }, [passage?.choices, speakWithVoiceListening]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -372,6 +385,7 @@ export default function Game() {
     console.log('🚀 goTo called with ID:', id);
     stopSpeak();
     stopVoiceListening(); // Stop voice listening when navigating
+    voiceMatchedRef.current = true;
     setCurrentId(id);
     console.log('✅ Navigation completed to:', id);
   }, [stopSpeak, stopVoiceListening]);

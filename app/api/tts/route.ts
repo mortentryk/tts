@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     const body = {
       model: "tts-1",
-      voice: "alloy", // alloy, echo, fable, onyx, nova, shimmer
+      voice: "fable", // alloy, echo, fable, onyx, nova, shimmer
       input: clean,
       response_format: "mp3"
     };
