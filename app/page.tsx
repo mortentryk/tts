@@ -165,6 +165,7 @@ export default function Game() {
   const [currentId, setCurrentId] = useState(START_ID);
   const [stats, setStats] = useState<GameStats>({ Evner: 10, Udholdenhed: 18, Held: 10 });
   const [speaking, setSpeaking] = useState(false);
+  const [autoRead, setAutoRead] = useState<boolean>(false);
   const [story, setStory] = useState<Record<string, StoryNode>>({});
   const [loading, setLoading] = useState(true);
   
@@ -246,8 +247,9 @@ export default function Game() {
   const speakWithVoiceListening = useCallback(async (text: string) => {
     if (!text || !text.trim()) return;
 
-    // Add choice prompt if there are choices available
-    const enhancedText = passage?.choices && passage.choices.length > 0 
+    // If caller already included choices, don't duplicate the prompt
+    const alreadyIncludesChoices = /Valgmuligheder:|Choices:|Hvad vælger du\?|What do you choose\?/i.test(text);
+    const enhancedText = (!alreadyIncludesChoices && passage?.choices && passage.choices.length > 0)
       ? `${text} What do you choose?`
       : text;
 
@@ -302,6 +304,8 @@ export default function Game() {
   const loadGame = useCallback(async () => {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
+      const auto = localStorage.getItem("svt_autoread_v1");
+      if (auto !== null) setAutoRead(auto === "1");
       if (raw) {
         const { id, s }: SaveData = JSON.parse(raw);
         if (id && s) { 
@@ -319,6 +323,13 @@ export default function Game() {
   useEffect(() => { 
     saveGame(currentId, stats); 
   }, [currentId, stats, saveGame]);
+
+  // Persist autoRead toggle
+  useEffect(() => {
+    try {
+      localStorage.setItem("svt_autoread_v1", autoRead ? "1" : "0");
+    } catch {}
+  }, [autoRead]);
 
   // --- Dice / checks ---
   const rolledForPassageRef = useRef<string | null>(null);
@@ -377,8 +388,22 @@ export default function Game() {
   const ttsCooldownRef = useRef(0);
   const COOL_DOWN_MS = 2500;
 
+  // Build narration string including choices so buttons are read aloud
+  const getNarrationText = useCallback(() => {
+    if (!passage?.text) return '';
+    let text = passage.text;
+    if (passage?.choices && passage.choices.length > 0) {
+      const choicesText = passage.choices
+        .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
+        .join(' ');
+      text = `${text} Valgmuligheder: ${choicesText} Hvad vælger du?`;
+    }
+    return text;
+  }, [passage]);
+
   const speakCloudThrottled = useCallback(async () => {
-    if (!passage?.text) return;
+    const narration = getNarrationText();
+    if (!narration) return;
     const now = Date.now();
     if (now - ttsCooldownRef.current < COOL_DOWN_MS) {
       return alert("Wait a moment - you can play again in a moment.");
@@ -389,8 +414,16 @@ export default function Game() {
     stopVoiceListening();
     
     // Use enhanced TTS with voice listening
-    await speakWithVoiceListening(passage.text);
-  }, [passage?.text, speakWithVoiceListening, stopVoiceListening]);
+    await speakWithVoiceListening(narration);
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening]);
+
+  // Auto-read new scenes when enabled
+  useEffect(() => {
+    if (!autoRead) return;
+    if (!passage?.text) return;
+    if (pendingDiceRoll) return; // hold during dice overlays
+    speakCloudThrottled();
+  }, [autoRead, currentId, pendingDiceRoll, speakCloudThrottled, passage?.text]);
 
   // --- Speech Recognition ---
   useEffect(() => {
@@ -722,6 +755,21 @@ export default function Game() {
             disabled={!speaking}
           >
             ⏹️ Stop
+          </button>
+        </div>
+
+        {/* Auto Read Toggle */}
+        <div className="flex gap-2.5">
+          <button
+            className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors ${
+              autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
+            }`}
+            onClick={() => setAutoRead(v => !v)}
+            aria-pressed={autoRead}
+            aria-label={autoRead ? 'Disable auto read' : 'Enable auto read'}
+            title={autoRead ? 'Disable auto read' : 'Enable auto read'}
+          >
+            {autoRead ? '🔁 Auto-Read: On' : '🔁 Auto-Read: Off'}
           </button>
         </div>
 
