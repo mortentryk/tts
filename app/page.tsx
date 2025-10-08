@@ -192,6 +192,7 @@ export default function Game() {
   } | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listeningSessionRef = useRef<number>(0);
   const voiceMatchedRef = useRef<boolean>(false);
   
   // Only OpenAI TTS now
@@ -220,29 +221,18 @@ export default function Game() {
   }, []);
 
   // Enhanced TTS with voice listening
-  const speakWithVoiceListening: (text: string) => Promise<void> = useCallback(async (text: string) => {
+  const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
     if (!text || !text.trim()) return;
 
-    // If caller already included choices, don't duplicate the prompt
-    const alreadyIncludesChoices = /Valgmuligheder:|Choices:|Hvad vælger du\?|What do you choose\?/i.test(text);
-    const enhancedText = (!alreadyIncludesChoices && passage?.choices && passage.choices.length > 0)
-      ? `${text} What do you choose?`
-      : text;
+    // Caller supplies final text; do not modify here to avoid duplicate reading
 
     try {
       setSpeaking(true);
-      await speakViaCloud(enhancedText, audioRef, () => {
+      await speakViaCloud(text, audioRef, () => {
         // Auto-start voice listening after TTS completes
         if (passage?.choices && passage.choices.length > 0) {
           console.log('TTS finished - starting voice listening for 10 seconds');
-          // Use a direct call instead of the callback to avoid circular dependency
-          setTimeout(() => {
-            if (passage?.choices && passage.choices.length > 0) {
-              setListening(true);
-              setSpeechError(null);
-              voiceMatchedRef.current = false;
-            }
-          }, 100);
+          startVoiceListening(10000);
         }
       });
       setSpeaking(false);
@@ -258,7 +248,7 @@ export default function Game() {
         alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
       }
     }
-  }, [passage?.choices]);
+  }, [passage?.choices, startVoiceListening]);
 
   const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 10000) => {
     // Clear any existing timeout
@@ -270,9 +260,11 @@ export default function Game() {
     setListening(true);
     setSpeechError(null);
     voiceMatchedRef.current = false;
+    const mySession = ++listeningSessionRef.current;
 
     // Set timeout to stop listening
     voiceTimeoutRef.current = setTimeout(async () => {
+      if (listeningSessionRef.current !== mySession) return;
       setListening(false);
       console.log('Voice listening timeout - stopping recognition');
       try {
@@ -281,13 +273,13 @@ export default function Game() {
             .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
             .join(' ');
           const text = `Valgmuligheder: ${choicesText} Hvad vælger du?`;
-          await speakWithVoiceListening(text);
+          await speakWithVoiceListening(text, () => startVoiceListening(10000));
         }
       } catch (e) {
         console.warn('Failed to re-read choices after timeout', e);
       }
     }, timeoutMs);
-  }, [passage?.choices]);
+  }, [passage?.choices, speakWithVoiceListening, startVoiceListening]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -434,13 +426,13 @@ export default function Game() {
     // Stop any existing voice listening
     stopVoiceListening();
     
-    // Use enhanced TTS with voice listening
-    await speakWithVoiceListening(narration);
-    // After narration, start listening for a choice if available
-    if (passage?.choices && passage.choices.length > 0) {
-      startVoiceListening(10000);
-    }
-  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, passage?.choices]);
+    // Use enhanced TTS with voice listening and start listening after it finishes
+    await speakWithVoiceListening(narration, () => {
+      if (passage?.choices && passage.choices.length > 0) {
+        startVoiceListening(10000);
+      }
+    });
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, startVoiceListening, passage?.choices]);
 
   // Auto-read new scenes when enabled
   useEffect(() => {
@@ -448,7 +440,8 @@ export default function Game() {
     if (!passage?.text) return;
     if (pendingDiceRoll) return; // hold during dice overlays
     speakCloudThrottled();
-  }, [autoRead, currentId, pendingDiceRoll, speakCloudThrottled, passage?.text]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRead, currentId, pendingDiceRoll]);
 
   // --- Speech Recognition ---
   useEffect(() => {
