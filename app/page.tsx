@@ -220,36 +220,6 @@ export default function Game() {
     }, 3000);
   }, []);
 
-  // Enhanced TTS with voice listening
-  const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
-    if (!text || !text.trim()) return;
-
-    // Caller supplies final text; do not modify here to avoid duplicate reading
-
-    try {
-      setSpeaking(true);
-      await speakViaCloud(text, audioRef, () => {
-        // Auto-start voice listening after TTS completes
-        if (passage?.choices && passage.choices.length > 0) {
-          console.log('TTS finished - starting voice listening for 10 seconds');
-          startVoiceListening(10000);
-        }
-      });
-      setSpeaking(false);
-    } catch (e: any) {
-      audioRef.current = null; // Clear ref on error
-      setSpeaking(false);
-      // Show a more user-friendly error message
-      if (e?.message?.includes("API key not configured")) {
-        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
-      } else if (e?.message?.includes("Incorrect API key")) {
-        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
-      } else {
-        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
-      }
-    }
-  }, [passage?.choices, startVoiceListening]);
-
   const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 10000) => {
     // Clear any existing timeout
     if (voiceTimeoutRef.current) {
@@ -279,7 +249,39 @@ export default function Game() {
         console.warn('Failed to re-read choices after timeout', e);
       }
     }, timeoutMs);
-  }, [passage?.choices, speakWithVoiceListening, startVoiceListening]);
+  }, [passage?.choices]);
+
+  // Enhanced TTS with voice listening
+  const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
+    if (!text || !text.trim()) return;
+
+    // Caller supplies final text; do not modify here to avoid duplicate reading
+
+    try {
+      setSpeaking(true);
+      await speakViaCloud(text, audioRef, () => {
+        // Auto-start voice listening after TTS completes
+        if (passage?.choices && passage.choices.length > 0) {
+          console.log('TTS finished - starting voice listening for 10 seconds');
+          startVoiceListening(10000);
+        }
+        // Set speaking to false only after TTS actually completes
+        setSpeaking(false);
+      });
+      // Don't set speaking to false here - let the callback handle it
+    } catch (e: any) {
+      audioRef.current = null; // Clear ref on error
+      setSpeaking(false);
+      // Show a more user-friendly error message
+      if (e?.message?.includes("API key not configured")) {
+        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
+      } else if (e?.message?.includes("Incorrect API key")) {
+        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
+      } else {
+        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+      }
+    }
+  }, [passage?.choices, startVoiceListening]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -426,22 +428,19 @@ export default function Game() {
     // Stop any existing voice listening
     stopVoiceListening();
     
-    // Use enhanced TTS with voice listening and start listening after it finishes
-    await speakWithVoiceListening(narration, () => {
-      if (passage?.choices && passage.choices.length > 0) {
-        startVoiceListening(10000);
-      }
-    });
-  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, startVoiceListening, passage?.choices]);
+    // Use enhanced TTS with voice listening - it will handle starting voice listening automatically
+    await speakWithVoiceListening(narration);
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening]);
 
   // Auto-read new scenes when enabled
   useEffect(() => {
     if (!autoRead) return;
     if (!passage?.text) return;
     if (pendingDiceRoll) return; // hold during dice overlays
+    if (speaking) return; // don't start TTS if already speaking
     speakCloudThrottled();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRead, currentId, pendingDiceRoll]);
+  }, [autoRead, currentId, pendingDiceRoll, speaking]);
 
   // --- Speech Recognition ---
   useEffect(() => {
