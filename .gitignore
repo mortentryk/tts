@@ -12,6 +12,11 @@ out/
 .env.test.local
 .env.production.local
 
+# API Keys and sensitive files
+local.env.md
+*.key
+*.pem
+
 # Vercel
 .vercel
 
