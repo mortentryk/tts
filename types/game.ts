@@ -22,6 +22,10 @@ export interface StoryNode {
   text: string;
   choices?: StoryChoice[];
   check?: StoryCheck;
+  image?: string; // URL to image
+  video?: string; // URL to video
+  backgroundImage?: string; // URL to background image
+  audio?: string; // URL to background audio
 }
 
 export interface GameState {

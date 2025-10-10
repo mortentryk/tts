@@ -26,6 +26,14 @@ const STORY_METADATA: StoryMetadata[] = [
     author: "Dragon Slayer",
     difficulty: "hard",
     estimatedTime: "20-30 minutes"
+  },
+  {
+    id: "skonhedenogudyret",
+    title: "Skønhed og Udyret",
+    description: "En dansk fortælling om skønhed, mod og forvandling. En interaktiv historie med stemmestyring og terningekast.",
+    author: "Danish Storyteller",
+    difficulty: "medium",
+    estimatedTime: "20-30 minutes"
   }
 ];
 
@@ -33,7 +41,8 @@ const STORY_METADATA: StoryMetadata[] = [
 const STORY_DATA_URLS: Record<string, string> = {
   "cave-adventure": "", // Current story URL
   "forest-quest": "", // Forest story URL  
-  "dragon-lair": "" // Dragon story URL
+  "dragon-lair": "", // Dragon story URL
+  "skonhedenogudyret": "https://script.google.com/macros/s/AKfycbzNcwtGVQUktMJ8oHrmBLsSkUf6s4G3zrpUm2lOwVMoywJtqdL_ASyu7gSRWAqXLFnW/exec" // Danish Beauty and the Beast story
 };
 
 // Fallback stories for each story ID
@@ -586,12 +595,23 @@ export async function loadStoryById(storyId: string): Promise<Record<string, Sto
     if (sheetUrl) {
       const res = await fetch(sheetUrl, { cache: "no-store" });
       if (res.ok) {
-        const csvText = await res.text();
-        const rows = parseCSV(csvText);
-        const story = buildStoryObject(rows);
-        
-        if (Object.keys(story).length > 0) {
-          return story;
+        // Check if it's a Google Apps Script JSON response
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const storyData = await res.json();
+          if (storyData.nodes && Object.keys(storyData.nodes).length > 0) {
+            console.log(`Loaded story from Google Apps Script: ${storyId}`);
+            return storyData.nodes;
+          }
+        } else {
+          // Fallback to CSV parsing
+          const csvText = await res.text();
+          const rows = parseCSV(csvText);
+          const story = buildStoryObject(rows);
+          
+          if (Object.keys(story).length > 0) {
+            return story;
+          }
         }
       }
     }
@@ -627,7 +647,16 @@ function buildStoryObject(rows: any[]) {
   for (const row of rows) {
     const id = (row.id || "").trim();
     if (!id) continue;
-    const scene: any = { id, text: row.tekst || "", choices: [] };
+    const scene: any = { 
+      id, 
+      text: row.tekst || "", 
+      choices: [],
+      // Add media fields if present
+      ...(row.image && { image: row.image.trim() }),
+      ...(row.video && { video: row.video.trim() }),
+      ...(row.backgroundImage && { backgroundImage: row.backgroundImage.trim() }),
+      ...(row.audio && { audio: row.audio.trim() })
+    };
     let i = 1;
     while (row["valg" + i + "_label"] || row["valg" + i + "_goto"]) {
       const label = row["valg" + i + "_label"];

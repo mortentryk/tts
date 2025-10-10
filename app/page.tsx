@@ -59,6 +59,20 @@ export default function Home() {
               <span className="ml-4">⏱️ 20-30 min</span>
             </div>
           </div>
+          
+          <div 
+            className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-6 cursor-pointer hover:bg-dungeon-accent transition-all duration-300 transform hover:scale-105"
+            onClick={() => handleStorySelect('skonhedenogudyret')}
+          >
+            <h3 className="text-xl font-bold text-white mb-2">Skønhed og Udyret</h3>
+            <p className="text-dungeon-text mb-4">En dansk fortælling om skønhed, mod og forvandling med stemmestyring.</p>
+            <div className="text-sm text-dungeon-text">
+              <span className="px-3 py-1 rounded-full text-sm font-semibold bg-yellow-900 text-yellow-400">
+                🟡 MEDIUM
+              </span>
+              <span className="ml-4">⏱️ 20-30 min</span>
+            </div>
+          </div>
         </div>
         
         <div className="mt-8 text-dungeon-text text-sm">
