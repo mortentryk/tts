@@ -30,6 +30,17 @@ export interface GameState {
 }
 
 export interface SaveData {
+  storyId: string;
   id: string;
   s: GameStats;
+}
+
+export interface StoryMetadata {
+  id: string;
+  title: string;
+  description: string;
+  author?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  estimatedTime?: string;
+  thumbnail?: string;
 }

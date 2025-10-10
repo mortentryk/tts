@@ -237,17 +237,7 @@ export default function Game() {
       if (listeningSessionRef.current !== mySession) return;
       setListening(false);
       console.log('Voice listening timeout - stopping recognition');
-      try {
-        if (passage?.choices && passage.choices.length > 0 && !voiceMatchedRef.current) {
-          const choicesText = passage.choices
-            .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
-            .join(' ');
-          const text = `Valgmuligheder: ${choicesText} Hvad vælger du?`;
-          await speakWithVoiceListening(text, () => startVoiceListening(10000));
-        }
-      } catch (e) {
-        console.warn('Failed to re-read choices after timeout', e);
-      }
+      // Don't automatically re-read choices - let user manually trigger TTS if needed
     }, timeoutMs);
   }, [passage?.choices]);
 
