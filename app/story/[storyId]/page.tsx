@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
 import { loadStoryById } from '../../../lib/storyManager';
@@ -162,7 +162,8 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   }
 }
 
-export default function Game({ params }: { params: { storyId: string } }) {
+export default function Game({ params }: { params: Promise<{ storyId: string }> }) {
+  const { storyId } = use(params);
   const [currentId, setCurrentId] = useState(START_ID);
   const [stats, setStats] = useState<GameStats>({ Evner: 10, Udholdenhed: 18, Held: 10 });
   const [speaking, setSpeaking] = useState(false);
@@ -295,7 +296,7 @@ export default function Game({ params }: { params: { storyId: string } }) {
   useEffect(() => {
     const loadStory = async () => {
       try {
-        const storyData = await loadStoryById(params.storyId);
+        const storyData = await loadStoryById(storyId);
         setStory(storyData);
         setLoading(false);
       } catch (error) {
@@ -305,7 +306,7 @@ export default function Game({ params }: { params: { storyId: string } }) {
       }
     };
     loadStory();
-  }, [params.storyId]);
+  }, [storyId]);
 
   // --- Save/Load ---
   const saveGame = useCallback(async (storyId: string, id: string, s: GameStats) => {
@@ -320,22 +321,22 @@ export default function Game({ params }: { params: { storyId: string } }) {
       const auto = localStorage.getItem("svt_autoread_v1");
       if (auto !== null) setAutoRead(auto === "1");
       if (raw) {
-        const { storyId, id, s }: SaveData = JSON.parse(raw);
-        if (storyId === params.storyId && id && s) { 
+        const { storyId: loadedStoryId, id, s }: SaveData = JSON.parse(raw);
+        if (loadedStoryId === storyId && id && s) { 
           setCurrentId(id); 
           setStats(s); 
         }
       }
     } catch {}
-  }, [params.storyId]);
+  }, [storyId]);
 
   useEffect(() => { 
     loadGame(); 
   }, [loadGame]);
   
   useEffect(() => { 
-    saveGame(params.storyId, currentId, stats); 
-  }, [currentId, stats, saveGame, params.storyId]);
+    saveGame(storyId, currentId, stats); 
+  }, [currentId, stats, saveGame, storyId]);
 
   // Persist autoRead toggle
   useEffect(() => {
