@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+# API Keys and sensitive files
+local.env.md
+*.key
+*.pem
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development files
+scripts/
+*.csv
+generated-*.csv
+
+# Documentation (keep main README)
+AUTOMATION-SETUP.md
+deploy-guide.md
+GOOGLE-SHEETS-SETUP.md
+MEDIA-HOSTING-GUIDE.md
+README-TTS-SETUP.md
+SETUP.md
