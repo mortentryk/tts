@@ -1,22 +1,7 @@
-# Exclude development files
+# Development files
 scripts/
-*.md
-*.csv
-local.env.md
 .env.local
+*.csv
 
-# Exclude documentation
-AUTOMATION-SETUP.md
-deploy-guide.md
-GOOGLE-SHEETS-SETUP.md
-MEDIA-HOSTING-GUIDE.md
-README-TTS-SETUP.md
-README.md
-SETUP.md
-
-# Exclude data files
-cave-adventure-story.csv
-data/
-
-# Exclude generated files
-generated-story-with-images.csv
+# Documentation
+*.md
