@@ -39,7 +39,7 @@ const STORY_METADATA: StoryMetadata[] = [
 
 // Story data URLs - each story can have its own Google Sheet
 const STORY_DATA_URLS: Record<string, string> = {
-  "cave-adventure": "", // Current story URL
+  "cave-adventure": "", // Temporarily using fallback data
   "forest-quest": "", // Forest story URL  
   "dragon-lair": "", // Dragon story URL
   "skonhedenogudyret": "https://script.google.com/macros/s/AKfycbzwl2jK34Bft1-peRWyhTtKIh0xPlJOwwjAtg9-8wf78b4VK736bEHRW5suK1yOYe1K/exec" // Danish Beauty and the Beast story
@@ -51,14 +51,17 @@ const FALLBACK_STORIES: Record<string, Record<string, StoryNode>> = {
     "1": {
       id: "1",
       text: "Du står ved indgangen til den mørke hule. En kold vind blæser ud fra åbningen, og du kan høre fjerne lyde derinde. Din fakkel kaster dansende skygger på væggene. Hvad gør du?",
+      image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-3c6jxEjriLqmYqpRWTh3QvcM.png?st=2025-10-12T13%3A21%3A15Z&se=2025-10-12T15%3A21%3A15Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=77e5a8ec-6bd1-4477-8afc-16703a64f029&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T06%3A42%3A52Z&ske=2025-10-13T06%3A42%3A52Z&sks=b&skv=2024-08-04&sig=X%2B8tavfilo%2BJZpqTXUeIs5yTodNX6kKnhGl2ddUxets%3D",
       choices: [
         { label: "Gå forsigtigt ind i hulen", goto: "2" },
-        { label: "Undersøg området omkring indgangen", goto: "3" }
+        { label: "Undersøg området omkring indgangen", goto: "3" },
+        { label: "Tænd en ekstra fakkel først", goto: "4" }
       ]
     },
     "2": {
       id: "2", 
       text: "Du går forsigtigt ind i hulen. Efter et par meter opdager du at gulvet er dækket af løse sten og skarpe klippestykker. Du må være forsigtig for ikke at snuble.",
+      image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-pZN167C8OAckVHL0T0BeWYut.png?st=2025-10-12T13%3A21%3A32Z&se=2025-10-12T15%3A21%3A32Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=cc612491-d948-4d2e-9821-2683df3719f5&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T05%3A15%3A45Z&ske=2025-10-13T05%3A15%3A45Z&sks=b&skv=2024-08-04&sig=fHHNGoUyUrHGBvElqqmJBmqBixydeT8YFDEuUp2X/Xc%3D",
       check: {
         stat: "Evner" as keyof import('../types/game').GameStats,
         dc: 8,

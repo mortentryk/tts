@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState, use } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
 import { loadStoryById } from '../../../lib/storyManager';
@@ -193,8 +193,8 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   }
 }
 
-export default function Game({ params }: { params: Promise<{ storyId: string }> }) {
-  const { storyId } = use(params);
+export default function Game({ params }: { params: { storyId: string } }) {
+  const { storyId } = params;
   const [currentId, setCurrentId] = useState(START_ID);
   const [stats, setStats] = useState<GameStats>({ Evner: 10, Udholdenhed: 18, Held: 10 });
   const [speaking, setSpeaking] = useState(false);
@@ -217,6 +217,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     successPassage: string;
     failurePassage: string;
   } | null>(null);
+  
+  // Dice roll UI state
+  const [showDiceRollButton, setShowDiceRollButton] = useState(false);
+  const [diceRolling, setDiceRolling] = useState(false);
   
   // Voice command state
   const [listening, setListening] = useState(false);
@@ -402,11 +406,32 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     if (!passage || !passage.check) { 
       rolledForPassageRef.current = null; 
       setPendingDiceRoll(null);
+      setShowDiceRollButton(false);
       return; 
     }
     if (rolledForPassageRef.current === passage.id) return;
 
+    // Show dice roll button instead of auto-rolling
+    setShowDiceRollButton(true);
+    setPendingDiceRoll(null);
+  }, [currentId, passage]);
+
+  const goTo = useCallback((id: string) => {
+    console.log('🚀 goTo called with ID:', id);
+    stopSpeak();
+    stopVoiceListening(); // Stop voice listening when navigating
+    voiceMatchedRef.current = true;
+    setCurrentId(id);
+    console.log('✅ Navigation completed to:', id);
+  }, [stopSpeak, stopVoiceListening]);
+
+  const handleDiceRoll = useCallback(async () => {
+    if (!passage?.check || diceRolling) return;
+    
+    setDiceRolling(true);
     rolledForPassageRef.current = passage.id;
+    setShowDiceRollButton(false);
+    
     const { stat, dc, success, fail } = passage.check;
     const roll = roll2d6();
     const total = roll + (stats[stat] || 0);
@@ -420,7 +445,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       }));
     }
 
-    // Set pending dice roll state instead of showing popup
+    // Set pending dice roll state
     setPendingDiceRoll({
       stat,
       roll,
@@ -429,16 +454,19 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       successPassage: success,
       failurePassage: fail
     });
-  }, [currentId, stats]);
-
-  const goTo = useCallback((id: string) => {
-    console.log('🚀 goTo called with ID:', id);
-    stopSpeak();
-    stopVoiceListening(); // Stop voice listening when navigating
-    voiceMatchedRef.current = true;
-    setCurrentId(id);
-    console.log('✅ Navigation completed to:', id);
-  }, [stopSpeak, stopVoiceListening]);
+    
+    setDiceRolling(false);
+    
+    // Create TTS narration for dice roll result
+    const diceResultText = `Du kaster terningerne og får ${roll}. Med din ${stat} på ${stats[stat]} bliver det i alt ${total}. ${ok ? 'Det lykkes!' : 'Det mislykkes!'} ${ok ? 'Du kan fortsætte.' : 'Du mister 2 point i ' + stat + '.'}`;
+    
+    // Speak the dice result
+    try {
+      await speakWithVoiceListening(diceResultText);
+    } catch (error) {
+      console.error('Failed to speak dice result:', error);
+    }
+  }, [passage, diceRolling, stats, speakWithVoiceListening]);
 
   const handleDiceRollContinue = useCallback(() => {
     if (!pendingDiceRoll) return;
@@ -634,6 +662,15 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             showVoiceNotification(`❌ Choice ${number} not available (max: ${passage.choices.length})`, 'error');
           }
         }
+      }
+
+      // Check for dice roll commands
+      if (showDiceRollButton && (transcript.includes('roll') || transcript.includes('kast') || transcript.includes('terning') || transcript.includes('dice'))) {
+        console.log('🎯 Matched dice roll command - rolling dice');
+        showVoiceNotification(`🎤 "${transcript}" → Rolling dice`, 'success');
+        stopVoiceListening();
+        handleDiceRoll();
+        return;
       }
 
       // Check for choice keywords and button text matching
@@ -886,24 +923,54 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           </p>
         </div>
 
-        {/* Dice Roll Panel */}
+        {/* Dice Roll Button */}
+        {showDiceRollButton && passage?.check && (
+          <div className="mb-6 p-4 bg-dungeon-surface border-2 border-dungeon-accent rounded-lg">
+            <div className="text-center mb-4">
+              <h3 className="text-xl font-bold text-dungeon-accent mb-2">🎲 Skill Check Required</h3>
+              <p className="text-white mb-4">
+                You need to make a <span className="font-semibold text-dungeon-accent">{passage.check.stat}</span> check 
+                (DC {passage.check.dc}). Your current {passage.check.stat} is <span className="font-semibold">{stats[passage.check.stat]}</span>.
+              </p>
+            </div>
+            
+            <div className="flex justify-center">
+              <button
+                onClick={handleDiceRoll}
+                disabled={diceRolling}
+                className={`px-8 py-4 text-white font-semibold rounded-lg transition-colors text-lg ${
+                  diceRolling 
+                    ? 'bg-gray-600 cursor-not-allowed' 
+                    : 'bg-dungeon-accent hover:bg-dungeon-accent-active'
+                }`}
+              >
+                {diceRolling ? '🎲 Rolling...' : '🎲 Roll Dice (2d6)'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Dice Roll Result Panel */}
         {pendingDiceRoll && (
           <div className="mb-6 p-4 bg-dungeon-surface border-2 border-dungeon-accent rounded-lg">
             <div className="text-center mb-4">
               <h3 className="text-xl font-bold text-dungeon-accent mb-2">🎲 Dice Roll Result</h3>
-              <div className="text-white space-y-1">
-                <p className="text-lg">
-                  <span className="font-semibold">{pendingDiceRoll.stat}:</span> {stats[pendingDiceRoll.stat]}
-                </p>
-                <p className="text-lg">
-                  <span className="font-semibold">Roll:</span> {pendingDiceRoll.roll}
-                </p>
-                <p className="text-lg">
-                  <span className="font-semibold">Total:</span> {pendingDiceRoll.total}
-                </p>
-                <p className={`text-xl font-bold ${pendingDiceRoll.success ? 'text-green-400' : 'text-red-400'}`}>
+              <div className="text-white space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">{pendingDiceRoll.stat}:</span>
+                  <span className="text-lg">{stats[pendingDiceRoll.stat]}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">Dice Roll:</span>
+                  <span className="text-lg">{pendingDiceRoll.roll}</span>
+                </div>
+                <div className="flex justify-between items-center border-t border-dungeon-border pt-2">
+                  <span className="font-semibold">Total:</span>
+                  <span className="text-xl font-bold">{pendingDiceRoll.total}</span>
+                </div>
+                <div className={`text-xl font-bold text-center mt-3 ${pendingDiceRoll.success ? 'text-green-400' : 'text-red-400'}`}>
                   {pendingDiceRoll.success ? '✅ Success!' : '❌ Failure!'}
-                </p>
+                </div>
               </div>
             </div>
             
@@ -1012,6 +1079,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                 <div className="text-left mb-2">
                   <span className="text-blue-400">•</span> <strong>Tal:</strong> 1, 2, 3... eller en, to, tre, første, anden...
                 </div>
+                {showDiceRollButton && (
+                  <div className="text-left mb-2">
+                    <span className="text-blue-400">•</span> <strong>Terning:</strong> roll, kast, terning, dice
+                  </div>
+                )}
                 {passage?.choices?.map((choice, index) => (
                   <div key={index} className="text-left">
                     <span className="text-blue-400">•</span> "{choice.label}" 

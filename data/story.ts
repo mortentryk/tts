@@ -4,6 +4,7 @@ export const STORY: Record<string, StoryNode> = {
   "1": {
     id: "1",
     text: "Du står ved indgangen til den mørke hule. En kold vind blæser ud fra åbningen, og du kan høre fjerne lyde derinde. Din fakkel kaster dansende skygger på væggene. Hvad gør du?",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-3c6jxEjriLqmYqpRWTh3QvcM.png?st=2025-10-12T13%3A21%3A15Z&se=2025-10-12T15%3A21%3A15Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=77e5a8ec-6bd1-4477-8afc-16703a64f029&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T06%3A42%3A52Z&ske=2025-10-13T06%3A42%3A52Z&sks=b&skv=2024-08-04&sig=X%2B8tavfilo%2BJZpqTXUeIs5yTodNX6kKnhGl2ddUxets%3D",
     choices: [
       { label: "Gå forsigtigt ind i hulen", goto: "2" },
       { label: "Undersøg området omkring indgangen", goto: "3" },
@@ -13,6 +14,7 @@ export const STORY: Record<string, StoryNode> = {
   "2": {
     id: "2",
     text: "Du går forsigtigt ind i hulen. Efter et par meter opdager du at gulvet er dækket af løse sten og skarpe klippestykker. Du må være forsigtig for ikke at snuble.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-pZN167C8OAckVHL0T0BeWYut.png?st=2025-10-12T13%3A21%3A32Z&se=2025-10-12T15%3A21%3A32Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=cc612491-d948-4d2e-9821-2683df3719f5&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T05%3A15%3A45Z&ske=2025-10-13T05%3A15%3A45Z&sks=b&skv=2024-08-04&sig=fHHNGoUyUrHGBvElqqmJBmqBixydeT8YFDEuUp2X/Xc%3D",
     check: {
       stat: "Evner",
       dc: 8,
@@ -23,6 +25,7 @@ export const STORY: Record<string, StoryNode> = {
   "3": {
     id: "3",
     text: "Du undersøger området omkring indgangen. I skyggerne finder du en gammel rusten dolk og en lille pose med guldmønter. Du samler dem op og føler dig bedre rustet til udfordringerne der venter.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-C4aSi1QRfdjlYMLbOdBxWmbS.png?st=2025-10-12T13%3A21%3A48Z&se=2025-10-12T15%3A21%3A48Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=f1dafa11-a0c2-4092-91d4-10981fbda051&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T07%3A50%3A32Z&ske=2025-10-13T07%3A50%3A32Z&sks=b&skv=2024-08-04&sig=TOXJDBgBIeIakk9kCr4bLKKdM6lpoZ9/ZI4boGlo3Jg%3D",
     choices: [
       { label: "Gå ind i hulen med dine nye fund", goto: "2" },
       { label: "Undersøg området videre", goto: "7" }
@@ -38,6 +41,7 @@ export const STORY: Record<string, StoryNode> = {
   "5": {
     id: "5",
     text: "Du navigerer elegant gennem stenene og kommer sikkert frem til en åbning dybere inde i hulen. Her opdager du en gammel trækiste med et rustent lås.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-mj9UcyekXLY5i4XoTPqjj4AH.png?st=2025-10-12T13%3A22%3A18Z&se=2025-10-12T15%3A22%3A18Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=b1a0ae1f-618f-4548-84fd-8b16cacd5485&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-11T17%3A05%3A38Z&ske=2025-10-12T17%3A05%3A38Z&sks=b&skv=2024-08-04&sig=%2BvTenCtDSwKbxSEF3fpXx4ZNh6V9kAbOq6KahWSOerI%3D",
     choices: [
       { label: "Prøv at åbne kisten", goto: "8" },
       { label: "Undersøg kisten nærmere", goto: "9" },
@@ -62,6 +66,7 @@ export const STORY: Record<string, StoryNode> = {
   "8": {
     id: "8",
     text: "Du prøver at åbne kisten, men låset er rustet fast. Du må bruge kraft for at få den op.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-QHmsQ5rO15AbcFZigmlab97r.png?st=2025-10-12T13%3A22%3A59Z&se=2025-10-12T15%3A22%3A59Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=77e5a8ec-6bd1-4477-8afc-16703a64f029&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T13%3A42%3A10Z&ske=2025-10-13T13%3A42%3A10Z&sks=b&skv=2024-08-04&sig=jB2sXlnuHK%2BW/TH2Y2cPSFnpStxpXVXfDmgy4h/iN%2BM%3D",
     check: {
       stat: "Evner",
       dc: 10,
@@ -91,6 +96,7 @@ export const STORY: Record<string, StoryNode> = {
   "11": {
     id: "11",
     text: "Du får med stor kraft åbnet kisten! Inden i finder du en magisk ring, en helbredelsesdrik og en gammel kært. Disse genstande vil være nyttige på din rejse.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-THWbVE9qywU3EBj42AKd4ctw.png?st=2025-10-12T13%3A23%3A53Z&se=2025-10-12T15%3A23%3A53Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=f1dafa11-a0c2-4092-91d4-10981fbda051&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T11%3A58%3A15Z&ske=2025-10-13T11%3A58%3A15Z&sks=b&skv=2024-08-04&sig=r5V3X2hQFClyz07ZaXYIDPOX8xVL3hQG4Nu9d6eM%2BZM%3D",
     choices: [
       { label: "Tag genstandene og fortsæt", goto: "17" }
     ]
@@ -120,6 +126,7 @@ export const STORY: Record<string, StoryNode> = {
   "15": {
     id: "15",
     text: "Du går til venstre og kommer til en lille grotte med en underjordisk sø. Vandet skinner i dit fakkellys, og du kan se noget der glimter på bunden.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-08MjAr4kmrHsbKJCj9rPaKEO.png?st=2025-10-12T13%3A24%3A46Z&se=2025-10-12T15%3A24%3A46Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=cc612491-d948-4d2e-9821-2683df3719f5&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T14%3A24%3A46Z&ske=2025-10-13T14%3A24%3A46Z&sks=b&skv=2024-08-04&sig=Tv7VFPJbv8T28PZrarmeNuIdTCsLiqYJAGDpMpJOeAg%3D",
     choices: [
       { label: "Dyk ned efter det glimtende", goto: "18" },
       { label: "Undersøg søen fra kanten", goto: "19" },
@@ -129,6 +136,7 @@ export const STORY: Record<string, StoryNode> = {
   "16": {
     id: "16",
     text: "Du går til højre og kommer til en stor kammer med en massiv trone i midten. På tronen sidder en skelettet konge med en glimtende krone på hovedet.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-lmJ2Rqk6Ij6asCUVCH07TPMg.png?st=2025-10-12T13%3A25%3A02Z&se=2025-10-12T15%3A25%3A02Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=ed3ea2f9-5e38-44be-9a1b-7c1e65e4d54f&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T08%3A56%3A54Z&ske=2025-10-13T08%3A56%3A54Z&sks=b&skv=2024-08-04&sig=4gzJ/Yz0jJa7O7GryyGKo7rb87O7%2BgIxf8hCNfSYGrY%3D",
     choices: [
       { label: "Gå hen til tronen", goto: "20" },
       { label: "Undersøg kammeret forsigtigt", goto: "21" },
@@ -163,6 +171,7 @@ export const STORY: Record<string, StoryNode> = {
   "20": {
     id: "20",
     text: "Du går hen til tronen. Når du nærmer dig, begynder skelettet at bevæge sig! Kongen rejser sig op og stirrer på dig med tomme øjenhuler.",
+    image: "https://oaidalleapiprodscus.blob.core.windows.net/private/org-PewCPHQ0ZybeyMJy1CIeFiq5/user-jWpZi21A06vkntZI2hHSB3sD/img-LWJFdHGJCek0PDL5h92D7eoA.png?st=2025-10-12T13%3A26%3A05Z&se=2025-10-12T15%3A26%3A05Z&sp=r&sv=2024-08-04&sr=b&rscd=inline&rsct=image/png&skoid=cc612491-d948-4d2e-9821-2683df3719f5&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2025-10-12T09%3A48%3A37Z&ske=2025-10-13T09%3A48%3A37Z&sks=b&skv=2024-08-04&sig=EI/Z38blqMCp04C3QjQYsuoD0btW%2Bn2eb4ogAFgPE84%3D",
     check: {
       stat: "Held",
       dc: 8,
