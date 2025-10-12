@@ -42,7 +42,7 @@ const STORY_DATA_URLS: Record<string, string> = {
   "cave-adventure": "", // Current story URL
   "forest-quest": "", // Forest story URL  
   "dragon-lair": "", // Dragon story URL
-  "skonhedenogudyret": "https://script.google.com/macros/s/AKfycbzNcwtGVQUktMJ8oHrmBLsSkUf6s4G3zrpUm2lOwVMoywJtqdL_ASyu7gSRWAqXLFnW/exec" // Danish Beauty and the Beast story
+  "skonhedenogudyret": "https://script.google.com/macros/s/AKfycbzwl2jK34Bft1-peRWyhTtKIh0xPlJOwwjAtg9-8wf78b4VK736bEHRW5suK1yOYe1K/exec" // Danish Beauty and the Beast story
 };
 
 // Fallback stories for each story ID
@@ -592,26 +592,32 @@ export async function loadStoryById(storyId: string): Promise<Record<string, Sto
   try {
     // Try to load from Google Sheets first
     const sheetUrl = STORY_DATA_URLS[storyId];
+    console.log(`🔍 Attempting to load story ${storyId} from:`, sheetUrl);
     if (sheetUrl) {
       const res = await fetch(sheetUrl, { cache: "no-store" });
+      console.log(`📡 Fetch response for ${storyId}:`, res.status, res.ok);
       if (res.ok) {
-        // Check if it's a Google Apps Script JSON response
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
+        // Try to parse as JSON first (Google Apps Script returns JSON but with text/html content-type)
+        try {
           const storyData = await res.json();
+          console.log(`Google Apps Script response for ${storyId}:`, storyData);
           if (storyData.nodes && Object.keys(storyData.nodes).length > 0) {
-            console.log(`Loaded story from Google Apps Script: ${storyId}`);
+            console.log(`✅ Loaded story from Google Apps Script: ${storyId} with ${Object.keys(storyData.nodes).length} nodes`);
             return storyData.nodes;
+          } else {
+            console.log(`❌ Story data missing nodes:`, storyData);
           }
-        } else {
-          // Fallback to CSV parsing
-          const csvText = await res.text();
-          const rows = parseCSV(csvText);
-          const story = buildStoryObject(rows);
-          
-          if (Object.keys(story).length > 0) {
-            return story;
-          }
+        } catch (jsonError) {
+          console.log(`❌ Failed to parse as JSON, trying CSV: ${jsonError}`);
+        }
+        
+        // Fallback to CSV parsing
+        const csvText = await res.text();
+        const rows = parseCSV(csvText);
+        const story = buildStoryObject(rows);
+        
+        if (Object.keys(story).length > 0) {
+          return story;
         }
       }
     }
