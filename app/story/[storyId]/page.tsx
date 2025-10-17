@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
-import { loadStoryById } from '../../../lib/storyManager';
+import { loadStoryById } from '../../../lib/supabaseStoryManager';
 
 // Speech Recognition types
 interface SpeechRecognition extends EventTarget {
