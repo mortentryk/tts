@@ -3,7 +3,7 @@
 // and bind it to your story sheet
 
 // Configuration - Update these values for your setup
-const SUPABASE_ENDPOINT = 'https://your-vercel-domain.vercel.app/api/ingest/sheet';
+const SUPABASE_ENDPOINT = 'https://thebook-lac.vercel.app/api/ingest/sheet';
 const INGEST_TOKEN = 'supabase-sync-token-2024'; // Must match your Vercel INGEST_TOKEN
 
 function onOpen() {
