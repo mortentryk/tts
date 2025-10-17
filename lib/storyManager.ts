@@ -628,11 +628,11 @@ export async function loadStoryById(storyId: string): Promise<Record<string, Sto
     // Fall back to static story data
     const fallbackStory = FALLBACK_STORIES[storyId];
     if (fallbackStory) {
-      console.log(`Using fallback story for: ${storyId}`);
+      console.log(`Connection error - contact dev team`);
       return fallbackStory;
     }
     
-    throw new Error(`Story not found: ${storyId}`);
+    throw new Error(`Connection error - contact dev team`);
   } catch (err) {
     console.error(`Failed to load story ${storyId}:`, err);
     throw err;

@@ -137,14 +137,14 @@ export async function loadStoryFromSheet() {
     
     // If no story was loaded, use fallback
     if (Object.keys(story).length === 0) {
-      console.warn("No story data loaded from Sheets, using fallback");
+      console.warn("Connection error - contact dev team");
       return FALLBACK_STORY;
     }
     
     return story;
   } catch (err) {
-    console.error("Kunne ikke hente historie fra Sheets:", err);
-    console.log("Using fallback story");
+    console.error("Connection error - contact dev team:", err);
+    console.log("Connection error - contact dev team");
     return FALLBACK_STORY;
   }
 }
