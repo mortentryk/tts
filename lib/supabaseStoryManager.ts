@@ -174,7 +174,7 @@ export async function loadStoryNode(storyId: string, nodeKey: string): Promise<S
     }
 
     const choices = data.story_choices
-      .sort((a, b) => a.sort_index - b.sort_index)
+      .sort((a: any, b: any) => a.sort_index - b.sort_index)
       .map(choice => ({
         label: choice.label,
         goto: choice.to_node_key,
