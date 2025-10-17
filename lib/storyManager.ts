@@ -42,7 +42,7 @@ const STORY_DATA_URLS: Record<string, string> = {
   "cave-adventure": "", // Temporarily using fallback data
   "forest-quest": "", // Forest story URL  
   "dragon-lair": "", // Dragon story URL
-  "skonhedenogudyret": "https://script.google.com/macros/s/AKfycbzwl2jK34Bft1-peRWyhTtKIh0xPlJOwwjAtg9-8wf78b4VK736bEHRW5suK1yOYe1K/exec" // Danish Beauty and the Beast story
+  "skonhedenogudyret": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQj01dDmjG2S4sXBXeLmZJMOzoowcP-Neq7H9BVlX4qt_Hr2T8HDcu21ZYQxJifhOKjKesv8Yl-7F9x/pub?output=csv" // Danish Beauty and the Beast story
 };
 
 // Fallback stories for each story ID
@@ -596,43 +596,68 @@ export async function loadStoryById(storyId: string): Promise<Record<string, Sto
     // Try to load from Google Sheets first
     const sheetUrl = STORY_DATA_URLS[storyId];
     console.log(`🔍 Attempting to load story ${storyId} from:`, sheetUrl);
+    
     if (sheetUrl) {
-      const res = await fetch(sheetUrl, { cache: "no-store" });
-      console.log(`📡 Fetch response for ${storyId}:`, res.status, res.ok);
-      if (res.ok) {
-        // Try to parse as JSON first (Google Apps Script returns JSON but with text/html content-type)
-        try {
-          const storyData = await res.json();
-          console.log(`Google Apps Script response for ${storyId}:`, storyData);
-          if (storyData.nodes && Object.keys(storyData.nodes).length > 0) {
-            console.log(`✅ Loaded story from Google Apps Script: ${storyId} with ${Object.keys(storyData.nodes).length} nodes`);
-            return storyData.nodes;
-          } else {
-            console.log(`❌ Story data missing nodes:`, storyData);
+      try {
+        const res = await fetch(sheetUrl, { 
+          cache: "no-store",
+          headers: {
+            'Accept': 'application/json,text/csv,*/*',
+            'User-Agent': 'Mozilla/5.0 (compatible; TTS-Books/1.0)'
           }
-        } catch (jsonError) {
-          console.log(`❌ Failed to parse as JSON, trying CSV: ${jsonError}`);
-        }
+        });
         
-        // Fallback to CSV parsing
-        const csvText = await res.text();
-        const rows = parseCSV(csvText);
-        const story = buildStoryObject(rows);
+        console.log(`📡 Fetch response for ${storyId}:`, res.status, res.ok);
         
-        if (Object.keys(story).length > 0) {
-          return story;
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          console.log(`📄 Content-Type: ${contentType}`);
+          
+          // Try to parse as JSON first (Google Apps Script returns JSON)
+          if (contentType.includes('application/json') || contentType.includes('text/html')) {
+            try {
+              const storyData = await res.json();
+              console.log(`Google Apps Script response for ${storyId}:`, storyData);
+              if (storyData.nodes && Object.keys(storyData.nodes).length > 0) {
+                console.log(`✅ Loaded story from Google Apps Script: ${storyId} with ${Object.keys(storyData.nodes).length} nodes`);
+                return storyData.nodes;
+              } else {
+                console.log(`❌ Story data missing nodes:`, storyData);
+              }
+            } catch (jsonError) {
+              console.log(`❌ Failed to parse as JSON, trying CSV: ${jsonError}`);
+            }
+          }
+          
+          // Fallback to CSV parsing
+          const csvText = await res.text();
+          console.log(`📄 CSV text length: ${csvText.length}`);
+          
+          if (csvText && csvText.length > 0 && !csvText.includes('<HTML>')) {
+            const rows = parseCSV(csvText);
+            const story = buildStoryObject(rows);
+            
+            if (Object.keys(story).length > 0) {
+              console.log(`✅ Loaded story from CSV: ${storyId} with ${Object.keys(story).length} nodes`);
+              return story;
+            }
+          }
+        } else {
+          console.log(`❌ HTTP Error: ${res.status} ${res.statusText}`);
         }
+      } catch (fetchError) {
+        console.error(`❌ Fetch error for ${storyId}:`, fetchError);
       }
     }
     
     // Fall back to static story data
     const fallbackStory = FALLBACK_STORIES[storyId];
     if (fallbackStory) {
-      console.log(`Connection error - contact dev team`);
+      console.log(`⚠️ Using fallback story for ${storyId} - Google Sheets connection failed`);
       return fallbackStory;
     }
     
-    throw new Error(`Connection error - contact dev team`);
+    throw new Error(`Story not found: ${storyId}`);
   } catch (err) {
     console.error(`Failed to load story ${storyId}:`, err);
     throw err;
