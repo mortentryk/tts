@@ -6,7 +6,7 @@ import { loadStoryList } from '../lib/supabaseStoryManager';
 
 export default function Home() {
   const router = useRouter();
-  const [stories, setStories] = useState([]);
+  const [stories, setStories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
