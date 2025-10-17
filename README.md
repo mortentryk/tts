@@ -1,158 +1,170 @@
-# TTS Books - Interactive Storytelling App
+# 🎙️ Next.js Interactive Story App (TTS + Supabase)
 
-A Next.js application for interactive storytelling with AI-generated images, text-to-speech, and voice commands.
+An open-source interactive story engine built with **Next.js 14**, **TypeScript**, and **Supabase**.  
+Stories are structured like choose-your-own-adventure games with dice rolls, TTS voice narration, and Cloudinary images.
 
-## 🚀 Features
+---
 
-- **Interactive Stories**: Choose-your-own-adventure style gameplay
-- **AI-Generated Images**: DALL-E 3 powered scene illustrations  
-- **Text-to-Speech**: Voice narration for immersive experience
-- **Voice Commands**: Speech recognition for hands-free gameplay
-- **Dice Rolling**: Integrated dice mechanics with TTS narration
-- **Google Sheets Integration**: Dynamic story loading from spreadsheets
-- **Cloudinary Hosting**: Permanent image storage and CDN delivery
+## 🚀 Tech Stack
 
-## 📁 Project Structure
+- **Next.js 14 + TypeScript** – frontend and API routes  
+- **Supabase (PostgreSQL + Realtime + RLS)** – fast, reliable story data  
+- **Cloudinary** – image hosting and transformations (25 GB free)  
+- **Google Sheets → Supabase Sync** – simple authoring workflow  
+- **TTS / SSML** – text-to-speech narration for each scene
 
-```
-/tts/
-├── app/                    # Next.js app directory
-│   ├── api/tts/           # TTS API endpoint
-│   ├── story/[storyId]/   # Dynamic story pages
-│   └── page.tsx           # Home page
-├── components/            # React components
-├── lib/                   # Story management & loading
-├── scripts/               # Automation scripts
-│   ├── generate-story-images.js
-│   ├── upload-to-cloudinary.js
-│   ├── google-apps-script.js
-│   └── automated-workflow.js
-├── types/                 # TypeScript definitions
-└── data/                  # Local story data
-```
+---
 
-## 🛠️ Setup
+## 🧱 Database Schema
 
-### 1. Install Dependencies
-```bash
-npm install
-```
+### stories
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid | Primary key |
+| slug | text | Unique story slug |
+| title | text | Display title |
+| lang | text | e.g. `da-DK` |
+| description | text | Optional |
+| cover_image_url | text | Cloudinary URL |
+| is_published | boolean | Controls public read |
+| version | int | Bumps on import |
+| created_at / updated_at | timestamptz | Timestamps |
 
-### 2. Environment Variables
-Create `.env.local` with:
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
-CLOUDINARY_API_KEY=your_cloudinary_api_key
-CLOUDINARY_API_SECRET=your_cloudinary_api_secret
-```
+### story_nodes
+| Column | Type | Notes |
+|--------|------|-------|
+| story_id | uuid | FK → stories.id |
+| node_key | text | Unique key per story (e.g. "42") |
+| text_md | text | Scene text (markdown) |
+| tts_ssml | text | Prebuilt SSML |
+| image_url | text | Cloudinary image |
+| dice_check | jsonb | e.g. `{ "stat":"Skill", "dc":8, "success":"43", "fail":"17" }` |
+| sort_index | int | Optional ordering |
 
-### 3. Run Development Server
-```bash
-npm run dev
-```
+### story_choices
+| Column | Type | Notes |
+|--------|------|-------|
+| story_id | uuid | FK → stories.id |
+| from_node_key | text | Source node |
+| label | text | Button text |
+| to_node_key | text | Destination node |
+| conditions | jsonb | Optional state checks |
+| effect | jsonb | Optional stat changes |
 
-Visit `http://localhost:3000` to see your app!
+---
 
-## 🎨 Image Generation & Automation
+## 🔐 Row Level Security (RLS)
 
-### Generate Images for Stories
-```bash
-node scripts/generate-story-images.js
-```
+Enable RLS and allow anonymous reads only for published stories:
 
-### Upload Images to Cloudinary
-```bash
-node scripts/upload-to-cloudinary.js
+```sql
+create policy "public read only published stories"
+on public.stories
+for select
+using (is_published = true);
 ```
 
-### Complete Automated Workflow
-```bash
-node scripts/automated-workflow.js
+Apply similar policies for `story_nodes` and `story_choices`.
+
+---
+
+## 🖼️ Cloudinary vs Supabase Storage
+
+Keep **Cloudinary** for images.
+
+* Built-in resizing, CDN caching, and automatic format conversion (`f_auto,q_auto`)
+* Store only the transformed image URL in your database.
+  Supabase storage is fine but less cost-efficient for many small image assets.
+
+---
+
+## 🔄 Google Sheets → Supabase Sync
+
+Author stories in Google Sheets, then sync automatically.
+
+### Option A: Push from Google Apps Script
+
+Attach a small Apps Script to your sheet that POSTs rows to your Next.js API route:
+
+```js
+const ENDPOINT = 'https://yourdomain.com/api/ingest/sheet';
+const TOKEN = 'your_ingest_token';
+
+function publishAll() {
+  const data = getRowsAsJSON();
+  UrlFetchApp.fetch(ENDPOINT, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'Authorization': `Bearer ${TOKEN}` },
+    payload: JSON.stringify({ storySlug: 'pirate-quest', rows: data })
+  });
+}
 ```
 
-## 📊 Google Sheets Integration
+### Option B: Pull via Cron
 
-1. **Set up your Google Sheet** with story data
-2. **Add the Google Apps Script** from `scripts/google-apps-script.js`
-3. **Update your story URLs** in `lib/storyManager.ts`
-4. **Your app will load stories dynamically!**
+A Supabase Edge Function or GitHub Action runs every X minutes, reads the Sheet, and upserts to Supabase.
 
-See `GOOGLE-SHEETS-SETUP.md` for detailed instructions.
+---
 
-## 🎮 Available Stories
+## 🧩 Example Query (load one node + its choices)
 
-- **Cave Adventure**: Explore a mysterious cave with treasures and dangers
-- **Forest Quest**: Journey through an enchanted forest
-- **Dragon's Lair**: Face the ultimate challenge
-- **Skønhed og Udyret**: Danish Beauty and the Beast story
-
-## 🚀 Deployment
-
-### Vercel (Recommended)
-1. Connect your GitHub repo to Vercel
-2. Add environment variables in Vercel dashboard
-3. Deploy automatically on push
-
-### Manual Deployment
-```bash
-npm run build
-npm start
+```sql
+select n.*,
+  (select coalesce(json_agg(c order by c.sort_index), '[]'::json)
+   from story_choices c
+   where c.story_id = n.story_id
+     and c.from_node_key = n.node_key) as choices
+from story_nodes n
+where n.story_id = $1
+  and n.node_key = $2;
 ```
 
-## 🔧 Development
+---
 
-### Adding New Stories
-1. Create story data in Google Sheets
-2. Add story metadata to `lib/storyManager.ts`
-3. Generate images with automation scripts
-4. Update story URLs
+## 🧠 Gameplay Logic
 
-### Customizing TTS
-- Modify `app/api/tts/route.ts` for different voices
-- Add language support in story data
-- Customize speech recognition commands
+* Each node contains text, image, optional dice check, and outgoing choices.
+* Dice rolls (2d6 or similar) are handled client-side using `dice_check`.
+* Game state (stats, items, flags) can be stored in localStorage for now.
+* TTS voices read either raw text or prebuilt `tts_ssml` from the database.
 
-## 📚 Scripts Reference
+---
 
-| Script | Purpose |
-|--------|---------|
-| `generate-story-images.js` | Generate AI images with DALL-E 3 |
-| `upload-to-cloudinary.js` | Upload images to Cloudinary CDN |
-| `google-apps-script.js` | Google Sheets automation script |
-| `automated-workflow.js` | Complete automation pipeline |
+## 💰 Cost & Limits
 
-## 🆘 Troubleshooting
+| Service       | Free Tier                    | Notes                             |
+| ------------- | ---------------------------- | --------------------------------- |
+| Supabase      | 500 MB DB, generous Realtime | perfect for small story libraries |
+| Cloudinary    | 25 GB storage + CDN          | image transforms included         |
+| Google Sheets | Free                         | lightweight editor                |
 
-### Images not loading?
-- Check Cloudinary URLs are correct
-- Verify API keys are set
-- Check browser console for errors
+---
 
-### TTS not working?
-- Verify OpenAI API key is valid
-- Check microphone permissions
-- Test with different browsers
+## 🧭 Development
 
-### Google Sheets not loading?
-- Check sheet permissions (make public)
-- Verify Apps Script is deployed
-- Check network connectivity
+1. Clone repo
+2. Create a Supabase project → copy URL + anon + service keys to `.env`
+3. Run database migrations (`supabase db push` or `sql` scripts above)
+4. Deploy Next.js app (`npm run dev`)
+5. (Optional) connect Google Sheet and publish your first story
 
-## 📄 License
+---
 
-MIT License - feel free to use and modify!
+## 🛠️ Future Ideas
 
-## 🤝 Contributing
+* User saves & branching stats
+* In-browser editor powered by Supabase Realtime
+* Audio ambience per node
+* Localization table for multi-language stories
+* SSR pre-rendered stories for SEO
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+---
 
-## 📞 Support
+## ⚖️ License
 
-For issues and questions:
-- Check the troubleshooting section
-- Review the setup guides
-- Open an issue on GitHub
+MIT — free to use, share, and adapt. Attribution appreciated.
+
+---
+
+Made with ❤️, dice, and a bit of Supabase magic.
