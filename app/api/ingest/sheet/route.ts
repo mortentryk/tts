@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       .from('stories')
       .upsert({
         slug: storySlug,
-        title: metadata?.title || storySlug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        title: metadata?.title || storySlug.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
         description: metadata?.description || null,
         cover_image_url: metadata?.cover_image_url || null,
         is_published: false, // Keep as draft until manually published
@@ -170,3 +170,4 @@ export async function POST(req: NextRequest) {
     }, { status: 500 });
   }
 }
+
