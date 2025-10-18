@@ -2,28 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../lib/supabase';
 import { z } from 'zod';
 
-// Validation schema for incoming sheet data
+// Very lenient validation schema for incoming sheet data
 const SheetRow = z.object({
   node_key: z.string().min(1),
   text_md: z.string().min(1),
-  image_url: z.string().optional().nullable(), // Allow null and empty strings
-  tts_ssml: z.string().optional().nullable(),
-  dice_check: z.string().optional().nullable(), // JSON string in sheet
-  choices: z.string().optional().nullable(), // JSON string in sheet
-  sort_index: z.coerce.number().optional()
+  image_url: z.any().optional(), // Accept any type
+  tts_ssml: z.any().optional(),
+  dice_check: z.any().optional(), // Accept any type
+  choices: z.any().optional(), // Accept any type
+  sort_index: z.any().optional()
 });
 
 const IngestRequest = z.object({
   storySlug: z.string().min(1),
   rows: z.array(SheetRow),
-  metadata: z.object({
-    title: z.string().optional().nullable(),
-    description: z.string().optional().nullable(),
-    estimated_time: z.string().optional().nullable(),
-    difficulty: z.string().optional().nullable(),
-    author: z.string().optional().nullable(),
-    cover_image_url: z.string().optional().nullable()
-  }).optional()
+  metadata: z.any().optional() // Accept any metadata format
 });
 
 export async function POST(req: NextRequest) {
@@ -78,16 +71,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to upsert story' }, { status: 500 });
     }
 
-    // Prepare nodes for upsert
-    const nodes = rows.map(row => ({
-      story_id: story.id,
-      node_key: row.node_key,
-      text_md: row.text_md,
-      image_url: row.image_url && row.image_url.trim() !== '' ? row.image_url : null,
-      tts_ssml: row.tts_ssml || null,
-      dice_check: row.dice_check ? JSON.parse(row.dice_check) : null,
-      sort_index: row.sort_index || 0
-    }));
+    // Prepare nodes for upsert with robust data cleaning
+    const nodes = rows.map(row => {
+      // Clean image_url - handle any format
+      let imageUrl = null;
+      if (row.image_url && typeof row.image_url === 'string' && row.image_url.trim() !== '') {
+        imageUrl = row.image_url.trim();
+      }
+      
+      // Clean dice_check - handle any format
+      let diceCheck = null;
+      if (row.dice_check) {
+        try {
+          if (typeof row.dice_check === 'string') {
+            diceCheck = JSON.parse(row.dice_check);
+          } else if (typeof row.dice_check === 'object') {
+            diceCheck = row.dice_check;
+          }
+        } catch (e) {
+          console.warn('Invalid dice_check format:', row.dice_check);
+        }
+      }
+      
+      return {
+        story_id: story.id,
+        node_key: row.node_key,
+        text_md: row.text_md,
+        image_url: imageUrl,
+        tts_ssml: row.tts_ssml || null,
+        dice_check: diceCheck,
+        sort_index: parseInt(row.sort_index) || 0
+      };
+    });
 
     // Upsert nodes
     const { error: nodesError } = await supabaseAdmin
