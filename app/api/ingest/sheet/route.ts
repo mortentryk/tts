@@ -6,7 +6,7 @@ import { z } from 'zod';
 const SheetRow = z.object({
   node_key: z.string().min(1),
   text_md: z.string().min(1),
-  image_url: z.string().url().optional(),
+  image_url: z.string().optional(), // Remove .url() validation to allow empty strings
   tts_ssml: z.string().optional(),
   dice_check: z.string().optional(), // JSON string in sheet
   choices: z.string().optional(), // JSON string in sheet
@@ -15,7 +15,15 @@ const SheetRow = z.object({
 
 const IngestRequest = z.object({
   storySlug: z.string().min(1),
-  rows: z.array(SheetRow)
+  rows: z.array(SheetRow),
+  metadata: z.object({
+    title: z.string().optional(),
+    description: z.string().optional(),
+    estimated_time: z.string().optional(),
+    difficulty: z.string().optional(),
+    author: z.string().optional(),
+    cover_image_url: z.string().optional()
+  }).optional()
 });
 
 export async function POST(req: NextRequest) {
@@ -30,16 +38,21 @@ export async function POST(req: NextRequest) {
 
     // Parse and validate request body
     const body = await req.json();
-    const { storySlug, rows } = IngestRequest.parse(body);
+    const { storySlug, rows, metadata } = IngestRequest.parse(body);
 
     console.log(`🔄 Ingesting story: ${storySlug} with ${rows.length} rows`);
+    if (metadata) {
+      console.log('📊 Metadata:', metadata);
+    }
 
-    // Upsert story
+    // Upsert story with metadata
     const { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
       .upsert({
         slug: storySlug,
-        title: storySlug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        title: metadata?.title || storySlug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        description: metadata?.description || null,
+        cover_image_url: metadata?.cover_image_url || null,
         is_published: false, // Keep as draft until manually published
         version: 1
       }, { 
@@ -59,7 +72,7 @@ export async function POST(req: NextRequest) {
       story_id: story.id,
       node_key: row.node_key,
       text_md: row.text_md,
-      image_url: row.image_url || null,
+      image_url: row.image_url && row.image_url.trim() !== '' ? row.image_url : null,
       tts_ssml: row.tts_ssml || null,
       dice_check: row.dice_check ? JSON.parse(row.dice_check) : null,
       sort_index: row.sort_index || 0
