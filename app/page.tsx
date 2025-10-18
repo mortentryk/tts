@@ -11,11 +11,15 @@ export default function Home() {
 
   useEffect(() => {
     const loadStories = async () => {
+      console.log('🚀 Starting to load stories...');
       try {
+        console.log('📡 Calling loadStoryList()...');
         const storyList = await loadStoryList();
+        console.log('✅ Stories loaded:', storyList);
         setStories(storyList);
       } catch (error) {
-        console.error('Failed to load stories:', error);
+        console.error('❌ Failed to load stories:', error);
+        console.log('🔄 Using fallback stories...');
         // Fallback to hardcoded stories if Supabase fails
         setStories([
           { id: 'cave-adventure', title: 'The Dark Cave', description: 'Explore a mysterious cave filled with treasures and dangers.' },
@@ -24,6 +28,7 @@ export default function Home() {
           { id: 'skonhedenogudyret', title: 'Skønhed og Udyret', description: 'En dansk fortælling om skønhed, mod og forvandling.' }
         ]);
       } finally {
+        console.log('🏁 Finished loading stories');
         setLoading(false);
       }
     };

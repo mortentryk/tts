@@ -44,18 +44,23 @@ export interface SupabaseStoryChoice {
 }
 
 export async function loadStoryList(): Promise<StoryMetadata[]> {
+  console.log('🔍 loadStoryList: Starting...');
   try {
+    console.log('🔍 loadStoryList: Calling Supabase...');
     const { data: stories, error } = await supabase
       .from('stories')
       .select('*')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
+    console.log('🔍 loadStoryList: Supabase response:', { data: stories, error });
+
     if (error) {
-      console.error('Error loading stories:', error);
+      console.error('❌ loadStoryList: Supabase error:', error);
       return [];
     }
 
+    console.log('✅ loadStoryList: Found', stories.length, 'stories');
     return stories.map(story => ({
       id: story.slug,
       title: story.title,
@@ -65,7 +70,7 @@ export async function loadStoryList(): Promise<StoryMetadata[]> {
       estimatedTime: '15-20 minutes' // You can add estimated_time field
     }));
   } catch (error) {
-    console.error('Failed to load story list:', error);
+    console.error('❌ loadStoryList: Exception:', error);
     return [];
   }
 }
