@@ -22,7 +22,7 @@ export default function Home() {
         console.log('🔄 Using fallback stories...');
         // Fallback to hardcoded stories if Supabase fails
         setStories([
-          { id: 'cave-adventure', title: 'The Dark Cave', description: 'Explore a mysterious cave filled with treasures and dangers.' },
+          { id: 'cave-adventure', title: 'Cave Adventure', description: 'Explore a mysterious cave filled with treasures and dangers.' },
           { id: 'forest-quest', title: 'The Enchanted Forest', description: 'Journey through magical woods where ancient trees whisper secrets.' },
           { id: 'dragon-lair', title: 'Dragon\'s Lair', description: 'Face the ultimate challenge in the dragon\'s lair.' },
           { id: 'skonhedenogudyret', title: 'Skønhed og Udyret', description: 'En dansk fortælling om skønhed, mod og forvandling.' }
