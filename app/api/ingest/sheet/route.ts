@@ -6,10 +6,10 @@ import { z } from 'zod';
 const SheetRow = z.object({
   node_key: z.string().min(1),
   text_md: z.string().min(1),
-  image_url: z.string().optional(), // Remove .url() validation to allow empty strings
-  tts_ssml: z.string().optional(),
-  dice_check: z.string().optional(), // JSON string in sheet
-  choices: z.string().optional(), // JSON string in sheet
+  image_url: z.string().optional().nullable(), // Allow null and empty strings
+  tts_ssml: z.string().optional().nullable(),
+  dice_check: z.string().optional().nullable(), // JSON string in sheet
+  choices: z.string().optional().nullable(), // JSON string in sheet
   sort_index: z.coerce.number().optional()
 });
 
@@ -17,12 +17,12 @@ const IngestRequest = z.object({
   storySlug: z.string().min(1),
   rows: z.array(SheetRow),
   metadata: z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
-    estimated_time: z.string().optional(),
-    difficulty: z.string().optional(),
-    author: z.string().optional(),
-    cover_image_url: z.string().optional()
+    title: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    estimated_time: z.string().optional().nullable(),
+    difficulty: z.string().optional().nullable(),
+    author: z.string().optional().nullable(),
+    cover_image_url: z.string().optional().nullable()
   }).optional()
 });
 
@@ -38,6 +38,17 @@ export async function POST(req: NextRequest) {
 
     // Parse and validate request body
     const body = await req.json();
+    
+    try {
+      const { storySlug, rows, metadata } = IngestRequest.parse(body);
+    } catch (validationError) {
+      console.error('Validation error:', validationError);
+      return NextResponse.json({ 
+        error: 'Invalid request format', 
+        details: validationError 
+      }, { status: 400 });
+    }
+    
     const { storySlug, rows, metadata } = IngestRequest.parse(body);
 
     console.log(`🔄 Ingesting story: ${storySlug} with ${rows.length} rows`);
