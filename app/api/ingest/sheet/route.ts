@@ -1,23 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../lib/supabase';
-import { z } from 'zod';
-
-// Very lenient validation schema for incoming sheet data
-const SheetRow = z.object({
-  node_key: z.string().min(1),
-  text_md: z.string().min(1),
-  image_url: z.any().optional(), // Accept any type
-  tts_ssml: z.any().optional(),
-  dice_check: z.any().optional(), // Accept any type
-  choices: z.any().optional(), // Accept any type
-  sort_index: z.any().optional()
-});
-
-const IngestRequest = z.object({
-  storySlug: z.string().min(1),
-  rows: z.array(SheetRow),
-  metadata: z.any().optional() // Accept any metadata format
-});
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,20 +11,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Parse and validate request body
+    // Parse request body without strict validation
     const body = await req.json();
-    
-    try {
-      const { storySlug, rows, metadata } = IngestRequest.parse(body);
-    } catch (validationError) {
-      console.error('Validation error:', validationError);
-      return NextResponse.json({ 
-        error: 'Invalid request format', 
-        details: validationError 
-      }, { status: 400 });
+    const { storySlug, rows, metadata } = body;
+
+    if (!storySlug || !rows || !Array.isArray(rows)) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
-    
-    const { storySlug, rows, metadata } = IngestRequest.parse(body);
 
     console.log(`🔄 Ingesting story: ${storySlug} with ${rows.length} rows`);
     if (metadata) {
@@ -72,7 +47,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Prepare nodes for upsert with robust data cleaning
-    const nodes = rows.map(row => {
+    const nodes = rows.map((row: any) => {
       // Clean image_url - handle any format
       let imageUrl = null;
       if (row.image_url && typeof row.image_url === 'string' && row.image_url.trim() !== '') {
@@ -117,59 +92,58 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to upsert nodes' }, { status: 500 });
     }
 
-    // Process choices
-    const choicesToInsert: any[] = [];
-    
-    for (const row of rows) {
-      if (row.choices) {
-        try {
-          const choicesData = JSON.parse(row.choices);
-          if (Array.isArray(choicesData)) {
-            choicesData.forEach((choice, index) => {
-              if (choice.label && choice.to) {
-                choicesToInsert.push({
-                  story_id: story.id,
-                  from_node_key: row.node_key,
-                  label: choice.label,
-                  to_node_key: choice.to,
-                  conditions: choice.conditions || null,
-                  effect: choice.effect || null,
-                  sort_index: choice.sort_index || index
-                });
-              }
-            });
-          }
-        } catch (parseError) {
-          console.error(`Failed to parse choices for node ${row.node_key}:`, parseError);
-        }
-      }
-    }
-
-    // Delete existing choices for this story
-    const { error: deleteError } = await supabaseAdmin
+    // Handle choices - delete existing and insert new ones
+    const { error: deleteChoicesError } = await supabaseAdmin
       .from('story_choices')
       .delete()
       .eq('story_id', story.id);
 
-    if (deleteError) {
-      console.error('Error deleting existing choices:', deleteError);
-      return NextResponse.json({ error: 'Failed to delete existing choices' }, { status: 500 });
+    if (deleteChoicesError) {
+      console.error('Error deleting choices:', deleteChoicesError);
+      return NextResponse.json({ error: 'Failed to delete choices' }, { status: 500 });
     }
 
     // Insert new choices
+    const choicesToInsert: any[] = [];
+    rows.forEach((row: any) => {
+      if (row.choices) {
+        try {
+          const parsedChoices = typeof row.choices === 'string' 
+            ? JSON.parse(row.choices) 
+            : row.choices;
+          
+          if (Array.isArray(parsedChoices)) {
+            parsedChoices.forEach((choice: any, i: number) => {
+              choicesToInsert.push({
+                story_id: story.id,
+                from_node_key: row.node_key,
+                label: choice.label,
+                to_node_key: choice.to,
+                conditions: choice.conditions || null,
+                effect: choice.effect || null,
+                sort_index: choice.sort_index ?? i
+              });
+            });
+          }
+        } catch (jsonParseError) {
+          console.warn(`Could not parse choices for node_key ${row.node_key}:`, jsonParseError);
+        }
+      }
+    });
+
     if (choicesToInsert.length > 0) {
-      const { error: choicesError } = await supabaseAdmin
+      const { error: choicesInsertError } = await supabaseAdmin
         .from('story_choices')
         .insert(choicesToInsert);
 
-      if (choicesError) {
-        console.error('Error inserting choices:', choicesError);
+      if (choicesInsertError) {
+        console.error('Error inserting choices:', choicesInsertError);
         return NextResponse.json({ error: 'Failed to insert choices' }, { status: 500 });
       }
     }
 
-    // Bump version
-    const { error: versionError } = await supabaseAdmin
+    // Update story version
+    const { error: versionUpdateError } = await supabaseAdmin
       .from('stories')
       .update({ 
         version: (story.version || 1) + 1,
@@ -177,26 +151,22 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', story.id);
 
-    if (versionError) {
-      console.error('Error updating version:', versionError);
+    if (versionUpdateError) {
+      console.warn('Could not update story version:', versionUpdateError);
     }
 
-    console.log(`✅ Successfully ingested story ${storySlug}`);
-    console.log(`   - Nodes: ${nodes.length}`);
-    console.log(`   - Choices: ${choicesToInsert.length}`);
-
     return NextResponse.json({ 
-      success: true, 
+      message: 'Story successfully synced to Supabase',
       storyId: story.id,
       nodesCount: nodes.length,
       choicesCount: choicesToInsert.length
     });
 
   } catch (error) {
-    console.error('Ingest error:', error);
+    console.error('Unexpected error during Supabase sync:', error);
     return NextResponse.json({ 
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      error: 'An unexpected error occurred', 
+      details: (error as Error).message 
     }, { status: 500 });
   }
 }
