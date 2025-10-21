@@ -38,7 +38,10 @@ export default function Home() {
     loadStories();
   }, []);
 
-  const handleStorySelect = async (storyId: string) => {
+  const handleStorySelect = async (story: any) => {
+    // Use slug for navigation, fallback to id for backwards compatibility
+    const storySlug = story.slug || story.id;
+    
     // Track click analytics (fire and forget)
     try {
       await fetch('/api/stories/track-click', {
@@ -46,7 +49,7 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ storySlug: storyId }),
+        body: JSON.stringify({ storySlug }),
       });
     } catch (error) {
       // Ignore analytics errors - don't block navigation
@@ -54,7 +57,7 @@ export default function Home() {
     }
     
     // Navigate to story
-    router.push(`/story/${storyId}`);
+    router.push(`/story/${storySlug}`);
   };
 
   if (loading) {
@@ -80,7 +83,7 @@ export default function Home() {
             <div 
               key={story.id}
               className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-6 cursor-pointer hover:bg-dungeon-accent transition-all duration-300 transform hover:scale-105"
-              onClick={() => handleStorySelect(story.id)}
+              onClick={() => handleStorySelect(story)}
             >
               <h3 className="text-xl font-bold text-white mb-2">{story.title}</h3>
               <p className="text-dungeon-text mb-4">{story.description}</p>
