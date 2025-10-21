@@ -532,11 +532,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   // Handle choice selection
   const handleChoice = useCallback((choice: any) => {
     console.log('🎯 Choice clicked:', choice);
-    if (!choice?.goto) {
-      console.error('❌ Choice missing goto property:', choice);
+    // Check for both goto (old format) and to_node_key (API format)
+    const targetNode = choice?.goto || choice?.to_node_key;
+    if (!targetNode) {
+      console.error('❌ Choice missing goto/to_node_key property:', choice);
       return;
     }
-    goTo(choice.goto);
+    goTo(targetNode);
   }, [goTo]);
 
   const handleDiceRoll = useCallback(async () => {
