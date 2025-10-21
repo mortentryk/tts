@@ -22,6 +22,10 @@ export interface StoryNode {
   text: string;
   choices?: StoryChoice[];
   check?: StoryCheck;
+  image?: string; // URL to image
+  video?: string; // URL to video
+  backgroundImage?: string; // URL to background image
+  audio?: string; // URL to background audio
 }
 
 export interface GameState {
@@ -30,6 +34,17 @@ export interface GameState {
 }
 
 export interface SaveData {
+  storyId: string;
   id: string;
   s: GameStats;
+}
+
+export interface StoryMetadata {
+  id: string;
+  title: string;
+  description: string;
+  author?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  estimatedTime?: string;
+  thumbnail?: string;
 }
