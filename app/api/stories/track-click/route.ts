@@ -15,17 +15,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Story slug required' }, { status: 400 });
     }
 
-    // Increment click count
-    const { error } = await supabaseAdmin
+    // Get current click count and increment
+    const { data: story, error: fetchError } = await supabaseAdmin
       .from('stories')
-      .update({ click_count: supabaseAdmin.raw('click_count + 1') })
-      .eq('slug', storySlug);
+      .select('click_count')
+      .eq('slug', storySlug)
+      .single();
 
-    if (error) {
-      console.error('❌ Click tracking error:', error);
-      // Don't return error to user - this is fire and forget
+    if (!fetchError && story) {
+      const { error: updateError } = await supabaseAdmin
+        .from('stories')
+        .update({ click_count: (story.click_count || 0) + 1 })
+        .eq('slug', storySlug);
+
+      if (updateError) {
+        console.error('❌ Click tracking error:', updateError);
+      } else {
+        console.log(`📊 Click tracked for story: ${storySlug}`);
+      }
     } else {
-      console.log(`📊 Click tracked for story: ${storySlug}`);
+      console.error('❌ Could not fetch story for click tracking:', fetchError);
     }
 
     // Always return success (fire and forget)
