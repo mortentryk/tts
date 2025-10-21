@@ -356,8 +356,14 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // Load story by ID
   useEffect(() => {
+    if (!storyId) {
+      console.log('⚠️ StoryId not ready yet:', storyId);
+      return;
+    }
+    
     const loadStory = async () => {
       try {
+        console.log('🚀 Loading story with ID:', storyId);
         // Stop any existing audio when loading new story
         stopSpeak();
         stopVoiceListening();
@@ -370,18 +376,22 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         isTTSRunningRef.current = false;
         
         // Load story metadata
+        console.log('📡 Fetching story metadata from:', `/api/stories/${storyId}`);
         const storyResponse = await fetch(`/api/stories/${storyId}`);
         if (!storyResponse.ok) {
           throw new Error('Story not found');
         }
         const storyData = await storyResponse.json();
+        console.log('✅ Story metadata loaded:', storyData);
         
         // Load first node
+        console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
         const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`);
         if (!nodeResponse.ok) {
           throw new Error('Story content not found');
         }
         const nodeData = await nodeResponse.json();
+        console.log('✅ Story node loaded:', nodeData);
         
         // Convert to the format expected by the component
         const story = {
