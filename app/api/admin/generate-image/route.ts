@@ -39,30 +39,44 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Image generated:', generatedImage.url);
 
-    // Upload to Cloudinary
-    const imageResponse = await fetch(generatedImage.url);
-    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-    
-    const publicId = generateStoryAssetId(storySlug, nodeId, 'image');
-    const uploadResult = await uploadImageToCloudinary(
-      imageBuffer,
-      `tts-books/${storySlug}`,
-      publicId,
-      {
-        width: 1024,
-        height: 1024,
-        quality: 'auto',
-        format: 'auto',
-      }
-    );
+    // Use Cloudinary if configured, otherwise use OpenAI URL directly
+    let finalImageUrl = generatedImage.url;
+    let imageWidth = 1024;
+    let imageHeight = 1024;
+    let publicId = '';
 
-    console.log('☁️ Uploaded to Cloudinary:', uploadResult.secure_url);
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+      // Upload to Cloudinary
+      console.log('📤 Uploading to Cloudinary...');
+      const imageResponse = await fetch(generatedImage.url);
+      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+      
+      publicId = generateStoryAssetId(storySlug, nodeId, 'image');
+      const uploadResult = await uploadImageToCloudinary(
+        imageBuffer,
+        `tts-books/${storySlug}`,
+        publicId,
+        {
+          width: 1024,
+          height: 1024,
+          quality: 'auto',
+          format: 'auto',
+        }
+      );
+
+      finalImageUrl = uploadResult.secure_url;
+      imageWidth = uploadResult.width;
+      imageHeight = uploadResult.height;
+      console.log('☁️ Uploaded to Cloudinary:', finalImageUrl);
+    } else {
+      console.log('⚠️ Cloudinary not configured, using OpenAI URL directly');
+    }
 
     // Update the story node with the new image URL
     const { error: updateError } = await supabase
       .from('story_nodes')
       .update({ 
-        image_url: uploadResult.secure_url,
+        image_url: finalImageUrl,
         updated_at: new Date().toISOString()
       })
       .eq('story_id', (await supabase
@@ -84,10 +98,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       image: {
-        url: uploadResult.secure_url,
-        public_id: uploadResult.public_id,
-        width: uploadResult.width,
-        height: uploadResult.height,
+        url: finalImageUrl,
+        public_id: publicId,
+        width: imageWidth,
+        height: imageHeight,
         model: generatedImage.model,
         cost: generatedImage.cost,
         prompt: generatedImage.revised_prompt || prompt,
