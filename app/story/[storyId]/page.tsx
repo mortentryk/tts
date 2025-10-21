@@ -397,7 +397,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           }
         };
         
-        setStory(story);
+        setStory(story as Record<string, StoryNode>);
         setLoading(false);
       } catch (error) {
         console.error('Failed to load story:', error);
