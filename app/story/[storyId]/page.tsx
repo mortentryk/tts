@@ -391,9 +391,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             choices: nodeData.choices || [],
             check: nodeData.dice_check,
             image: nodeData.image_url,
-            video: null,
-            backgroundImage: null,
-            audio: null
+            video: undefined,
+            backgroundImage: undefined,
+            audio: undefined
           }
         };
         
@@ -498,9 +498,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           choices: nodeData.choices || [],
           check: nodeData.dice_check,
           image: nodeData.image_url,
-          video: null,
-          backgroundImage: null,
-          audio: null
+          video: undefined,
+          backgroundImage: undefined,
+          audio: undefined
         }
       }));
       
