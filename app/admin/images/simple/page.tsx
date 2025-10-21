@@ -105,6 +105,13 @@ export default function SimpleImageManager() {
     setGenerating(nodeKey);
     
     try {
+      // Find the node to get its text
+      const node = nodes.find(n => n.node_key === nodeKey);
+      if (!node) {
+        alert('❌ Node not found');
+        return;
+      }
+
       const response = await fetch('/api/admin/generate-image', {
         method: 'POST',
         headers: {
@@ -112,7 +119,9 @@ export default function SimpleImageManager() {
         },
         body: JSON.stringify({
           storySlug: selectedStory,
-          nodeKey: nodeKey,
+          nodeId: nodeKey,
+          storyText: node.text_md,
+          storyTitle: selectedStoryData?.title || selectedStory,
           style: 'fantasy adventure book illustration',
         }),
       });
@@ -125,10 +134,10 @@ export default function SimpleImageManager() {
           row.node_key === nodeKey 
             ? { 
                 ...row, 
-                image_url: data.imageUrl, 
+                image_url: data.image?.url || data.imageUrl, 
                 status: 'ready',
                 generated_at: new Date().toISOString(),
-                cost: data.cost || 0
+                cost: data.image?.cost || data.cost || 0
               }
             : row
         ));
