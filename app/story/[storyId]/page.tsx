@@ -290,9 +290,9 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
         {currentNode.choices && currentNode.choices.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-lg font-semibold text-white mb-4">What do you do?</h3>
-            {currentNode.choices.map((choice) => (
+            {currentNode.choices.map((choice, index) => (
               <button
-                key={choice.id}
+                key={index}
                 onClick={() => handleChoice(choice)}
                 className="w-full bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-4 text-left hover:bg-dungeon-accent transition-colors group"
               >
