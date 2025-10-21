@@ -404,18 +404,18 @@ export default function SimpleImageManager() {
                     <table className="w-full border-collapse border border-gray-300">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="border border-gray-300 px-4 py-2 text-left">Node</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left">Text</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left">Characters</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left">Image</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left">Status</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Node</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Text</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Characters</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Image</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Actions</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {imageRows.map((row) => (
                           <tr key={row.id} className="hover:bg-gray-50">
-                            <td className="border border-gray-300 px-4 py-2 font-mono text-sm">
+                            <td className="border border-gray-300 px-4 py-2 font-mono text-sm text-gray-900 font-semibold">
                               {row.node_key}
                             </td>
                             <td className="border border-gray-300 px-4 py-2 max-w-md">
@@ -484,7 +484,7 @@ export default function SimpleImageManager() {
                                         </div>
                                       ))
                                     ) : (
-                                      <div className="text-gray-400 text-xs">No characters</div>
+                                      <div className="text-gray-600 text-xs">No characters</div>
                                     )}
                                     <button
                                       onClick={() => setEditingNode(row.node_key)}
@@ -512,7 +512,7 @@ export default function SimpleImageManager() {
                                   </button>
                                 </div>
                               ) : (
-                                <div className="text-gray-400 text-sm">No image</div>
+                                <div className="text-gray-600 text-sm">No image</div>
                               )}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
