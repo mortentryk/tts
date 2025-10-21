@@ -9,10 +9,10 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { storyId: string } }
+  { params }: { params: Promise<{ storyId: string }> }
 ) {
   try {
-    const { storyId } = params;
+    const { storyId } = await params;
 
     // Get story metadata
     const { data: story, error } = await supabase

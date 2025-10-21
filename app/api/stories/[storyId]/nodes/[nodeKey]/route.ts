@@ -9,10 +9,10 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { storyId: string; nodeKey: string } }
+  { params }: { params: Promise<{ storyId: string; nodeKey: string }> }
 ) {
   try {
-    const { storyId, nodeKey } = params;
+    const { storyId, nodeKey } = await params;
 
     // First get the story to verify it exists and is published
     const { data: story, error: storyError } = await supabase
