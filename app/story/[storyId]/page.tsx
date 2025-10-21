@@ -140,7 +140,7 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
             if (choice.label.toLowerCase().includes(transcript) || transcript.includes(choice.label.toLowerCase())) {
               console.log('Voice match found:', choice.label);
               voiceMatchedRef.current = true;
-              goToNode(choice.to_node_key);
+              goToNode(choice.goto);
               break;
             }
           }
@@ -170,7 +170,7 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
   const handleChoice = useCallback((choice: StoryChoice) => {
     stopSpeak();
     stopVoiceListening();
-    goToNode(choice.to_node_key);
+    goToNode(choice.goto);
   }, [goToNode, stopSpeak, stopVoiceListening]);
 
   // Auto-speak when node changes
