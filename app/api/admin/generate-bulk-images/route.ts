@@ -98,14 +98,17 @@ export async function POST(request: NextRequest) {
         // Get character assignments for this node
         const nodeCharacters = characterAssignments
           ?.filter(assignment => assignment.node_key === node.node_key)
-          .map(assignment => ({
-            name: assignment.characters?.name || '',
-            description: assignment.characters?.description || '',
-            appearancePrompt: assignment.characters?.appearance_prompt || '',
-            role: assignment.role,
-            emotion: assignment.emotion,
-            action: assignment.action,
-          })) || [];
+          .map(assignment => {
+            const character = assignment.characters as any;
+            return {
+              name: character?.name || '',
+              description: character?.description || '',
+              appearancePrompt: character?.appearance_prompt || '',
+              role: assignment.role,
+              emotion: assignment.emotion,
+              action: assignment.action,
+            };
+          }) || [];
 
         // Create AI prompt from story text with character consistency
         const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
