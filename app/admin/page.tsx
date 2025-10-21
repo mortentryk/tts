@@ -172,6 +172,12 @@ export default function AdminDashboard() {
                 🎨 AI Images
               </button>
               <button
+                onClick={() => router.push('/admin/images/gallery')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+              >
+                🖼️ Image Gallery
+              </button>
+              <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
               >

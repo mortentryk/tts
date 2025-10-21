@@ -137,6 +137,31 @@ export async function POST(request: NextRequest) {
           }
         );
 
+        // Create gallery entry
+        const { data: galleryImage, error: galleryError } = await supabase
+          .from('story_images')
+          .insert({
+            story_id: story.id,
+            node_key: node.node_key,
+            image_url: uploadResult.secure_url,
+            thumbnail_url: uploadResult.secure_url,
+            public_id: uploadResult.public_id,
+            characters: nodeCharacters.map(char => char.name),
+            cost: generatedImage.cost || 0,
+            model: generatedImage.model,
+            prompt: generatedImage.revised_prompt || prompt,
+            width: uploadResult.width,
+            height: uploadResult.height,
+            file_size: uploadResult.bytes,
+            status: 'generated',
+          })
+          .select()
+          .single();
+
+        if (galleryError) {
+          console.warn('⚠️ Could not create gallery entry:', galleryError);
+        }
+
         // Update the story node with the new image URL
         const { error: updateError } = await supabase
           .from('story_nodes')
