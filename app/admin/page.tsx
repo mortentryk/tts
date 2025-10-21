@@ -92,6 +92,7 @@ export default function AdminDashboard() {
 
   const handleTogglePublish = async (storySlug: string) => {
     try {
+      console.log('🔄 Toggling publish for:', storySlug);
       const response = await fetch('/api/admin/toggle-publish', {
         method: 'POST',
         headers: {
@@ -101,14 +102,18 @@ export default function AdminDashboard() {
       });
 
       const data = await response.json();
+      console.log('📡 Toggle response:', data);
 
       if (response.ok) {
+        console.log('✅ Toggle successful, reloading stories...');
         // Reload stories to show updated status
         loadStories();
       } else {
+        console.error('❌ Toggle failed:', data);
         alert(data.error || 'Failed to toggle publish status');
       }
     } catch (error) {
+      console.error('❌ Toggle error:', error);
       alert('Failed to toggle publish status');
     }
   };
@@ -119,6 +124,7 @@ export default function AdminDashboard() {
     }
 
     try {
+      console.log('🗑️ Deleting story:', storySlug);
       const response = await fetch('/api/admin/delete-story', {
         method: 'DELETE',
         headers: {
@@ -128,14 +134,18 @@ export default function AdminDashboard() {
       });
 
       const data = await response.json();
+      console.log('📡 Delete response:', data);
 
       if (response.ok) {
+        console.log('✅ Delete successful, reloading stories...');
         // Reload stories to remove deleted story
         loadStories();
       } else {
+        console.error('❌ Delete failed:', data);
         alert(data.error || 'Failed to delete story');
       }
     } catch (error) {
+      console.error('❌ Delete error:', error);
       alert('Failed to delete story');
     }
   };
