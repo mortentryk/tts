@@ -249,14 +249,22 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // --- TTS Controls ---
   const stopSpeak = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      // Note: We don't revoke the ObjectURL here as it might be cached for replays
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        // Note: We don't revoke the ObjectURL here as it might be cached for replays
+      }
+      audioRef.current = null;
+      setSpeaking(false);
+      isTTSRunningRef.current = false; // Reset the TTS running flag
+    } catch (error) {
+      console.log('⚠️ Error stopping audio (non-critical):', error);
+      // Reset state even if audio cleanup fails
+      audioRef.current = null;
+      setSpeaking(false);
+      isTTSRunningRef.current = false;
     }
-    audioRef.current = null;
-    setSpeaking(false);
-    isTTSRunningRef.current = false; // Reset the TTS running flag
   }, []);
 
   // --- Voice Recognition Helpers ---
@@ -520,6 +528,16 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       console.error('Failed to load node:', error);
     }
   }, [stopSpeak, stopVoiceListening, storyId]);
+
+  // Handle choice selection
+  const handleChoice = useCallback((choice: any) => {
+    console.log('🎯 Choice clicked:', choice);
+    if (!choice?.goto) {
+      console.error('❌ Choice missing goto property:', choice);
+      return;
+    }
+    goTo(choice.goto);
+  }, [goTo]);
 
   const handleDiceRoll = useCallback(async () => {
     if (!passage?.check || diceRolling) return;
@@ -886,16 +904,24 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   }, [autoRead, passage?.text, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
 
   const goBackToStories = useCallback(() => {
-    // Stop all audio and voice recognition when leaving story
-    stopSpeak();
-    stopVoiceListening();
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    try {
+      // Stop all audio and voice recognition when leaving story
+      stopSpeak();
+      stopVoiceListening();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current = null;
+      }
+      setSpeaking(false);
+      isTTSRunningRef.current = false;
+    } catch (error) {
+      console.log('⚠️ Error during story exit cleanup (non-critical):', error);
+      // Reset state even if cleanup fails
       audioRef.current = null;
+      setSpeaking(false);
+      isTTSRunningRef.current = false;
     }
-    setSpeaking(false);
-    isTTSRunningRef.current = false;
     
     router.push('/');
   }, [router, stopSpeak, stopVoiceListening]);
@@ -903,12 +929,18 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   // Cleanup effect when component unmounts
   useEffect(() => {
     return () => {
-      // Stop all audio and voice recognition on unmount
-      stopSpeak();
-      stopVoiceListening();
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+      try {
+        // Stop all audio and voice recognition on unmount
+        stopSpeak();
+        stopVoiceListening();
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+          audioRef.current = null;
+        }
+      } catch (error) {
+        console.log('⚠️ Error during component unmount cleanup (non-critical):', error);
+        // Reset state even if cleanup fails
         audioRef.current = null;
       }
     };
@@ -1119,7 +1151,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               <button
                 key={i}
                 className="w-full bg-dungeon-surface p-3.5 rounded-lg border border-dungeon-accent text-center text-white hover:bg-dungeon-accent transition-colors"
-                onClick={() => goTo(choice.goto)}
+                onClick={() => handleChoice(choice)}
               >
                 {choice.label}
               </button>
