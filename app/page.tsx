@@ -38,7 +38,22 @@ export default function Home() {
     loadStories();
   }, []);
 
-  const handleStorySelect = (storyId: string) => {
+  const handleStorySelect = async (storyId: string) => {
+    // Track click analytics (fire and forget)
+    try {
+      await fetch('/api/stories/track-click', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ storySlug: storyId }),
+      });
+    } catch (error) {
+      // Ignore analytics errors - don't block navigation
+      console.log('Analytics tracking failed:', error);
+    }
+    
+    // Navigate to story
     router.push(`/story/${storyId}`);
   };
 
