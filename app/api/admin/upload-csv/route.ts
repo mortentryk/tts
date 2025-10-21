@@ -31,14 +31,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSV must have at least a header and one data row' }, { status: 400 });
     }
 
+    // Parse CSV with proper handling of quoted fields
+    const parseCSVLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"') {
+          if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+            // Escaped quote - add one quote to current and skip the next
+            current += '"';
+            i++; // Skip the next quote
+          } else {
+            // Toggle quote state
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          // Field separator - add current field to result
+          result.push(current.trim());
+          current = '';
+        } else {
+          // Regular character - add to current field
+          current += char;
+        }
+      }
+      
+      // Add the last field
+      result.push(current.trim());
+      return result;
+    };
+
     // Parse header
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const headers = parseCSVLine(lines[0]);
     console.log('📋 CSV Headers:', headers);
 
     // Parse data rows
     const rows: any[] = [];
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      const values = parseCSVLine(lines[i]);
       const row: any = {};
       
       headers.forEach((header, index) => {
@@ -53,6 +86,15 @@ export async function POST(request: NextRequest) {
     // Extract metadata from first row if it contains story info
     let metadata: any = {};
     const firstRow = rows[0];
+    console.log('🔍 First row metadata:', {
+      story_title: firstRow.story_title,
+      story_description: firstRow.story_description,
+      front_screen_image: firstRow.front_screen_image,
+      length: firstRow.length,
+      age: firstRow.age,
+      author: firstRow.author
+    });
+    
     if (firstRow.story_title || firstRow.story_description) {
       metadata = {
         title: firstRow.story_title || storySlug,
@@ -62,6 +104,7 @@ export async function POST(request: NextRequest) {
         difficulty: firstRow.age || null,
         author: firstRow.author || null
       };
+      console.log('📝 Extracted metadata:', metadata);
     }
 
     // Process story nodes
@@ -131,16 +174,20 @@ export async function POST(request: NextRequest) {
     console.log(`📄 Created ${nodes.length} nodes and ${choices.length} choices`);
 
     // Upsert story
+    const storyData = {
+      slug: storySlug,
+      title: metadata.title || storySlug,
+      description: metadata.description || null,
+      cover_image_url: metadata.cover_image_url || null,
+      is_published: publishStory,
+      version: 1
+    };
+    
+    console.log('📚 Creating story with data:', storyData);
+    
     const { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
-      .upsert({
-        slug: storySlug,
-        title: metadata.title || storySlug,
-        description: metadata.description || null,
-        cover_image_url: metadata.cover_image_url || null,
-        is_published: publishStory,
-        version: 1
-      }, { 
+      .upsert(storyData, { 
         onConflict: 'slug',
         ignoreDuplicates: false 
       })
