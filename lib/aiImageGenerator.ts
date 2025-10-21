@@ -1,0 +1,217 @@
+import OpenAI from 'openai';
+import Replicate from 'replicate';
+
+// Initialize AI services
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
+
+export interface ImageGenerationOptions {
+  model?: 'dalle3' | 'stable-diffusion';
+  size?: '1024x1024' | '1024x1792' | '1792x1024';
+  quality?: 'standard' | 'hd';
+  style?: 'vivid' | 'natural';
+  n?: number;
+}
+
+export interface GeneratedImage {
+  url: string;
+  revised_prompt?: string;
+  model: string;
+  size: string;
+  cost?: number;
+}
+
+/**
+ * Generate an image using DALL-E 3
+ */
+export async function generateImageWithDALLE3(
+  prompt: string,
+  options: ImageGenerationOptions = {}
+): Promise<GeneratedImage> {
+  try {
+    console.log('🎨 Generating image with DALL-E 3:', prompt);
+    
+    const response = await openai.images.generate({
+      model: 'dall-e-3',
+      prompt,
+      size: options.size || '1024x1024',
+      quality: options.quality || 'standard',
+      style: options.style || 'vivid',
+      n: 1,
+    });
+
+    const image = response.data[0];
+    
+    return {
+      url: image.url!,
+      revised_prompt: image.revised_prompt,
+      model: 'dall-e-3',
+      size: options.size || '1024x1024',
+      cost: 0.04, // DALL-E 3 cost per image
+    };
+  } catch (error) {
+    console.error('❌ DALL-E 3 generation error:', error);
+    throw new Error(`DALL-E 3 generation failed: ${error}`);
+  }
+}
+
+/**
+ * Generate an image using Stable Diffusion via Replicate
+ */
+export async function generateImageWithStableDiffusion(
+  prompt: string,
+  options: ImageGenerationOptions = {}
+): Promise<GeneratedImage> {
+  try {
+    console.log('🎨 Generating image with Stable Diffusion:', prompt);
+    
+    const output = await replicate.run(
+      "stability-ai/stable-diffusion:27b93a2413e7f36cd83da926f3656280b2931564ff050bf9575f1fdf9bcd747e",
+      {
+        input: {
+          prompt,
+          width: 1024,
+          height: 1024,
+          num_outputs: 1,
+          scheduler: "K_EULER",
+          num_inference_steps: 50,
+          guidance_scale: 7.5,
+        }
+      }
+    );
+
+    const imageUrl = Array.isArray(output) ? output[0] : output;
+    
+    return {
+      url: imageUrl as string,
+      model: 'stable-diffusion',
+      size: '1024x1024',
+      cost: 0.0023, // Replicate Stable Diffusion cost
+    };
+  } catch (error) {
+    console.error('❌ Stable Diffusion generation error:', error);
+    throw new Error(`Stable Diffusion generation failed: ${error}`);
+  }
+}
+
+/**
+ * Generate an image using the specified model
+ */
+export async function generateImage(
+  prompt: string,
+  options: ImageGenerationOptions = {}
+): Promise<GeneratedImage> {
+  const model = options.model || 'dalle3';
+  
+  switch (model) {
+    case 'dalle3':
+      return generateImageWithDALLE3(prompt, options);
+    case 'stable-diffusion':
+      return generateImageWithStableDiffusion(prompt, options);
+    default:
+      throw new Error(`Unsupported model: ${model}`);
+  }
+}
+
+/**
+ * Generate multiple images with the same prompt
+ */
+export async function generateMultipleImages(
+  prompt: string,
+  count: number,
+  options: ImageGenerationOptions = {}
+): Promise<GeneratedImage[]> {
+  const promises = Array(count).fill(null).map(() => 
+    generateImage(prompt, options)
+  );
+  
+  return Promise.all(promises);
+}
+
+/**
+ * Create a story-specific image prompt
+ */
+export function createStoryImagePrompt(
+  storyText: string,
+  storyTitle: string,
+  style: string = 'fantasy adventure book illustration'
+): string {
+  // Extract key visual elements from the story text
+  const visualElements = extractVisualElements(storyText);
+  
+  // Create a comprehensive prompt
+  const prompt = `${style}, ${visualElements.join(', ')}, detailed, high quality, book illustration style, vibrant colors, cinematic lighting`;
+  
+  return prompt;
+}
+
+/**
+ * Extract visual elements from story text
+ */
+function extractVisualElements(text: string): string[] {
+  const elements: string[] = [];
+  
+  // Common fantasy/adventure keywords
+  const keywords = [
+    'forest', 'cave', 'mountain', 'castle', 'dragon', 'knight', 'princess',
+    'magic', 'sword', 'treasure', 'monster', 'dark', 'light', 'mysterious',
+    'ancient', 'ruins', 'tower', 'bridge', 'river', 'lake', 'village',
+    'wizard', 'elf', 'dwarf', 'goblin', 'troll', 'spider', 'bat',
+    'crystal', 'gem', 'gold', 'silver', 'fire', 'ice', 'storm'
+  ];
+  
+  const lowerText = text.toLowerCase();
+  
+  keywords.forEach(keyword => {
+    if (lowerText.includes(keyword)) {
+      elements.push(keyword);
+    }
+  });
+  
+  // If no specific elements found, add generic adventure elements
+  if (elements.length === 0) {
+    elements.push('adventure scene', 'mysterious atmosphere');
+  }
+  
+  return elements;
+}
+
+/**
+ * Generate a video using RunwayML or similar
+ */
+export async function generateVideoWithRunway(
+  prompt: string,
+  duration: number = 4
+): Promise<{ url: string; cost: number }> {
+  try {
+    console.log('🎬 Generating video with RunwayML:', prompt);
+    
+    // Note: This is a placeholder - RunwayML API integration would go here
+    // For now, we'll return a mock response
+    throw new Error('Video generation not yet implemented - requires RunwayML API setup');
+    
+    // Example implementation:
+    // const output = await replicate.run(
+    //   "runwayml/gen-2:8b1cc6c616e1c9c647c366f9b4b9b9b9b9b9b9b9",
+    //   {
+    //     input: {
+    //       prompt,
+    //       duration,
+    //     }
+    //   }
+    // );
+    
+    // return {
+    //   url: output as string,
+    //   cost: 0.05, // Estimated cost per second
+    // };
+  } catch (error) {
+    console.error('❌ Video generation error:', error);
+    throw new Error(`Video generation failed: ${error}`);
+  }
+}

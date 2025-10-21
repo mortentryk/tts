@@ -158,12 +158,20 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-bold text-gray-900">
               📚 Story Admin Dashboard
             </h1>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-            >
-              Logout
-            </button>
+            <div className="space-x-4">
+              <button
+                onClick={() => router.push('/admin/images')}
+                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
+              >
+                🎨 AI Images
+              </button>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
           </div>
 
           {/* CSV Upload Section */}

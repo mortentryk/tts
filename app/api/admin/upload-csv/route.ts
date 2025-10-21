@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isAssetReference } from '../../../../lib/cloudinary';
 
 // Initialize Supabase admin client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ooyzdksmeglhocjlaouo.supabase.co';
@@ -75,11 +76,25 @@ export async function POST(request: NextRequest) {
         story_id: '', // Will be set after story creation
         node_key: row.id,
         text_md: row.text,
-        image_url: row.image || null,
+        image_url: null, // Will be set based on image field
         tts_ssml: null,
         dice_check: null,
         sort_index: parseInt(row.id) || 0
       };
+
+      // Handle image field - check if it's an asset reference or full URL
+      if (row.image) {
+        if (isAssetReference(row.image)) {
+          // It's an asset reference like "image-1" - store as-is for later processing
+          node.image_url = row.image;
+        } else if (row.image.startsWith('http')) {
+          // It's a full URL - use directly
+          node.image_url = row.image;
+        } else {
+          // Empty or invalid - set to null
+          node.image_url = null;
+        }
+      }
 
       // Add dice check if present
       if (row.check_stat && row.check_dc) {
