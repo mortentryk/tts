@@ -1,0 +1,199 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase admin client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ooyzdksmeglhocjlaouo.supabase.co';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDYzMzM4OSwiZXhwIjoyMDc2MjA5Mzg5fQ.97T-OTcCNBk0qrs-kdqoGQbhsFDyWCQ5Z_x4bbPPbTI';
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    const file = formData.get('csv') as File;
+    const storySlug = formData.get('storySlug') as string;
+    const publishStory = formData.get('publishStory') === 'true';
+
+    if (!file) {
+      return NextResponse.json({ error: 'No CSV file provided' }, { status: 400 });
+    }
+
+    if (!storySlug) {
+      return NextResponse.json({ error: 'No story slug provided' }, { status: 400 });
+    }
+
+    // Parse CSV content
+    const csvText = await file.text();
+    const lines = csvText.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      return NextResponse.json({ error: 'CSV must have at least a header and one data row' }, { status: 400 });
+    }
+
+    // Parse header
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    console.log('📋 CSV Headers:', headers);
+
+    // Parse data rows
+    const rows: any[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      const row: any = {};
+      
+      headers.forEach((header, index) => {
+        row[header] = values[index] || '';
+      });
+      
+      rows.push(row);
+    }
+
+    console.log(`📊 Parsed ${rows.length} rows from CSV`);
+
+    // Extract metadata from first row if it contains story info
+    let metadata: any = {};
+    const firstRow = rows[0];
+    if (firstRow.story_title || firstRow.story_description) {
+      metadata = {
+        title: firstRow.story_title || storySlug,
+        description: firstRow.story_description || null,
+        cover_image_url: firstRow.front_screen_image || null,
+        estimated_time: firstRow.length || null,
+        difficulty: firstRow.age || null,
+        author: firstRow.author || null
+      };
+    }
+
+    // Process story nodes
+    const nodes: any[] = [];
+    const choices: any[] = [];
+
+    for (const row of rows) {
+      if (!row.id || !row.text) continue;
+
+      // Create node
+      const node: any = {
+        story_id: '', // Will be set after story creation
+        node_key: row.id,
+        text_md: row.text,
+        image_url: row.image || null,
+        tts_ssml: null,
+        dice_check: null,
+        sort_index: parseInt(row.id) || 0
+      };
+
+      // Add dice check if present
+      if (row.check_stat && row.check_dc) {
+        node.dice_check = {
+          stat: row.check_stat,
+          dc: parseInt(row.check_dc) || 10,
+          success: row.check_success || null,
+          fail: row.check_fail || null
+        };
+      }
+
+      nodes.push(node);
+
+      // Create choices
+      const choiceFields = [
+        { label: 'valg1_label', goto: 'valg1_goto' },
+        { label: 'valg2_label', goto: 'valg2_goto' },
+        { label: 'valg3_label', goto: 'valg3_goto' }
+      ];
+
+      choiceFields.forEach((field, index) => {
+        if (row[field.label] && row[field.goto]) {
+          choices.push({
+            story_id: '', // Will be set after story creation
+            from_node_key: row.id,
+            label: row[field.label],
+            to_node_key: row[field.goto],
+            sort_index: index
+          });
+        }
+      });
+    }
+
+    console.log(`📄 Created ${nodes.length} nodes and ${choices.length} choices`);
+
+    // Upsert story
+    const { data: story, error: storyError } = await supabaseAdmin
+      .from('stories')
+      .upsert({
+        slug: storySlug,
+        title: metadata.title || storySlug,
+        description: metadata.description || null,
+        cover_image_url: metadata.cover_image_url || null,
+        is_published: publishStory,
+        version: 1
+      }, { 
+        onConflict: 'slug',
+        ignoreDuplicates: false 
+      })
+      .select('id, version')
+      .single();
+
+    if (storyError) {
+      console.error('❌ Story error:', storyError);
+      return NextResponse.json({ error: `Story error: ${storyError.message}` }, { status: 500 });
+    }
+
+    console.log('✅ Story created/updated:', story.id);
+
+    // Update nodes and choices with story_id
+    const storyId = story.id;
+    nodes.forEach(node => node.story_id = storyId);
+    choices.forEach(choice => choice.story_id = storyId);
+
+    // Upsert nodes
+    const { error: nodesError } = await supabaseAdmin
+      .from('story_nodes')
+      .upsert(nodes, { 
+        onConflict: 'story_id,node_key',
+        ignoreDuplicates: false 
+      });
+
+    if (nodesError) {
+      console.error('❌ Nodes error:', nodesError);
+      return NextResponse.json({ error: `Nodes error: ${nodesError.message}` }, { status: 500 });
+    }
+
+    // Delete existing choices and insert new ones
+    await supabaseAdmin
+      .from('story_choices')
+      .delete()
+      .eq('story_id', storyId);
+
+    if (choices.length > 0) {
+      const { error: choicesError } = await supabaseAdmin
+        .from('story_choices')
+        .insert(choices);
+
+      if (choicesError) {
+        console.error('❌ Choices error:', choicesError);
+        return NextResponse.json({ error: `Choices error: ${choicesError.message}` }, { status: 500 });
+      }
+    }
+
+    console.log('✅ CSV upload successful!');
+
+    return NextResponse.json({
+      success: true,
+      message: `Story "${storySlug}" uploaded successfully!`,
+      story: {
+        id: story.id,
+        slug: storySlug,
+        title: metadata.title || storySlug,
+        nodes: nodes.length,
+        choices: choices.length,
+        published: publishStory
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ CSV upload error:', error);
+    return NextResponse.json({ 
+      error: 'Failed to process CSV file',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}
