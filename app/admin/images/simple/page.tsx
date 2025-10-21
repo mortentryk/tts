@@ -55,7 +55,8 @@ export default function SimpleImageManager() {
   const [expandedText, setExpandedText] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
-  const [showCharacterModal, setShowCharacterModal] = useState<string | null>(null);
+  const [editingNode, setEditingNode] = useState<string | null>(null);
+  const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
 
   // Check if user is logged in
   useEffect(() => {
@@ -274,6 +275,42 @@ export default function SimpleImageManager() {
     router.push('/admin/login');
   };
 
+  const assignCharacterToNode = async (nodeKey: string) => {
+    if (!selectedStory || !assignForm.characterId) {
+      alert('Please select a character');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/character-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storySlug: selectedStory,
+          nodeKey: nodeKey,
+          assignments: [{
+            characterId: assignForm.characterId,
+            emotion: assignForm.emotion || null,
+            action: assignForm.action || null,
+            role: 'main',
+          }],
+        }),
+      });
+
+      if (response.ok) {
+        // Reload assignments
+        await loadCharacterAssignments();
+        setEditingNode(null);
+        setAssignForm({ characterId: '', emotion: '', action: '' });
+      } else {
+        alert('❌ Failed to assign character');
+      }
+    } catch (error) {
+      console.error('Assign character error:', error);
+      alert('❌ Failed to assign character');
+    }
+  };
+
   const selectedStoryData = stories.find(s => s.slug === selectedStory);
   const totalCost = imageRows.reduce((sum, row) => sum + (row.cost || 0), 0);
   const readyImages = imageRows.filter(row => row.status === 'ready').length;
@@ -395,6 +432,48 @@ export default function SimpleImageManager() {
                             <td className="border border-gray-300 px-4 py-2">
                               {(() => {
                                 const nodeChars = characterAssignments.filter(a => a.node_key === row.node_key);
+                                
+                                if (editingNode === row.node_key) {
+                                  return (
+                                    <div className="space-y-2">
+                                      <select
+                                        value={assignForm.characterId}
+                                        onChange={(e) => setAssignForm({...assignForm, characterId: e.target.value})}
+                                        className="w-full text-xs px-2 py-1 border rounded"
+                                      >
+                                        <option value="">Select character...</option>
+                                        {characters.map(char => (
+                                          <option key={char.id} value={char.id}>{char.name}</option>
+                                        ))}
+                                      </select>
+                                      <input
+                                        type="text"
+                                        placeholder="Emotion (e.g. happy)"
+                                        value={assignForm.emotion}
+                                        onChange={(e) => setAssignForm({...assignForm, emotion: e.target.value})}
+                                        className="w-full text-xs px-2 py-1 border rounded"
+                                      />
+                                      <div className="flex space-x-1">
+                                        <button
+                                          onClick={() => assignCharacterToNode(row.node_key)}
+                                          className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
+                                        >
+                                          ✓ Save
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setEditingNode(null);
+                                            setAssignForm({ characterId: '', emotion: '', action: '' });
+                                          }}
+                                          className="text-xs bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                
                                 return (
                                   <div className="space-y-1">
                                     {nodeChars.length > 0 ? (
@@ -408,10 +487,10 @@ export default function SimpleImageManager() {
                                       <div className="text-gray-400 text-xs">No characters</div>
                                     )}
                                     <button
-                                      onClick={() => setShowCharacterModal(row.node_key)}
+                                      onClick={() => setEditingNode(row.node_key)}
                                       className="mt-1 text-xs text-purple-600 hover:text-purple-800 hover:underline"
                                     >
-                                      {nodeChars.length > 0 ? '✏️ Edit' : '➕ Add Characters'}
+                                      {nodeChars.length > 0 ? '✏️ Edit' : '➕ Add Character'}
                                     </button>
                                   </div>
                                 );
