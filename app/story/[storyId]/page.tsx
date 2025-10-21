@@ -175,8 +175,8 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
 
   // Auto-speak when node changes
   useEffect(() => {
-    if (currentNode && currentNode.text_md) {
-      speak(currentNode.text_md);
+    if (currentNode && currentNode.text) {
+      speak(currentNode.text);
     }
   }, [currentNode, speak]);
 
@@ -243,10 +243,10 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
       {/* Story Content */}
       <div className="max-w-4xl mx-auto p-6">
           {/* Scene Image */}
-        {currentNode.image_url && (
+        {currentNode.image && (
             <div className="mb-6 flex justify-center">
               <img 
-              src={currentNode.image_url} 
+              src={currentNode.image} 
                 alt="Scene illustration"
                 className="max-w-full h-auto max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
               />
@@ -256,14 +256,14 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
         {/* Story Text */}
         <div className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-6 mb-6">
           <div className="prose prose-invert max-w-none">
-            <p className="text-lg leading-relaxed whitespace-pre-wrap">{currentNode.text_md}</p>
+            <p className="text-lg leading-relaxed whitespace-pre-wrap">{currentNode.text}</p>
             </div>
         </div>
 
         {/* Controls */}
         <div className="flex justify-center space-x-4 mb-6">
               <button
-            onClick={() => speak(currentNode.text_md)}
+            onClick={() => speak(currentNode.text)}
             disabled={speaking}
             className={`px-6 py-3 rounded-lg font-medium transition-colors ${
               speaking 
