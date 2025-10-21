@@ -74,6 +74,8 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
 
   // Navigate to a specific node
   const goToNode = useCallback(async (nodeKey: string) => {
+    if (!storyId) return;
+    
     try {
       const response = await fetch(`/api/stories/${storyId}/nodes/${nodeKey}`);
       if (!response.ok) {
@@ -120,7 +122,7 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
   const startVoiceListening = useCallback(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    const recognition = new SpeechRecognition();
+      const recognition = new SpeechRecognition();
       
       recognition.lang = 'da-DK';
       recognition.continuous = false;
@@ -135,7 +137,7 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
         const transcript = event.results[0][0].transcript.toLowerCase();
         console.log('Voice command:', transcript);
         
-        if (currentNode?.choices) {
+        if (currentNode?.choices && currentNode.choices.length > 0) {
           for (const choice of currentNode.choices) {
             if (choice.label.toLowerCase().includes(transcript) || transcript.includes(choice.label.toLowerCase())) {
               console.log('Voice match found:', choice.label);
@@ -145,9 +147,9 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
             }
           }
         }
-    };
-
-    recognition.onend = () => {
+      };
+      
+      recognition.onend = () => {
         setVoiceListening(false);
         if (!voiceMatchedRef.current) {
           console.log('No voice match found');
@@ -168,6 +170,8 @@ export default function StoryPage({ params }: { params: Promise<{ storyId: strin
 
   // Handle choice selection
   const handleChoice = useCallback((choice: StoryChoice) => {
+    if (!choice?.goto) return;
+    
     stopSpeak();
     stopVoiceListening();
     goToNode(choice.goto);
