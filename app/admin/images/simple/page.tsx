@@ -131,7 +131,7 @@ export default function SimpleImageManager() {
       const response = await fetch(`/api/admin/characters?storySlug=${selectedStory}`);
       if (response.ok) {
         const data = await response.json();
-        setCharacters(data || []);
+        setCharacters(data.characters || []);
       }
     } catch (error) {
       console.error('Failed to load characters:', error);
