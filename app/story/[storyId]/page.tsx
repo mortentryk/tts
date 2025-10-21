@@ -13,9 +13,9 @@ interface Story {
   is_published: boolean;
 }
 
-export default function StoryPage({ params }: { params: { storyId: string } }) {
+export default function StoryPage({ params }: { params: Promise<{ storyId: string }> }) {
   const router = useRouter();
-  const { storyId } = params;
+  const [storyId, setStoryId] = useState<string>('');
   
   const [story, setStory] = useState<Story | null>(null);
   const [currentNode, setCurrentNode] = useState<StoryNode | null>(null);
@@ -29,8 +29,19 @@ export default function StoryPage({ params }: { params: { storyId: string } }) {
   const isTTSRunningRef = useRef(false);
   const voiceMatchedRef = useRef(false);
 
+  // Load params
+  useEffect(() => {
+    const loadParams = async () => {
+      const resolvedParams = await params;
+      setStoryId(resolvedParams.storyId);
+    };
+    loadParams();
+  }, [params]);
+
   // Load story data
   useEffect(() => {
+    if (!storyId) return;
+    
     const loadStory = async () => {
       try {
         setLoading(true);
