@@ -28,6 +28,22 @@ interface ImageRow {
   cost?: number;
 }
 
+interface Character {
+  id: string;
+  name: string;
+  description?: string;
+  appearance_prompt?: string;
+}
+
+interface CharacterAssignment {
+  node_key: string;
+  character_id: string;
+  character_name: string;
+  role?: string;
+  emotion?: string;
+  action?: string;
+}
+
 export default function SimpleImageManager() {
   const router = useRouter();
   const [stories, setStories] = useState<Story[]>([]);
@@ -37,6 +53,9 @@ export default function SimpleImageManager() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
   const [expandedText, setExpandedText] = useState<string | null>(null);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
+  const [showCharacterModal, setShowCharacterModal] = useState<string | null>(null);
 
   // Check if user is logged in
   useEffect(() => {
@@ -55,9 +74,13 @@ export default function SimpleImageManager() {
   useEffect(() => {
     if (selectedStory) {
       loadStoryNodes();
+      loadCharacters();
+      loadCharacterAssignments();
     } else {
       setNodes([]);
       setImageRows([]);
+      setCharacters([]);
+      setCharacterAssignments([]);
     }
   }, [selectedStory]);
 
@@ -97,6 +120,42 @@ export default function SimpleImageManager() {
       }
     } catch (error) {
       console.error('Failed to load story nodes:', error);
+    }
+  };
+
+  const loadCharacters = async () => {
+    if (!selectedStory) return;
+    
+    try {
+      const response = await fetch(`/api/admin/characters?storySlug=${selectedStory}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCharacters(data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load characters:', error);
+    }
+  };
+
+  const loadCharacterAssignments = async () => {
+    if (!selectedStory) return;
+    
+    try {
+      const response = await fetch(`/api/admin/character-assignments?storySlug=${selectedStory}`);
+      if (response.ok) {
+        const data = await response.json();
+        const assignments: CharacterAssignment[] = data.map((a: any) => ({
+          node_key: a.node_key,
+          character_id: a.character_id,
+          character_name: a.characters?.name || 'Unknown',
+          role: a.role,
+          emotion: a.emotion,
+          action: a.action,
+        }));
+        setCharacterAssignments(assignments);
+      }
+    } catch (error) {
+      console.error('Failed to load character assignments:', error);
     }
   };
 
@@ -225,7 +284,7 @@ export default function SimpleImageManager() {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">
-              🖼️ Simple Image Manager
+              🖼️ Image Manager
             </h1>
             <div className="space-x-4">
               <button
@@ -233,12 +292,6 @@ export default function SimpleImageManager() {
                 className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
               >
                 ← Back to Admin
-              </button>
-              <button
-                onClick={() => router.push('/admin/images')}
-                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
-              >
-                🎨 AI Images
               </button>
               <button
                 onClick={handleLogout}
@@ -276,13 +329,24 @@ export default function SimpleImageManager() {
                 
                 {selectedStoryData && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <h3 className="font-semibold text-blue-900">{selectedStoryData.title}</h3>
-                    {selectedStoryData.description && (
-                      <p className="text-blue-700 mt-1">{selectedStoryData.description}</p>
-                    )}
-                    <p className="text-blue-600 text-sm mt-2">
-                      {selectedStoryData.node_count} nodes • {selectedStoryData.is_published ? 'Published' : 'Draft'}
-                    </p>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold text-blue-900">{selectedStoryData.title}</h3>
+                        {selectedStoryData.description && (
+                          <p className="text-blue-700 mt-1">{selectedStoryData.description}</p>
+                        )}
+                        <p className="text-blue-600 text-sm mt-2">
+                          {selectedStoryData.node_count} nodes • {selectedStoryData.is_published ? 'Published' : 'Draft'}
+                          {characters.length > 0 && ` • ${characters.length} character${characters.length > 1 ? 's' : ''}`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => router.push('/admin/characters')}
+                        className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm"
+                      >
+                        🎭 Manage Characters
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -305,6 +369,7 @@ export default function SimpleImageManager() {
                         <tr className="bg-gray-50">
                           <th className="border border-gray-300 px-4 py-2 text-left">Node</th>
                           <th className="border border-gray-300 px-4 py-2 text-left">Text</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left">Characters</th>
                           <th className="border border-gray-300 px-4 py-2 text-left">Image</th>
                           <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
                           <th className="border border-gray-300 px-4 py-2 text-left">Status</th>
@@ -326,6 +391,31 @@ export default function SimpleImageManager() {
                               >
                                 📖 Read full text
                               </button>
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              {(() => {
+                                const nodeChars = characterAssignments.filter(a => a.node_key === row.node_key);
+                                return (
+                                  <div className="space-y-1">
+                                    {nodeChars.length > 0 ? (
+                                      nodeChars.map((assignment, idx) => (
+                                        <div key={idx} className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                                          🎭 {assignment.character_name}
+                                          {assignment.emotion && ` • ${assignment.emotion}`}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="text-gray-400 text-xs">No characters</div>
+                                    )}
+                                    <button
+                                      onClick={() => setShowCharacterModal(row.node_key)}
+                                      className="mt-1 text-xs text-purple-600 hover:text-purple-800 hover:underline"
+                                    >
+                                      {nodeChars.length > 0 ? '✏️ Edit' : '➕ Add Characters'}
+                                    </button>
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {row.image_url ? (

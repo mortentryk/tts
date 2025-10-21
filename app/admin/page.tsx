@@ -166,22 +166,10 @@ export default function AdminDashboard() {
                 🎭 Characters
               </button>
               <button
-                onClick={() => router.push('/admin/images')}
+                onClick={() => router.push('/admin/images/simple')}
                 className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
               >
-                🎨 AI Images
-              </button>
-              <button
-                onClick={() => router.push('/admin/images/gallery')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-              >
-                🖼️ Image Gallery
-              </button>
-              <button
-                onClick={() => router.push('/admin/images/simple')}
-                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-              >
-                📊 Simple Images
+                🖼️ Images
               </button>
               <button
                 onClick={handleLogout}

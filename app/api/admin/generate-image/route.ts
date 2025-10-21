@@ -26,8 +26,57 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
 
-    // Create AI prompt from story text
-    const prompt = createStoryImagePrompt(storyText, storyTitle || '', style);
+    // Get story ID first
+    const { data: story, error: storyError } = await supabase
+      .from('stories')
+      .select('id')
+      .eq('slug', storySlug)
+      .single();
+
+    if (storyError || !story) {
+      return NextResponse.json(
+        { error: 'Story not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get character assignments for this node
+    const { data: characterAssignments, error: assignmentsError } = await supabase
+      .from('character_assignments')
+      .select(`
+        role,
+        emotion,
+        action,
+        characters (
+          name,
+          description,
+          appearance_prompt
+        )
+      `)
+      .eq('story_id', story.id)
+      .eq('node_key', nodeId);
+
+    if (assignmentsError) {
+      console.warn('⚠️ Could not load character assignments:', assignmentsError);
+    }
+
+    // Format character data for prompt
+    const nodeCharacters = characterAssignments?.map(assignment => {
+      const character = assignment.characters as any;
+      return {
+        name: character?.name || '',
+        description: character?.description || '',
+        appearancePrompt: character?.appearance_prompt || '',
+        role: assignment.role,
+        emotion: assignment.emotion,
+        action: assignment.action,
+      };
+    }) || [];
+
+    console.log(`🎭 Found ${nodeCharacters.length} characters for this node`);
+
+    // Create AI prompt from story text with character consistency
+    const prompt = createStoryImagePrompt(storyText, storyTitle || '', style, nodeCharacters);
     console.log('📝 Generated prompt:', prompt);
 
     // Generate image with AI
@@ -78,12 +127,7 @@ export async function POST(request: NextRequest) {
         image_url: finalImageUrl,
         updated_at: new Date().toISOString()
       })
-      .eq('story_id', (await supabase
-        .from('stories')
-        .select('id')
-        .eq('slug', storySlug)
-        .single()
-      ).data?.id)
+      .eq('story_id', story.id)
       .eq('node_key', nodeId);
 
     if (updateError) {
