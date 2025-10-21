@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
           width: 1024,
           height: 1024,
           quality: 'auto',
-          format: 'auto',
         }
       );
 
