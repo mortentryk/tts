@@ -15,20 +15,36 @@ export async function GET(
     const { storyId } = await params;
 
     // Get story metadata
-    const { data: story, error } = await supabase
+    const { data: story, error: storyError } = await supabase
       .from('stories')
       .select('*')
       .eq('slug', storyId)
       .eq('is_published', true)
       .single();
 
-    if (error) {
-      console.error('❌ Story fetch error:', error);
+    if (storyError) {
+      console.error('❌ Story fetch error:', storyError);
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
-    console.log('✅ Story loaded:', story.title);
-    return NextResponse.json(story);
+    // Get story nodes
+    const { data: nodes, error: nodesError } = await supabase
+      .from('story_nodes')
+      .select('*')
+      .eq('story_id', story.id)
+      .order('sort_index', { ascending: true });
+
+    if (nodesError) {
+      console.error('❌ Nodes fetch error:', nodesError);
+      return NextResponse.json({ error: 'Failed to fetch nodes' }, { status: 500 });
+    }
+
+    console.log('✅ Story loaded:', story.title, 'with', nodes.length, 'nodes');
+    
+    return NextResponse.json({
+      ...story,
+      nodes: nodes || []
+    });
 
   } catch (error) {
     console.error('❌ API error:', error);
