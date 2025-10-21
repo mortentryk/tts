@@ -56,6 +56,28 @@ export async function POST(request: NextRequest) {
     const results = [];
     const errors = [];
 
+    // Get character assignments for all nodes
+    const { data: characterAssignments, error: assignmentsError } = await supabase
+      .from('character_assignments')
+      .select(`
+        node_key,
+        role,
+        emotion,
+        action,
+        characters (
+          id,
+          name,
+          description,
+          reference_image_url,
+          appearance_prompt
+        )
+      `)
+      .eq('story_id', story.id);
+
+    if (assignmentsError) {
+      console.warn('⚠️ Could not load character assignments:', assignmentsError);
+    }
+
     // Process each node
     for (const node of nodes) {
       try {
@@ -73,8 +95,20 @@ export async function POST(request: NextRequest) {
 
         console.log(`🎨 Generating image for node ${node.node_key}...`);
 
-        // Create AI prompt from story text
-        const prompt = createStoryImagePrompt(node.text_md, story.title, style);
+        // Get character assignments for this node
+        const nodeCharacters = characterAssignments
+          ?.filter(assignment => assignment.node_key === node.node_key)
+          .map(assignment => ({
+            name: assignment.characters?.name || '',
+            description: assignment.characters?.description || '',
+            appearancePrompt: assignment.characters?.appearance_prompt || '',
+            role: assignment.role,
+            emotion: assignment.emotion,
+            action: assignment.action,
+          })) || [];
+
+        // Create AI prompt from story text with character consistency
+        const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
         
         // Generate image with AI
         const generatedImage = await generateImage(prompt, {
