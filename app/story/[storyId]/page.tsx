@@ -193,8 +193,8 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   }
 }
 
-export default function Game({ params }: { params: { storyId: string } }) {
-  const { storyId } = params;
+export default function Game({ params }: { params: Promise<{ storyId: string }> }) {
+  const [storyId, setStoryId] = useState<string>('');
   const [currentId, setCurrentId] = useState(START_ID);
   const [stats, setStats] = useState<GameStats>({ Evner: 10, Udholdenhed: 18, Held: 10 });
   const [speaking, setSpeaking] = useState(false);
@@ -237,6 +237,15 @@ export default function Game({ params }: { params: { storyId: string } }) {
   
   const router = useRouter();
   const passage = story[currentId];
+
+  // Load params
+  useEffect(() => {
+    const loadParams = async () => {
+      const resolvedParams = await params;
+      setStoryId(resolvedParams.storyId);
+    };
+    loadParams();
+  }, [params]);
 
   // --- TTS Controls ---
   const stopSpeak = useCallback(() => {
