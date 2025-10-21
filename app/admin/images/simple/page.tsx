@@ -36,6 +36,7 @@ export default function SimpleImageManager() {
   const [imageRows, setImageRows] = useState<ImageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [expandedText, setExpandedText] = useState<string | null>(null);
 
   // Check if user is logged in
   useEffect(() => {
@@ -316,9 +317,15 @@ export default function SimpleImageManager() {
                               {row.node_key}
                             </td>
                             <td className="border border-gray-300 px-4 py-2 max-w-md">
-                              <div className="text-sm text-gray-700 line-clamp-3">
+                              <div className="text-sm text-gray-900 font-medium">
                                 {row.text.substring(0, 100)}...
                               </div>
+                              <button
+                                onClick={() => setExpandedText(row.node_key)}
+                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                📖 Read full text
+                              </button>
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {row.image_url ? (
@@ -413,6 +420,44 @@ export default function SimpleImageManager() {
           )}
         </div>
       </div>
+
+      {/* Full Text Modal */}
+      {expandedText && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedText(null)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-auto p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">
+                📖 Node {expandedText}
+              </h2>
+              <button
+                onClick={() => setExpandedText(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="prose max-w-none">
+              <p className="text-gray-900 text-base leading-relaxed whitespace-pre-wrap">
+                {imageRows.find(row => row.node_key === expandedText)?.text}
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setExpandedText(null)}
+                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
