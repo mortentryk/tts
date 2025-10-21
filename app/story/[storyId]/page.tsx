@@ -131,9 +131,11 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
         
         // Handle autoplay policy errors
         if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
-          throw new Error("Autoplay blocked – click the button and try again.");
+          console.log('⚠️ Autoplay blocked (non-critical):', playError);
+          return; // Don't throw, just return silently
         }
-        throw new Error("Failed to play cached audio");
+        console.log('⚠️ Failed to play cached audio (non-critical):', playError);
+        return; // Don't throw, just return silently
       }
     }
   }
@@ -906,25 +908,35 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   }, [autoRead, passage?.text, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
 
   const goBackToStories = useCallback(() => {
+    // Stop all audio and voice recognition when leaving story
     try {
-      // Stop all audio and voice recognition when leaving story
       stopSpeak();
+    } catch (error) {
+      console.log('⚠️ Error stopping speech (non-critical):', error);
+    }
+    
+    try {
       stopVoiceListening();
+    } catch (error) {
+      console.log('⚠️ Error stopping voice listening (non-critical):', error);
+    }
+    
+    try {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
         audioRef.current = null;
       }
-      setSpeaking(false);
-      isTTSRunningRef.current = false;
     } catch (error) {
-      console.log('⚠️ Error during story exit cleanup (non-critical):', error);
-      // Reset state even if cleanup fails
+      console.log('⚠️ Error stopping audio (non-critical):', error);
       audioRef.current = null;
-      setSpeaking(false);
-      isTTSRunningRef.current = false;
     }
     
+    // Always reset state regardless of errors
+    setSpeaking(false);
+    isTTSRunningRef.current = false;
+    
+    // Navigate away - this should happen even if cleanup fails
     router.push('/');
   }, [router, stopSpeak, stopVoiceListening]);
 
