@@ -348,13 +348,13 @@ export default function SimpleImageManager() {
             <div className="space-y-8">
               {/* Story Selection */}
               <div>
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
                   📚 Select Story
                 </h2>
                 <select
                   value={selectedStory}
                   onChange={(e) => setSelectedStory(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 font-medium"
                 >
                   <option value="">Choose a story...</option>
                   {stories.map((story) => (
@@ -392,10 +392,10 @@ export default function SimpleImageManager() {
               {selectedStory && (
                 <div>
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-semibold text-gray-800">
+                    <h2 className="text-xl font-semibold text-gray-900">
                       🖼️ Story Images
                     </h2>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-gray-900 font-medium">
                       {readyImages} / {imageRows.length} images ready • Total cost: ${totalCost.toFixed(2)}
                     </div>
                   </div>
