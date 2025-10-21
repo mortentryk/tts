@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ assignments });
+    return NextResponse.json(assignments || []);
 
   } catch (error) {
     console.error('❌ Character assignments fetch error:', error);
