@@ -72,27 +72,27 @@ export async function POST(request: NextRequest) {
     console.log('☁️ Uploaded to Cloudinary:', uploadResult.secure_url);
 
     // Update the story node with the new video URL
-    const { error: updateError } = await supabase
+    console.log('💾 Updating node with video URL...');
+    const { data: updateData, error: updateError } = await supabase
       .from('story_nodes')
       .update({ 
         video_url: uploadResult.secure_url,
         updated_at: new Date().toISOString()
       })
-      .eq('story_id', (await supabase
-        .from('stories')
-        .select('id')
-        .eq('slug', storySlug)
-        .single()
-      ).data?.id)
-      .eq('node_key', nodeId);
+      .eq('story_id', story.id)
+      .eq('node_key', nodeId)
+      .select();
 
     if (updateError) {
       console.error('❌ Failed to update story node:', updateError);
+      console.error('❌ Error details:', JSON.stringify(updateError, null, 2));
       return NextResponse.json(
-        { error: 'Failed to update story node with video URL' },
+        { error: `Failed to update story node with video URL: ${updateError.message}` },
         { status: 500 }
       );
     }
+
+    console.log('✅ Node updated successfully:', updateData);
 
     return NextResponse.json({
       success: true,
