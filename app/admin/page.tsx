@@ -317,6 +317,12 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                           <button
+                            onClick={() => router.push(`/story/${story.slug}`)}
+                            className="px-3 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+                          >
+                            👁️ View
+                          </button>
+                          <button
                             onClick={() => handleTogglePublish(story.slug)}
                             className={`px-3 py-1 rounded text-xs font-medium ${
                               story.is_published
