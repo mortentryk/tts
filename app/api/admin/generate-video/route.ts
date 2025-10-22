@@ -101,9 +101,9 @@ export async function POST(request: NextRequest) {
         public_id: uploadResult.public_id,
         width: uploadResult.width,
         height: uploadResult.height,
-        duration,
+        duration: 2.3, // ~14 frames at 6 FPS
         cost: generatedVideo.cost,
-        prompt,
+        prompt: node.text_md,
       },
     });
 
