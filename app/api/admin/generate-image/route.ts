@@ -26,10 +26,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
 
-    // Get story ID first
+    // Get story ID and visual style
     const { data: story, error: storyError } = await supabase
       .from('stories')
-      .select('id')
+      .select('id, title, visual_style')
       .eq('slug', storySlug)
       .single();
 
@@ -98,10 +98,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Use story's visual style or fallback to generic style
+    const visualStyle = story.visual_style || style || 'fantasy adventure book illustration, detailed, cinematic lighting, consistent art style';
+    
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;
-    const prompt = createStoryImagePrompt(fullStoryText, storyTitle || '', style, nodeCharacters);
+    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters);
     console.log('📝 Generated prompt:', prompt);
+    console.log('🎨 Using visual style:', visualStyle);
 
     // Generate image with AI
     const generatedImage = await generateImage(prompt, {
