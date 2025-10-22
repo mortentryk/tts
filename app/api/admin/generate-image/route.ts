@@ -75,8 +75,32 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎭 Found ${nodeCharacters.length} characters for this node`);
 
-    // Create AI prompt from story text with character consistency
-    const prompt = createStoryImagePrompt(storyText, storyTitle || '', style, nodeCharacters);
+    // Get previous nodes for context (up to 2 previous nodes)
+    const currentNodeIndex = parseInt(nodeId) || 0;
+    const previousNodeKeys = [];
+    for (let i = Math.max(1, currentNodeIndex - 2); i < currentNodeIndex; i++) {
+      previousNodeKeys.push(i.toString());
+    }
+
+    let previousContext = '';
+    if (previousNodeKeys.length > 0) {
+      const { data: previousNodes } = await supabase
+        .from('story_nodes')
+        .select('node_key, text_md')
+        .eq('story_id', story.id)
+        .in('node_key', previousNodeKeys)
+        .order('sort_index', { ascending: true });
+
+      if (previousNodes && previousNodes.length > 0) {
+        const contextTexts = previousNodes.map(n => n.text_md.substring(0, 100)).join('. ');
+        previousContext = `Previous scene: ${contextTexts}. Now: `;
+        console.log(`📖 Using context from ${previousNodes.length} previous nodes`);
+      }
+    }
+
+    // Create AI prompt from story text with character consistency and context
+    const fullStoryText = previousContext + storyText;
+    const prompt = createStoryImagePrompt(fullStoryText, storyTitle || '', style, nodeCharacters);
     console.log('📝 Generated prompt:', prompt);
 
     // Generate image with AI
