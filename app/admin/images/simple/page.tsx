@@ -57,6 +57,8 @@ export default function SimpleImageManager() {
   const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
+  const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
+  const [customPrompt, setCustomPrompt] = useState('');
 
   // Check if user is logged in
   useEffect(() => {
@@ -237,6 +239,67 @@ export default function SimpleImageManager() {
     
     // Generate new image
     await generateImage(nodeKey);
+  };
+
+  const generateWithCustomPrompt = async (nodeKey: string) => {
+    if (!selectedStory || !customPrompt.trim()) {
+      alert('❌ Please enter a custom prompt');
+      return;
+    }
+    
+    setGenerating(nodeKey);
+    
+    try {
+      const node = nodes.find(n => n.node_key === nodeKey);
+      if (!node) {
+        alert('❌ Node not found');
+        return;
+      }
+
+      const response = await fetch('/api/admin/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storySlug: selectedStory,
+          nodeId: nodeKey,
+          storyText: customPrompt, // Use custom prompt as story text
+          storyTitle: selectedStoryData?.title || selectedStory,
+          style: '', // No style prefix, use prompt as-is
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setImageRows(prev => prev.map(row => 
+          row.node_key === nodeKey 
+            ? { 
+                ...row, 
+                image_url: data.image?.url || data.imageUrl,
+                status: 'ready',
+                generated_at: new Date().toISOString(),
+                cost: data.image?.cost || data.cost || 0
+              }
+            : row
+        ));
+        setCustomPrompt('');
+        setCustomPromptNode(null);
+        loadStoryNodes();
+      } else {
+        alert(`❌ Failed to generate image: ${data.error}`);
+        setImageRows(prev => prev.map(row => 
+          row.node_key === nodeKey ? { ...row, status: 'error' } : row
+        ));
+      }
+    } catch (error) {
+      console.error('Generate with custom prompt error:', error);
+      alert('❌ Failed to generate image with custom prompt');
+      setImageRows(prev => prev.map(row => 
+        row.node_key === nodeKey ? { ...row, status: 'error' } : row
+      ));
+    } finally {
+      setGenerating(null);
+    }
   };
 
   const deleteImage = async (nodeKey: string) => {
@@ -536,6 +599,15 @@ export default function SimpleImageManager() {
                                       🔄 Redo
                                     </button>
                                     <button
+                                      onClick={() => {
+                                        setCustomPromptNode(row.node_key);
+                                        setCustomPrompt('');
+                                      }}
+                                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+                                    >
+                                      ✏️ Custom
+                                    </button>
+                                    <button
                                       onClick={() => deleteImage(row.node_key)}
                                       className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
                                     >
@@ -589,6 +661,62 @@ export default function SimpleImageManager() {
           )}
         </div>
       </div>
+
+      {/* Custom Prompt Modal */}
+      {customPromptNode && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setCustomPromptNode(null)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">
+                ✏️ Custom Prompt for Node {customPromptNode}
+              </h2>
+              <button
+                onClick={() => setCustomPromptNode(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Describe the exact scene you want:
+                </label>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Example: A dark hollow tree interior, humid air, a large dog with eyes like teacups guarding a chest of copper coins, dramatic lighting, fantasy illustration style"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 h-32"
+                />
+                <p className="mt-2 text-xs text-gray-600">
+                  💡 Tip: Be specific! Include lighting, mood, colors, and style.
+                </p>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setCustomPromptNode(null)}
+                  className="bg-gray-400 text-white px-6 py-2 rounded-md hover:bg-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => generateWithCustomPrompt(customPromptNode)}
+                  disabled={!customPrompt.trim() || generating === customPromptNode}
+                  className="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 disabled:bg-gray-400"
+                >
+                  {generating === customPromptNode ? '⏳ Generating...' : '🎨 Generate Image'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Full Text Modal */}
       {expandedText && (
