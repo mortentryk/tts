@@ -220,6 +220,13 @@ export async function generateVideoWithReplicate(
   try {
     console.log('🎬 Generating video with Replicate:', prompt);
     
+    // Check if API token is set
+    if (!process.env.REPLICATE_API_TOKEN) {
+      throw new Error('REPLICATE_API_TOKEN environment variable is not set');
+    }
+    
+    console.log('✅ Replicate API token found');
+    
     const Replicate = (await import('replicate')).default;
     const replicate = new Replicate({
       auth: process.env.REPLICATE_API_TOKEN,
@@ -233,26 +240,44 @@ export async function generateVideoWithReplicate(
     // Use Stable Video Diffusion to animate an image
     console.log('🎬 Calling Replicate API with image:', imageUrl);
     
-    const output = await replicate.run(
-      "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
-      {
-        input: {
-          input_image: imageUrl,
-          cond_aug: 0.02,
-          decoding_t: 14,
-          video_length: "14_frames_with_svd",
-          sizing_strategy: "maintain_aspect_ratio",
-          motion_bucket_id: 127,
-          frames_per_second: 6,
-        }
+    // Create and wait for the prediction
+    const prediction = await replicate.predictions.create({
+      version: "3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
+      input: {
+        input_image: imageUrl,
+        cond_aug: 0.02,
+        decoding_t: 14,
+        video_length: "14_frames_with_svd",
+        sizing_strategy: "maintain_aspect_ratio",
+        motion_bucket_id: 127,
+        frames_per_second: 6,
       }
-    );
+    });
 
-    console.log('🔍 Replicate output type:', typeof output);
-    console.log('🔍 Replicate output:', JSON.stringify(output, null, 2));
+    console.log('🔍 Prediction created:', prediction.id, 'status:', prediction.status);
 
-    // Replicate returns the video URL in different formats
+    // Wait for the prediction to complete
+    let finalPrediction = prediction;
+    while (finalPrediction.status !== 'succeeded' && finalPrediction.status !== 'failed' && finalPrediction.status !== 'canceled') {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
+      finalPrediction = await replicate.predictions.get(prediction.id);
+      console.log('⏳ Prediction status:', finalPrediction.status);
+    }
+
+    if (finalPrediction.status === 'failed') {
+      throw new Error(`Replicate prediction failed: ${finalPrediction.error}`);
+    }
+
+    if (finalPrediction.status === 'canceled') {
+      throw new Error('Replicate prediction was canceled');
+    }
+
+    console.log('🔍 Final prediction output type:', typeof finalPrediction.output);
+    console.log('🔍 Final prediction output:', JSON.stringify(finalPrediction.output, null, 2));
+
+    // Extract video URL from the prediction output
     let videoUrl: string | null = null;
+    const output = finalPrediction.output;
     
     if (typeof output === 'string') {
       videoUrl = output;
