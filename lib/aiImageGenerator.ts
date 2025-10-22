@@ -231,6 +231,8 @@ export async function generateVideoWithReplicate(
     }
 
     // Use Stable Video Diffusion to animate an image
+    console.log('🎬 Calling Replicate API with image:', imageUrl);
+    
     const output = await replicate.run(
       "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
       {
@@ -246,11 +248,23 @@ export async function generateVideoWithReplicate(
       }
     );
 
-    // Replicate returns the video URL as a string or in an object
-    const videoUrl = typeof output === 'string' ? output : (output as any)?.output || (output as any)?.[0];
+    console.log('🔍 Replicate output type:', typeof output);
+    console.log('🔍 Replicate output:', JSON.stringify(output, null, 2));
+
+    // Replicate returns the video URL in different formats
+    let videoUrl: string | null = null;
     
-    if (!videoUrl) {
-      throw new Error('No video URL returned from Replicate');
+    if (typeof output === 'string') {
+      videoUrl = output;
+    } else if (Array.isArray(output) && output.length > 0) {
+      videoUrl = output[0];
+    } else if (output && typeof output === 'object') {
+      videoUrl = (output as any).output || (output as any).url || (output as any)[0];
+    }
+    
+    if (!videoUrl || typeof videoUrl !== 'string') {
+      console.error('❌ Could not extract video URL from output:', output);
+      throw new Error(`No video URL returned from Replicate. Output type: ${typeof output}, Output: ${JSON.stringify(output)}`);
     }
 
     console.log('✅ Video generated:', videoUrl);
