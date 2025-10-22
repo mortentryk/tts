@@ -211,36 +211,52 @@ function extractVisualElements(text: string): string[] {
 }
 
 /**
- * Generate a video using RunwayML or similar
+ * Generate a video using Replicate
  */
-export async function generateVideoWithRunway(
+export async function generateVideoWithReplicate(
   prompt: string,
-  duration: number = 4
+  imageUrl?: string
 ): Promise<{ url: string; cost: number }> {
   try {
-    console.log('🎬 Generating video with RunwayML:', prompt);
+    console.log('🎬 Generating video with Replicate:', prompt);
     
-    // Note: This is a placeholder - RunwayML API integration would go here
-    // For now, we'll return a mock response
-    throw new Error('Video generation not yet implemented - requires RunwayML API setup');
-    
-    // Example implementation:
-    // const output = await replicate.run(
-    //   "runwayml/gen-2:8b1cc6c616e1c9c647c366f9b4b9b9b9b9b9b9b9",
-    //   {
-    //     input: {
-    //       prompt,
-    //       duration,
-    //     }
-    //   }
-    // );
-    
-    // return {
-    //   url: output as string,
-    //   cost: 0.05, // Estimated cost per second
-    // };
+    const Replicate = (await import('replicate')).default;
+    const replicate = new Replicate({
+      auth: process.env.REPLICATE_API_TOKEN,
+    });
+
+    // If we have an image, animate it. Otherwise skip for now.
+    if (!imageUrl) {
+      throw new Error('Video generation requires an existing image. Generate an image first, then convert it to video.');
+    }
+
+    // Use Stable Video Diffusion to animate an image
+    const output = await replicate.run(
+      "stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
+      {
+        input: {
+          input_image: imageUrl,
+          cond_aug: 0.02,
+          decoding_t: 14,
+          video_length: "14_frames_with_svd",
+          sizing_strategy: "maintain_aspect_ratio",
+          motion_bucket_id: 127,
+          frames_per_second: 6,
+        }
+      }
+    ) as string;
+
+    console.log('✅ Video generated:', output);
+
+    return {
+      url: output,
+      cost: 0.10, // Approximate cost per video
+    };
   } catch (error) {
     console.error('❌ Video generation error:', error);
-    throw new Error(`Video generation failed: ${error}`);
+    throw new Error(`Video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+// Legacy function name for compatibility
+export const generateVideoWithRunway = generateVideoWithReplicate;

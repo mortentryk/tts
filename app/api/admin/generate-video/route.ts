@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateVideoWithRunway } from '../../../../lib/aiImageGenerator';
+import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
 import { uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -9,26 +9,47 @@ export async function POST(request: NextRequest) {
     const { 
       storySlug, 
       nodeId, 
-      storyText, 
-      storyTitle, 
-      duration = 4
+      imageUrl
     } = body;
 
-    if (!storySlug || !nodeId || !storyText) {
+    if (!storySlug || !nodeId) {
       return NextResponse.json(
-        { error: 'Missing required fields: storySlug, nodeId, storyText' },
+        { error: 'Missing required fields: storySlug, nodeId' },
         { status: 400 }
       );
     }
 
     console.log(`🎬 Generating video for story: ${storySlug}, node: ${nodeId}`);
 
-    // Create AI prompt from story text
-    const prompt = `Create a short video scene for: ${storyText}`;
-    console.log('📝 Generated prompt:', prompt);
+    // Get the existing image for this node
+    const { data: story } = await supabase
+      .from('stories')
+      .select('id')
+      .eq('slug', storySlug)
+      .single();
 
-    // Generate video with AI (placeholder for now)
-    const generatedVideo = await generateVideoWithRunway(prompt, duration);
+    if (!story) {
+      return NextResponse.json({ error: 'Story not found' }, { status: 404 });
+    }
+
+    const { data: node } = await supabase
+      .from('story_nodes')
+      .select('image_url, text_md')
+      .eq('story_id', story.id)
+      .eq('node_key', nodeId)
+      .single();
+
+    if (!node || !node.image_url) {
+      return NextResponse.json(
+        { error: 'No image found for this node. Generate an image first.' },
+        { status: 400 }
+      );
+    }
+
+    console.log('🖼️ Using existing image:', node.image_url);
+
+    // Generate video from the image
+    const generatedVideo = await generateVideoWithReplicate(node.text_md, node.image_url);
 
     console.log('✅ Video generated:', generatedVideo.url);
 

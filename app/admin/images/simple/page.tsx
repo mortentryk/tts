@@ -52,6 +52,7 @@ export default function SimpleImageManager() {
   const [imageRows, setImageRows] = useState<ImageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
   const [expandedText, setExpandedText] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
@@ -299,6 +300,39 @@ export default function SimpleImageManager() {
       ));
     } finally {
       setGenerating(null);
+    }
+  };
+
+  const generateVideo = async (nodeKey: string) => {
+    if (!selectedStory) return;
+    
+    const confirmed = confirm('Generate video from this image? This will cost approximately $0.10 and take 1-2 minutes.');
+    if (!confirmed) return;
+    
+    setGeneratingVideo(nodeKey);
+    
+    try {
+      const response = await fetch('/api/admin/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storySlug: selectedStory,
+          nodeId: nodeKey,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`✅ Video generated! URL: ${data.video.url}\nCost: $${data.video.cost}`);
+      } else {
+        alert(`❌ Failed to generate video: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Generate video error:', error);
+      alert('❌ Failed to generate video');
+    } finally {
+      setGeneratingVideo(null);
     }
   };
 
@@ -606,6 +640,13 @@ export default function SimpleImageManager() {
                                       className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
                                     >
                                       ✏️ Custom
+                                    </button>
+                                    <button
+                                      onClick={() => generateVideo(row.node_key)}
+                                      disabled={generatingVideo === row.node_key}
+                                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                                    >
+                                      {generatingVideo === row.node_key ? '⏳ Video...' : '🎬 Video'}
                                     </button>
                                     <button
                                       onClick={() => deleteImage(row.node_key)}
