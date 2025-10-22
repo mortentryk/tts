@@ -26,18 +26,33 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
 
-    // Get story ID and visual style
+    // Get story ID and title (visual_style is optional)
     const { data: story, error: storyError } = await supabase
       .from('stories')
-      .select('id, title, visual_style')
+      .select('id, title')
       .eq('slug', storySlug)
       .single();
 
     if (storyError || !story) {
+      console.error('Story fetch error:', storyError);
       return NextResponse.json(
         { error: 'Story not found' },
         { status: 404 }
       );
+    }
+    
+    // Try to get visual_style if the column exists
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+    } catch (error) {
+      // Column doesn't exist yet, that's okay
+      console.log('Note: visual_style column not yet added to database');
     }
 
     // Get character assignments for this node
@@ -99,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Use story's visual style or fallback to generic style
-    const visualStyle = story.visual_style || style || 'fantasy adventure book illustration, detailed, cinematic lighting, consistent art style';
+    const visualStyle = storyVisualStyle || style || 'fantasy adventure book illustration, detailed, cinematic lighting, consistent art style';
     
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;
