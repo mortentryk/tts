@@ -244,12 +244,19 @@ export async function generateVideoWithReplicate(
           frames_per_second: 6,
         }
       }
-    ) as string;
+    );
 
-    console.log('✅ Video generated:', output);
+    // Replicate returns the video URL as a string or in an object
+    const videoUrl = typeof output === 'string' ? output : (output as any)?.output || (output as any)?.[0];
+    
+    if (!videoUrl) {
+      throw new Error('No video URL returned from Replicate');
+    }
+
+    console.log('✅ Video generated:', videoUrl);
 
     return {
-      url: output,
+      url: videoUrl,
       cost: 0.10, // Approximate cost per video
     };
   } catch (error) {
