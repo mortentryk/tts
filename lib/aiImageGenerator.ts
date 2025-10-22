@@ -170,8 +170,11 @@ export function createStoryImagePrompt(
     characterDescriptions = `, featuring ${characterParts.join(', ')}`;
   }
   
-  // Create a comprehensive prompt
-  const prompt = `${style}, ${visualElements.join(', ')}${characterDescriptions}, detailed, high quality, book illustration style, vibrant colors, cinematic lighting, consistent character appearance`;
+  // Use the first 200 characters of story text as main description
+  const sceneDescription = storyText.substring(0, 200).trim();
+  
+  // Create a comprehensive prompt with the actual story text
+  const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, book illustration style, cinematic lighting`;
   
   return prompt;
 }
