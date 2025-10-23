@@ -21,6 +21,9 @@ export interface SupabaseStoryNode {
   text_md: string;
   tts_ssml?: string;
   image_url?: string;
+  video_url?: string;
+  audio_url?: string;
+  text_hash?: string;
   dice_check?: {
     stat: string;
     dc: number;

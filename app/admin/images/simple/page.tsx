@@ -16,6 +16,7 @@ interface StoryNode {
   node_key: string;
   text_md: string;
   image_url?: string;
+  audio_url?: string;
 }
 
 interface ImageRow {
@@ -23,6 +24,7 @@ interface ImageRow {
   node_key: string;
   text: string;
   image_url: string;
+  audio_url?: string;
   status: 'empty' | 'generating' | 'ready' | 'error';
   generated_at?: string;
   cost?: number;
@@ -53,6 +55,7 @@ export default function SimpleImageManager() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
+  const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
   const [expandedText, setExpandedText] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
@@ -115,6 +118,7 @@ export default function SimpleImageManager() {
           node_key: node.node_key,
           text: node.text_md,
           image_url: node.image_url || '',
+          audio_url: node.audio_url || '',
           status: node.image_url ? 'ready' : 'empty',
           generated_at: node.image_url ? new Date().toISOString() : undefined,
           cost: 0
@@ -333,6 +337,43 @@ export default function SimpleImageManager() {
       alert('❌ Failed to generate video');
     } finally {
       setGeneratingVideo(null);
+    }
+  };
+
+  const generateAudio = async (nodeKey: string) => {
+    if (!selectedStory) return;
+    
+    setGeneratingAudio(nodeKey);
+    
+    try {
+      const response = await fetch('/api/admin/generate-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storySlug: selectedStory,
+          nodeId: nodeKey,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
+        
+        // Update the row to show audio is available
+        setImageRows(prev => prev.map(row => 
+          row.node_key === nodeKey 
+            ? { ...row, audio_url: data.audio.url }
+            : row
+        ));
+      } else {
+        alert(`❌ Failed to generate audio: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Generate audio error:', error);
+      alert('❌ Failed to generate audio');
+    } finally {
+      setGeneratingAudio(null);
     }
   };
 
@@ -647,6 +688,14 @@ export default function SimpleImageManager() {
                                       className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
                                     >
                                       {generatingVideo === row.node_key ? '⏳ Video...' : '🎬 Video'}
+                                    </button>
+                                    <button
+                                      onClick={() => generateAudio(row.node_key)}
+                                      disabled={generatingAudio === row.node_key}
+                                      className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-400"
+                                      title={row.audio_url ? 'Audio already generated - click to regenerate' : 'Generate audio with ElevenLabs'}
+                                    >
+                                      {generatingAudio === row.node_key ? '⏳ Audio...' : row.audio_url ? '🔊 ✓' : '🔊 Audio'}
                                     </button>
                                     <button
                                       onClick={() => deleteImage(row.node_key)}

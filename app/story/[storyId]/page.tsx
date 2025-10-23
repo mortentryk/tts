@@ -87,7 +87,7 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     audioRef.current = null;
   }
 
-  const key = `openai-${hashText(text)}`;
+  const key = `elevenlabs-${hashText(text)}`;
   if (audioCache.has(key)) {
     const cached = audioCache.get(key);
     if (cached) {
@@ -143,7 +143,7 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   const res = await fetch(SERVER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, provider: 'openai' })
+    body: JSON.stringify({ text, provider: 'elevenlabs' })
   });
 
   if (!res.ok) {
@@ -151,7 +151,7 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     try { 
       msg = await res.text(); 
     } catch {}
-    const e = new Error(`OpenAI TTS failed (${res.status})${msg ? `: ${msg.slice(0,180)}` : ""}`);
+    const e = new Error(`TTS failed (${res.status})${msg ? `: ${msg.slice(0,180)}` : ""}`);
     (e as any).status = res.status;
     throw e;
   }

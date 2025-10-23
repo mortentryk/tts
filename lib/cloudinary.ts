@@ -95,6 +95,41 @@ export async function uploadVideoToCloudinary(
 }
 
 /**
+ * Upload audio to Cloudinary
+ */
+export async function uploadAudioToCloudinary(
+  audioBuffer: Buffer,
+  folder: string,
+  publicId: string,
+  options: any = {}
+): Promise<CloudinaryUploadResult> {
+  try {
+    const result = await cloudinary.uploader.upload(
+      `data:audio/mpeg;base64,${audioBuffer.toString('base64')}`,
+      {
+        folder,
+        public_id: publicId,
+        resource_type: 'video', // Cloudinary uses 'video' resource type for audio files
+        ...options,
+      }
+    );
+
+    return {
+      public_id: result.public_id,
+      secure_url: result.secure_url,
+      width: result.width || 0,
+      height: result.height || 0,
+      format: result.format,
+      bytes: result.bytes,
+    };
+  } catch (error) {
+    console.error('❌ Cloudinary audio upload error:', error);
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+    throw new Error(`Failed to upload audio to Cloudinary: ${errorMessage}`);
+  }
+}
+
+/**
  * Generate a Cloudinary URL for an image with transformations
  */
 export function getCloudinaryUrl(
