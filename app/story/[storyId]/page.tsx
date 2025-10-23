@@ -663,7 +663,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     console.log('🎯 Auto-read triggered for passage:', passage.id);
     speakCloudThrottled();
-  }, [autoRead, currentId, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
+  }, [autoRead, currentId, passage, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
 
   // --- Speech Recognition ---
   useEffect(() => {
