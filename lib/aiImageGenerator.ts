@@ -237,20 +237,18 @@ export async function generateVideoWithReplicate(
       throw new Error('Video generation requires an existing image. Generate an image first, then convert it to video.');
     }
 
-    // Use Stable Video Diffusion to animate an image
-    console.log('🎬 Calling Replicate API with image:', imageUrl);
+    // Use Kling v2.1 to animate an image
+    console.log('🎬 Calling Replicate API with Kling v2.1, image:', imageUrl);
     
     // Create and wait for the prediction
     const prediction = await replicate.predictions.create({
-      version: "3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438",
+      model: "kwaivgi/kling-v2.1",
       input: {
-        input_image: imageUrl,
-        cond_aug: 0.02,
-        decoding_t: 14,
-        video_length: "14_frames_with_svd",
-        sizing_strategy: "maintain_aspect_ratio",
-        motion_bucket_id: 127,
-        frames_per_second: 6,
+        prompt: prompt.substring(0, 200), // Use story context for video animation
+        start_image: imageUrl,
+        aspect_ratio: "16:9",
+        duration: 5, // 5 second video
+        negative_prompt: "blurry, low quality, distorted"
       }
     });
 
