@@ -16,6 +16,7 @@ interface StoryNode {
   node_key: string;
   text_md: string;
   image_url?: string;
+  video_url?: string;
   audio_url?: string;
 }
 
@@ -24,6 +25,7 @@ interface ImageRow {
   node_key: string;
   text: string;
   image_url: string;
+  video_url?: string;
   audio_url?: string;
   status: 'empty' | 'generating' | 'ready' | 'error';
   generated_at?: string;
@@ -118,6 +120,7 @@ export default function SimpleImageManager() {
           node_key: node.node_key,
           text: node.text_md,
           image_url: node.image_url || '',
+          video_url: node.video_url || '',
           audio_url: node.audio_url || '',
           status: node.image_url ? 'ready' : 'empty',
           generated_at: node.image_url ? new Date().toISOString() : undefined,
@@ -546,6 +549,8 @@ export default function SimpleImageManager() {
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Text</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Characters</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Image</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Video</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Audio</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Actions</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Status</th>
                         </tr>
@@ -651,6 +656,45 @@ export default function SimpleImageManager() {
                                 </div>
                               ) : (
                                 <div className="text-gray-600 text-sm">No image</div>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              {row.video_url ? (
+                                <div className="flex items-center space-x-2">
+                                  <video
+                                    src={row.video_url}
+                                    className="w-16 h-16 object-cover rounded border"
+                                    controls={false}
+                                  />
+                                  <button
+                                    onClick={() => window.open(row.video_url, '_blank')}
+                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                  >
+                                    🎬 Play
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="text-gray-600 text-sm">No video</div>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              {row.audio_url ? (
+                                <div className="flex items-center space-x-2">
+                                  <audio
+                                    src={row.audio_url}
+                                    controls
+                                    className="h-8"
+                                    style={{ maxWidth: '150px' }}
+                                  />
+                                  <button
+                                    onClick={() => window.open(row.audio_url, '_blank')}
+                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                  >
+                                    🔊 Open
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="text-gray-600 text-sm">No audio</div>
                               )}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
