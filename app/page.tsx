@@ -82,17 +82,22 @@ export default function Home() {
           {stories.map((story) => (
             <div 
               key={story.id}
-              className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-6 cursor-pointer hover:bg-dungeon-accent transition-all duration-300 transform hover:scale-105"
-              onClick={() => handleStorySelect(story)}
+              className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-6 hover:border-yellow-500 transition-all duration-300"
             >
               <h3 className="text-xl font-bold text-white mb-2">{story.title}</h3>
               <p className="text-dungeon-text mb-4">{story.description}</p>
-              <div className="text-sm text-dungeon-text">
+              <div className="text-sm text-dungeon-text mb-4">
                 <span className="px-3 py-1 rounded-full text-sm font-semibold bg-yellow-900 text-yellow-400">
                   🟡 MEDIUM
                 </span>
                 <span className="ml-4">⏱️ {story.estimatedTime || '15-20 min'}</span>
               </div>
+              <button
+                onClick={() => handleStorySelect(story)}
+                className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 transform hover:scale-105"
+              >
+                ▶️ Start Story
+              </button>
             </div>
           ))}
         </div>

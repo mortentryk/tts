@@ -26,18 +26,33 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
 
-    // Get story ID first
+    // Get story ID and title (visual_style is optional)
     const { data: story, error: storyError } = await supabase
       .from('stories')
-      .select('id')
+      .select('id, title')
       .eq('slug', storySlug)
       .single();
 
     if (storyError || !story) {
+      console.error('Story fetch error:', storyError);
       return NextResponse.json(
         { error: 'Story not found' },
         { status: 404 }
       );
+    }
+    
+    // Try to get visual_style if the column exists
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+    } catch (error) {
+      // Column doesn't exist yet, that's okay
+      console.log('Note: visual_style column not yet added to database');
     }
 
     // Get character assignments for this node
@@ -75,9 +90,37 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎭 Found ${nodeCharacters.length} characters for this node`);
 
-    // Create AI prompt from story text with character consistency
-    const prompt = createStoryImagePrompt(storyText, storyTitle || '', style, nodeCharacters);
+    // Get previous nodes for context (up to 2 previous nodes)
+    const currentNodeIndex = parseInt(nodeId) || 0;
+    const previousNodeKeys = [];
+    for (let i = Math.max(1, currentNodeIndex - 2); i < currentNodeIndex; i++) {
+      previousNodeKeys.push(i.toString());
+    }
+
+    let previousContext = '';
+    if (previousNodeKeys.length > 0) {
+      const { data: previousNodes } = await supabase
+        .from('story_nodes')
+        .select('node_key, text_md')
+        .eq('story_id', story.id)
+        .in('node_key', previousNodeKeys)
+        .order('sort_index', { ascending: true });
+
+      if (previousNodes && previousNodes.length > 0) {
+        const contextTexts = previousNodes.map(n => n.text_md.substring(0, 100)).join('. ');
+        previousContext = `Previous scene: ${contextTexts}. Now: `;
+        console.log(`📖 Using context from ${previousNodes.length} previous nodes`);
+      }
+    }
+
+    // Use story's visual style or fallback to generic style
+    const visualStyle = storyVisualStyle || style || 'fantasy adventure book illustration, detailed, cinematic lighting, consistent art style';
+    
+    // Create AI prompt from story text with character consistency and context
+    const fullStoryText = previousContext + storyText;
+    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters);
     console.log('📝 Generated prompt:', prompt);
+    console.log('🎨 Using visual style:', visualStyle);
 
     // Generate image with AI
     const generatedImage = await generateImage(prompt, {

@@ -1041,7 +1041,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         {/* Main Content */}
         <div className="mb-4">
           {/* Scene Image */}
-          {passage?.image && (
+          {passage?.image && passage.image.includes('cloudinary.com') && (
             <div className="mb-6 flex justify-center">
               <img 
                 src={passage.image} 
@@ -1056,7 +1056,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           )}
           
           {/* Scene Video */}
-          {passage?.video && (
+          {passage?.video && passage.video.includes('cloudinary.com') && (
             <div className="mb-6 flex justify-center">
               <video 
                 src={passage.video}

@@ -211,36 +211,96 @@ function extractVisualElements(text: string): string[] {
 }
 
 /**
- * Generate a video using RunwayML or similar
+ * Generate a video using Replicate
  */
-export async function generateVideoWithRunway(
+export async function generateVideoWithReplicate(
   prompt: string,
-  duration: number = 4
+  imageUrl?: string
 ): Promise<{ url: string; cost: number }> {
   try {
-    console.log('🎬 Generating video with RunwayML:', prompt);
+    console.log('🎬 Generating video with Replicate:', prompt);
     
-    // Note: This is a placeholder - RunwayML API integration would go here
-    // For now, we'll return a mock response
-    throw new Error('Video generation not yet implemented - requires RunwayML API setup');
+    // Check if API token is set
+    if (!process.env.REPLICATE_API_TOKEN) {
+      throw new Error('REPLICATE_API_TOKEN environment variable is not set');
+    }
     
-    // Example implementation:
-    // const output = await replicate.run(
-    //   "runwayml/gen-2:8b1cc6c616e1c9c647c366f9b4b9b9b9b9b9b9b9",
-    //   {
-    //     input: {
-    //       prompt,
-    //       duration,
-    //     }
-    //   }
-    // );
+    console.log('✅ Replicate API token found');
     
-    // return {
-    //   url: output as string,
-    //   cost: 0.05, // Estimated cost per second
-    // };
+    const Replicate = (await import('replicate')).default;
+    const replicate = new Replicate({
+      auth: process.env.REPLICATE_API_TOKEN,
+    });
+
+    // If we have an image, animate it. Otherwise skip for now.
+    if (!imageUrl) {
+      throw new Error('Video generation requires an existing image. Generate an image first, then convert it to video.');
+    }
+
+    // Use Kling v2.1 to animate an image
+    console.log('🎬 Calling Replicate API with Kling v2.1, image:', imageUrl);
+    
+    // Create and wait for the prediction
+    const prediction = await replicate.predictions.create({
+      model: "kwaivgi/kling-v2.1",
+      input: {
+        prompt: prompt.substring(0, 200), // Use story context for video animation
+        start_image: imageUrl,
+        aspect_ratio: "16:9",
+        duration: 5, // 5 second video
+        negative_prompt: "blurry, low quality, distorted"
+      }
+    });
+
+    console.log('🔍 Prediction created:', prediction.id, 'status:', prediction.status);
+
+    // Wait for the prediction to complete
+    let finalPrediction = prediction;
+    while (finalPrediction.status !== 'succeeded' && finalPrediction.status !== 'failed' && finalPrediction.status !== 'canceled') {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
+      finalPrediction = await replicate.predictions.get(prediction.id);
+      console.log('⏳ Prediction status:', finalPrediction.status);
+    }
+
+    if (finalPrediction.status === 'failed') {
+      throw new Error(`Replicate prediction failed: ${finalPrediction.error}`);
+    }
+
+    if (finalPrediction.status === 'canceled') {
+      throw new Error('Replicate prediction was canceled');
+    }
+
+    console.log('🔍 Final prediction output type:', typeof finalPrediction.output);
+    console.log('🔍 Final prediction output:', JSON.stringify(finalPrediction.output, null, 2));
+
+    // Extract video URL from the prediction output
+    let videoUrl: string | null = null;
+    const output = finalPrediction.output;
+    
+    if (typeof output === 'string') {
+      videoUrl = output;
+    } else if (Array.isArray(output) && output.length > 0) {
+      videoUrl = output[0];
+    } else if (output && typeof output === 'object') {
+      videoUrl = (output as any).output || (output as any).url || (output as any)[0];
+    }
+    
+    if (!videoUrl || typeof videoUrl !== 'string') {
+      console.error('❌ Could not extract video URL from output:', output);
+      throw new Error(`No video URL returned from Replicate. Output type: ${typeof output}, Output: ${JSON.stringify(output)}`);
+    }
+
+    console.log('✅ Video generated:', videoUrl);
+
+    return {
+      url: videoUrl,
+      cost: 0.10, // Approximate cost per video
+    };
   } catch (error) {
     console.error('❌ Video generation error:', error);
-    throw new Error(`Video generation failed: ${error}`);
+    throw new Error(`Video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+// Legacy function name for compatibility
+export const generateVideoWithRunway = generateVideoWithReplicate;
