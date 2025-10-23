@@ -408,7 +408,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           [nodeData.node_key]: {
             id: nodeData.node_key,
             text: nodeData.text_md,
-            choices: nodeData.choices || [],
+            choices: (nodeData.choices || []).map((choice: any) => ({
+              label: choice.label,
+              goto: choice.to_node_key,
+              match: choice.match
+            })),
             check: nodeData.dice_check,
             image: nodeData.image_url,
             video: undefined,
@@ -515,7 +519,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         [nodeData.node_key]: {
           id: nodeData.node_key,
           text: nodeData.text_md,
-          choices: nodeData.choices || [],
+          choices: (nodeData.choices || []).map((choice: any) => ({
+            label: choice.label,
+            goto: choice.to_node_key,
+            match: choice.match
+          })),
           check: nodeData.dice_check,
           image: nodeData.image_url,
           video: undefined,
