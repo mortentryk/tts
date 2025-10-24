@@ -9,10 +9,16 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function GET() {
   try {
-    // Get published stories
+    // Get published stories with their first image as fallback
     const { data: stories, error } = await supabase
       .from('stories')
-      .select('*')
+      .select(`
+        *,
+        story_nodes!inner(
+          image_url,
+          sort_index
+        )
+      `)
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
@@ -21,8 +27,26 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to load stories' }, { status: 500 });
     }
 
-    console.log('✅ Stories loaded:', stories.length);
-    return NextResponse.json(stories);
+    // Process stories to add fallback images
+    const processedStories = stories.map(story => {
+      // If no cover image, use the first story node image
+      if (!story.cover_image_url && story.story_nodes && story.story_nodes.length > 0) {
+        const firstNodeWithImage = story.story_nodes
+          .sort((a: any, b: any) => a.sort_index - b.sort_index)
+          .find((node: any) => node.image_url);
+        
+        if (firstNodeWithImage) {
+          story.cover_image_url = firstNodeWithImage.image_url;
+        }
+      }
+      
+      // Remove the story_nodes from the response
+      delete story.story_nodes;
+      return story;
+    });
+
+    console.log('✅ Stories loaded:', processedStories.length);
+    return NextResponse.json(processedStories);
 
   } catch (error) {
     console.error('❌ API error:', error);

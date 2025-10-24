@@ -72,32 +72,51 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold text-white mb-4">Choose Your Adventure</h1>
-        <p className="text-dungeon-text text-lg mb-8">
+    <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center p-4">
+      <div className="text-center max-w-6xl w-full">
+        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">Choose Your Adventure</h1>
+        <p className="text-dungeon-text text-base sm:text-lg mb-8">
           Select a story to begin your interactive adventure with voice narration
         </p>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-4xl">
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
           {stories.map((story) => (
             <div 
               key={story.id}
-              className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-6 hover:border-yellow-500 transition-all duration-300"
+              className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg overflow-hidden hover:border-yellow-500 transition-all duration-300 cursor-pointer group"
+              onClick={() => handleStorySelect(story)}
             >
-              <h3 className="text-xl font-bold text-white mb-2">{story.title}</h3>
-              <p className="text-dungeon-text mb-4">{story.description}</p>
-              <div className="text-sm text-dungeon-text mb-4">
-                <span className="px-3 py-1 rounded-full text-sm font-semibold bg-yellow-900 text-yellow-400">
-                  🟡 MEDIUM
-                </span>
-                <span className="ml-4">⏱️ {story.estimatedTime || '15-20 min'}</span>
+              {/* Story Cover Image */}
+              {story.cover_image_url && (
+                <div className="h-40 sm:h-48 overflow-hidden">
+                  <img 
+                    src={story.cover_image_url} 
+                    alt={`${story.title} cover`}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+              
+              <div className="p-6">
+                <h3 className="text-xl font-bold text-white mb-2">{story.title}</h3>
+                <p className="text-dungeon-text mb-4">{story.description}</p>
+                <div className="text-sm text-dungeon-text mb-4">
+                  <span className="px-3 py-1 rounded-full text-sm font-semibold bg-yellow-900 text-yellow-400">
+                    🟡 MEDIUM
+                  </span>
+                  <span className="ml-4">⏱️ {story.estimatedTime || '15-20 min'}</span>
+                </div>
+                
+                {/* Click anywhere to start - no button needed */}
+                <div className="text-center">
+                  <div className="inline-flex items-center text-yellow-400 font-semibold text-sm group-hover:text-yellow-300 transition-colors">
+                    <span className="mr-2">▶️</span>
+                    <span>Click to Start Story</span>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={() => handleStorySelect(story)}
-                className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 px-4 rounded-lg transition-all duration-300 transform hover:scale-105"
-              >
-                ▶️ Start Story
-              </button>
             </div>
           ))}
         </div>
