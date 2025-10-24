@@ -6,3 +6,54 @@ body {
   background-color: #0f1115;
   color: white;
 }
+
+/* Journey Map Animations */
+@keyframes pathGlow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes landmarkPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+@keyframes journeySlide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.journey-path {
+  animation: pathGlow 2s ease-in-out infinite;
+}
+
+.journey-landmark {
+  animation: landmarkPulse 2s ease-in-out infinite;
+}
+
+.journey-slide {
+  animation: journeySlide 0.5s ease-out;
+}
+
+/* Hide scrollbars for journey map */
+.journey-map::-webkit-scrollbar {
+  display: none;
+}
+
+.journey-map {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .journey-map {
+    height: 100vh;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  
+  .journey-landmark {
+    transform: scale(0.8);
+  }
+}

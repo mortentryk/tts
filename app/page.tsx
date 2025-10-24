@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import JourneyMap from './components/JourneyMap';
 
 export default function Home() {
   const router = useRouter();
   const [stories, setStories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showJourney, setShowJourney] = useState(false);
 
   useEffect(() => {
     const loadStories = async () => {
@@ -72,12 +74,37 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center p-4">
-      <div className="text-center max-w-6xl w-full">
-        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">Choose Your Adventure</h1>
-        <p className="text-dungeon-text text-base sm:text-lg mb-8">
-          Select a story to begin your interactive adventure with voice narration
-        </p>
+    <div className="min-h-screen bg-dungeon-bg text-white">
+      {/* Hero Section - Journey Mode */}
+      <section className="bg-gradient-to-b from-dungeon-bg to-dungeon-surface py-16 px-4">
+        <div className="text-center max-w-4xl mx-auto">
+          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-6">
+            Choose Your Adventure
+          </h1>
+          <p className="text-dungeon-text text-lg sm:text-xl mb-8">
+            Follow the magical path and discover stories, or browse all adventures below
+          </p>
+          
+          <button
+            onClick={() => setShowJourney(true)}
+            className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+          >
+            🗺️ Start Your Adventure Journey
+          </button>
+          
+          <p className="text-dungeon-text text-sm mt-4">
+            Follow an animated path through magical lands and discover stories along the way
+          </p>
+        </div>
+      </section>
+
+      {/* Browse All Stories Section */}
+      <section className="py-12 px-4">
+        <div className="text-center max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold text-white mb-4">Or Browse All Stories</h2>
+          <p className="text-dungeon-text text-lg mb-8">
+            Select any story to begin your interactive adventure with voice narration
+          </p>
         <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
           {stories.map((story) => (
             <div 
@@ -134,7 +161,16 @@ export default function Home() {
             🔧 Admin Dashboard
           </button>
         </div>
-      </div>
+        </div>
+      </section>
+
+      {/* Journey Modal/Overlay */}
+      {showJourney && (
+        <JourneyMap 
+          stories={stories} 
+          onExit={() => setShowJourney(false)} 
+        />
+      )}
     </div>
   );
 }

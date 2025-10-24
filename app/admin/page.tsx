@@ -172,6 +172,12 @@ export default function AdminDashboard() {
                 🖼️ Images
               </button>
               <button
+                onClick={() => router.push('/admin/journey')}
+                className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
+              >
+                🗺️ Journey Map
+              </button>
+              <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
               >
