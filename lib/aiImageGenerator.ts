@@ -153,9 +153,6 @@ export function createStoryImagePrompt(
     action?: string;
   }>
 ): string {
-  // Extract key visual elements from the story text
-  const visualElements = extractVisualElements(storyText);
-  
   // Build character descriptions
   let characterDescriptions = '';
   if (characters && characters.length > 0) {
@@ -170,45 +167,24 @@ export function createStoryImagePrompt(
     characterDescriptions = `, featuring ${characterParts.join(', ')}`;
   }
   
-  // Use the first 200 characters of story text as main description
-  const sceneDescription = storyText.substring(0, 200).trim();
+  // Use the full story text as the main description, but limit to reasonable length for AI processing
+  // Clean up the story text and use more of it for better context
+  const cleanStoryText = storyText
+    .replace(/\*\*/g, '') // Remove markdown bold
+    .replace(/\*/g, '') // Remove markdown italic
+    .replace(/#{1,6}\s/g, '') // Remove markdown headers
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert markdown links to plain text
+    .trim();
+  
+  // Use up to 500 characters of the story text for better context
+  const sceneDescription = cleanStoryText.substring(0, 500).trim();
   
   // Create a comprehensive prompt with the actual story text
-  const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, book illustration style, cinematic lighting`;
+  const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, book illustration style, cinematic lighting, no text, no words, no writing, no letters`;
   
   return prompt;
 }
 
-/**
- * Extract visual elements from story text
- */
-function extractVisualElements(text: string): string[] {
-  const elements: string[] = [];
-  
-  // Common fantasy/adventure keywords
-  const keywords = [
-    'forest', 'cave', 'mountain', 'castle', 'dragon', 'knight', 'princess',
-    'magic', 'sword', 'treasure', 'monster', 'dark', 'light', 'mysterious',
-    'ancient', 'ruins', 'tower', 'bridge', 'river', 'lake', 'village',
-    'wizard', 'elf', 'dwarf', 'goblin', 'troll', 'spider', 'bat',
-    'crystal', 'gem', 'gold', 'silver', 'fire', 'ice', 'storm'
-  ];
-  
-  const lowerText = text.toLowerCase();
-  
-  keywords.forEach(keyword => {
-    if (lowerText.includes(keyword)) {
-      elements.push(keyword);
-    }
-  });
-  
-  // If no specific elements found, add generic adventure elements
-  if (elements.length === 0) {
-    elements.push('adventure scene', 'mysterious atmosphere');
-  }
-  
-  return elements;
-}
 
 /**
  * Generate a video using Replicate
