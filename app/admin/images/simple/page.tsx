@@ -579,8 +579,7 @@ export default function SimpleImageManager() {
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Node</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Text</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Characters</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Image</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Video</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Media</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Audio</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Actions</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Status</th>
@@ -671,48 +670,98 @@ export default function SimpleImageManager() {
                               })()}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
-                              {row.image_url ? (
-                                <div className="flex items-center space-x-2">
-                                  <img
-                                    src={row.image_url}
-                                    alt={`Node ${row.node_key}`}
-                                    className="w-16 h-16 object-cover rounded border"
-                                  />
-                                  <button
-                                    onClick={() => window.open(row.image_url, '_blank')}
-                                    className="text-blue-600 hover:text-blue-800 text-sm"
-                                  >
-                                    👁️ See
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="text-gray-600 text-sm">No image</div>
-                              )}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2">
-                              {row.video_url ? (
-                                <div className="flex items-center space-x-2">
-                                  <div className="relative">
-                                    <video
-                                      src={row.video_url}
-                                      className="w-16 h-16 object-cover rounded border"
-                                      controls={false}
-                                      muted
-                                    />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded">
-                                      <span className="text-white text-lg">▶️</span>
+                              {(() => {
+                                // Priority: Video first, then image, then none
+                                if (row.video_url) {
+                                  return (
+                                    <div className="flex items-center space-x-3">
+                                      <div className="relative group">
+                                        <video
+                                          src={row.video_url}
+                                          className="w-20 h-20 object-cover rounded-lg border-2 border-purple-300 shadow-md"
+                                          controls={false}
+                                          muted
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <span className="text-white text-2xl">▶️</span>
+                                        </div>
+                                        <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-1 py-0.5 rounded">
+                                          🎬
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col space-y-1">
+                                        <button
+                                          onClick={() => window.open(row.video_url, '_blank')}
+                                          className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 flex items-center space-x-1"
+                                        >
+                                          <span>🎬</span>
+                                          <span>Play Video</span>
+                                        </button>
+                                        <button
+                                          onClick={() => deleteVideo(row.node_key)}
+                                          className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 flex items-center space-x-1"
+                                        >
+                                          <span>🗑️</span>
+                                          <span>Delete Video</span>
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
-                                  <button
-                                    onClick={() => window.open(row.video_url, '_blank')}
-                                    className="text-blue-600 hover:text-blue-800 text-sm"
-                                  >
-                                    🎬 Play
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="text-gray-600 text-sm">No video</div>
-                              )}
+                                  );
+                                } else if (row.image_url) {
+                                  return (
+                                    <div className="flex items-center space-x-3">
+                                      <div className="relative group">
+                                        <img
+                                          src={row.image_url}
+                                          alt={`Node ${row.node_key}`}
+                                          className="w-20 h-20 object-cover rounded-lg border-2 border-blue-300 shadow-md"
+                                        />
+                                        <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs px-1 py-0.5 rounded">
+                                          🖼️
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col space-y-1">
+                                        <button
+                                          onClick={() => window.open(row.image_url, '_blank')}
+                                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 flex items-center space-x-1"
+                                        >
+                                          <span>👁️</span>
+                                          <span>View Image</span>
+                                        </button>
+                                        <button
+                                          onClick={() => generateVideo(row.node_key)}
+                                          disabled={generatingVideo === row.node_key}
+                                          className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 disabled:bg-gray-400 flex items-center space-x-1"
+                                        >
+                                          <span>🎬</span>
+                                          <span>{generatingVideo === row.node_key ? 'Generating...' : 'Generate Video'}</span>
+                                        </button>
+                                        <button
+                                          onClick={() => deleteImage(row.node_key)}
+                                          className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 flex items-center space-x-1"
+                                        >
+                                          <span>🗑️</span>
+                                          <span>Delete Image</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="text-center py-4">
+                                      <div className="text-gray-400 text-4xl mb-2">📷</div>
+                                      <div className="text-gray-600 text-sm mb-3">No media</div>
+                                      <button
+                                        onClick={() => generateImage(row.node_key)}
+                                        disabled={generating === row.node_key}
+                                        className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                                      >
+                                        {generating === row.node_key ? '⏳ Generating...' : '🎨 Generate Image'}
+                                      </button>
+                                    </div>
+                                  );
+                                }
+                              })()}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {row.audio_url ? (
@@ -763,20 +812,13 @@ export default function SimpleImageManager() {
                                     >
                                       ✏️ Custom
                                     </button>
-                                    {!row.video_url ? (
+                                    {!row.video_url && (
                                       <button
                                         onClick={() => generateVideo(row.node_key)}
                                         disabled={generatingVideo === row.node_key}
                                         className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
                                       >
                                         {generatingVideo === row.node_key ? '⏳ Video...' : '🎬 Video'}
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => deleteVideo(row.node_key)}
-                                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
-                                      >
-                                        🗑️ Delete Video
                                       </button>
                                     )}
                                     <button
@@ -786,12 +828,6 @@ export default function SimpleImageManager() {
                                       title={row.audio_url ? 'Audio already generated - click to regenerate' : 'Generate audio with ElevenLabs'}
                                     >
                                       {generatingAudio === row.node_key ? '⏳ Audio...' : row.audio_url ? '🔊 ✓' : '🔊 Audio'}
-                                    </button>
-                                    <button
-                                      onClick={() => deleteImage(row.node_key)}
-                                      className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
-                                    >
-                                      🗑️ Delete
                                     </button>
                                   </>
                                 )}
