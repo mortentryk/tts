@@ -604,7 +604,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // --- Cloud TTS throttle (avoid spamming server) ---
   const ttsCooldownRef = useRef(0);
-  const COOL_DOWN_MS = 2500;
+  const COOL_DOWN_MS = 1000; // Reduced from 2500ms to 1000ms for better UX
 
   // Build narration string including choices so buttons are read aloud
   const getNarrationText = useCallback(() => {
@@ -632,7 +632,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     const now = Date.now();
     if (now - ttsCooldownRef.current < COOL_DOWN_MS) {
       console.log('🚫 TTS cooldown active, skipping');
-      return alert("Wait a moment - you can play again in a moment.");
+      const remainingTime = Math.ceil((COOL_DOWN_MS - (now - ttsCooldownRef.current)) / 1000);
+      showVoiceNotification(`⏳ Please wait ${remainingTime} second${remainingTime > 1 ? 's' : ''} before playing again`, 'info');
+      return;
     }
     ttsCooldownRef.current = now;
 
@@ -1002,7 +1004,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     <div className="min-h-screen bg-dungeon-bg text-white">
       {/* Voice Notification */}
       {voiceNotification && (
-        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transition-all duration-300 ${
+        <div className={`fixed top-2 right-2 sm:top-4 sm:right-4 z-50 p-3 sm:p-4 rounded-lg shadow-lg max-w-xs sm:max-w-sm transition-all duration-300 ${
           voiceNotification.type === 'success' 
             ? 'bg-green-800 border-2 border-green-600' 
             : voiceNotification.type === 'error'
@@ -1010,10 +1012,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             : 'bg-blue-800 border-2 border-blue-600'
         }`}>
           <div className="flex items-center space-x-2">
-            <div className="text-lg">
+            <div className="text-base sm:text-lg">
               {voiceNotification.type === 'success' ? '✅' : voiceNotification.type === 'error' ? '❌' : 'ℹ️'}
             </div>
-            <div className="text-sm font-medium text-white">
+            <div className="text-xs sm:text-sm font-medium text-white">
               {voiceNotification.message}
             </div>
           </div>
@@ -1021,23 +1023,23 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       )}
       
       <div className="border-b border-dungeon-border p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white">Sword & Sorcery (MVP)</h1>
-            <p className="text-dungeon-text mt-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex-1">
+            <h1 className="text-lg sm:text-xl font-bold text-white">Sword & Sorcery (MVP)</h1>
+            <p className="text-dungeon-text mt-1.5 text-sm sm:text-base">
               Evner {stats.Evner}  •  HP {stats.Udholdenhed}  •  Held {stats.Held}
             </p>
           </div>
           <button
             onClick={goBackToStories}
-            className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+            className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm sm:text-base w-full sm:w-auto"
           >
             ← Back to Stories
           </button>
         </div>
       </div>
 
-      <div className="flex-1 p-4">
+      <div className="flex-1 p-3 sm:p-4">
         {/* Background Image */}
         {passage?.backgroundImage && (
           <div 
@@ -1050,11 +1052,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         <div className="mb-4">
           {/* Scene Image */}
           {passage?.image && passage.image.includes('cloudinary.com') && (
-            <div className="mb-6 flex justify-center">
+            <div className="mb-4 sm:mb-6 flex justify-center">
               <img 
                 src={passage.image} 
                 alt="Scene illustration"
-                className="max-w-full h-auto max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
                 onError={(e) => {
                   console.error('Failed to load image:', passage.image);
                   e.currentTarget.style.display = 'none';
@@ -1065,11 +1067,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           
           {/* Scene Video */}
           {passage?.video && passage.video.includes('cloudinary.com') && (
-            <div className="mb-6 flex justify-center">
+            <div className="mb-4 sm:mb-6 flex justify-center">
               <video 
                 src={passage.video}
                 controls
-                className="max-w-full h-auto max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
                 onError={(e) => {
                   console.error('Failed to load video:', passage.video);
                   e.currentTarget.style.display = 'none';
@@ -1093,7 +1095,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             />
           )}
           
-          <p className="text-lg leading-relaxed text-white">
+          <p className="text-base sm:text-lg leading-relaxed text-white">
             {passage?.text || "Story not found. Please check your story data."}
           </p>
         </div>
@@ -1168,11 +1170,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         )}
 
         {(!passage?.check && passage?.choices) && (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {passage.choices.map((choice, i) => (
               <button
                 key={i}
-                className="w-full bg-dungeon-surface p-3.5 rounded-lg border border-dungeon-accent text-center text-white hover:bg-dungeon-accent transition-colors"
+                className="w-full bg-dungeon-surface p-3 sm:p-3.5 rounded-lg border border-dungeon-accent text-center text-white hover:bg-dungeon-accent transition-colors text-sm sm:text-base"
                 onClick={() => handleChoice(choice)}
               >
                 {choice.label}
@@ -1184,9 +1186,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
       <div className="border-t border-dungeon-border p-3 space-y-3">
         {/* TTS Controls */}
-        <div className="flex gap-2.5">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
           <button 
-            className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors ${
+            className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors text-sm sm:text-base ${
               speaking ? 'bg-green-700' : ''
             }`}
             onClick={speakCloudThrottled}
@@ -1205,9 +1207,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         </div>
 
         {/* Auto Read Toggle */}
-        <div className="flex gap-2.5">
+        <div className="flex gap-2 sm:gap-2.5">
           <button
-            className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors ${
+            className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
               autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
             }`}
             onClick={handleAutoReadToggle}
@@ -1221,9 +1223,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
         {/* Voice Commands */}
         <div className="space-y-2">
-          <div className="flex gap-2.5">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
             <button 
-              className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors ${
+              className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
                 listening 
                   ? 'bg-blue-600 hover:bg-blue-700' 
                   : 'bg-gray-600 hover:bg-gray-700'
