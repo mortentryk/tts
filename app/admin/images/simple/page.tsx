@@ -16,8 +16,6 @@ interface StoryNode {
   node_key: string;
   text_md: string;
   image_url?: string;
-  video_url?: string;
-  audio_url?: string;
 }
 
 interface ImageRow {
@@ -25,27 +23,9 @@ interface ImageRow {
   node_key: string;
   text: string;
   image_url: string;
-  video_url?: string;
-  audio_url?: string;
   status: 'empty' | 'generating' | 'ready' | 'error';
   generated_at?: string;
   cost?: number;
-}
-
-interface Character {
-  id: string;
-  name: string;
-  description?: string;
-  appearance_prompt?: string;
-}
-
-interface CharacterAssignment {
-  node_key: string;
-  character_id: string;
-  character_name: string;
-  role?: string;
-  emotion?: string;
-  action?: string;
 }
 
 export default function SimpleImageManager() {
@@ -56,15 +36,6 @@ export default function SimpleImageManager() {
   const [imageRows, setImageRows] = useState<ImageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
-  const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
-  const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
-  const [expandedText, setExpandedText] = useState<string | null>(null);
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
-  const [editingNode, setEditingNode] = useState<string | null>(null);
-  const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
-  const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
-  const [customPrompt, setCustomPrompt] = useState('');
 
   // Check if user is logged in
   useEffect(() => {
@@ -83,13 +54,9 @@ export default function SimpleImageManager() {
   useEffect(() => {
     if (selectedStory) {
       loadStoryNodes();
-      loadCharacters();
-      loadCharacterAssignments();
     } else {
       setNodes([]);
       setImageRows([]);
-      setCharacters([]);
-      setCharacterAssignments([]);
     }
   }, [selectedStory]);
 
@@ -109,64 +76,45 @@ export default function SimpleImageManager() {
 
   const loadStoryNodes = async () => {
     try {
-      const response = await fetch(`/api/stories/${selectedStory}`);
-      if (response.ok) {
-        const data = await response.json();
-        setNodes(data.nodes || []);
+      // First get the story to get the story ID
+      const storyResponse = await fetch(`/api/stories/${selectedStory}`);
+      if (!storyResponse.ok) {
+        console.error('Failed to load story');
+        return;
+      }
+      
+      const story = await storyResponse.json();
+      
+      // Now fetch the nodes directly from Supabase
+      const nodesResponse = await fetch(`/api/admin/stories/${selectedStory}/nodes`);
+      if (nodesResponse.ok) {
+        const nodesData = await nodesResponse.json();
+        const nodes = nodesData.nodes || [];
+        setNodes(nodes);
         
         // Create image rows for each node
-        const rows: ImageRow[] = data.nodes.map((node: StoryNode) => ({
+        const rows: ImageRow[] = nodes.map((node: StoryNode) => ({
           id: `node-${node.node_key}`,
           node_key: node.node_key,
           text: node.text_md,
           image_url: node.image_url || '',
-          video_url: node.video_url || '',
-          audio_url: node.audio_url || '',
           status: node.image_url ? 'ready' : 'empty',
           generated_at: node.image_url ? new Date().toISOString() : undefined,
           cost: 0
         }));
         
         setImageRows(rows);
+      } else {
+        // Fallback: try to get nodes from the story loader
+        const storyLoaderResponse = await fetch(`/api/stories/${selectedStory}`);
+        if (storyLoaderResponse.ok) {
+          const storyData = await storyLoaderResponse.json();
+          // The story loader might have nodes in a different structure
+          console.log('Story data structure:', storyData);
+        }
       }
     } catch (error) {
       console.error('Failed to load story nodes:', error);
-    }
-  };
-
-  const loadCharacters = async () => {
-    if (!selectedStory) return;
-    
-    try {
-      const response = await fetch(`/api/admin/characters?storySlug=${selectedStory}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCharacters(data.characters || []);
-      }
-    } catch (error) {
-      console.error('Failed to load characters:', error);
-    }
-  };
-
-  const loadCharacterAssignments = async () => {
-    if (!selectedStory) return;
-    
-    try {
-      const response = await fetch(`/api/admin/character-assignments?storySlug=${selectedStory}`);
-      if (response.ok) {
-        const data = await response.json();
-        const assignments: CharacterAssignment[] = data.map((a: any) => ({
-          node_key: a.node_key,
-          character_id: a.character_id,
-          character_name: a.characters?.name || 'Unknown',
-          role: a.role,
-          emotion: a.emotion,
-          action: a.action,
-        }));
-        setCharacterAssignments(assignments);
-      }
-    } catch (error) {
-      console.error('Failed to load character assignments:', error);
     }
   };
 
@@ -176,13 +124,6 @@ export default function SimpleImageManager() {
     setGenerating(nodeKey);
     
     try {
-      // Find the node to get its text
-      const node = nodes.find(n => n.node_key === nodeKey);
-      if (!node) {
-        alert('❌ Node not found');
-        return;
-      }
-
       const response = await fetch('/api/admin/generate-image', {
         method: 'POST',
         headers: {
@@ -190,9 +131,9 @@ export default function SimpleImageManager() {
         },
         body: JSON.stringify({
           storySlug: selectedStory,
-          nodeId: nodeKey,
-          storyText: node.text_md,
-          storyTitle: selectedStoryData?.title || selectedStory,
+          nodeKey: nodeKey,
+          storyText: imageRows.find(row => row.node_key === nodeKey)?.text || '',
+          storyTitle: selectedStoryData?.title || '',
           style: 'fantasy adventure book illustration',
         }),
       });
@@ -205,10 +146,10 @@ export default function SimpleImageManager() {
           row.node_key === nodeKey 
             ? { 
                 ...row, 
-                image_url: data.image?.url || data.imageUrl, 
+                image_url: data.imageUrl, 
                 status: 'ready',
                 generated_at: new Date().toISOString(),
-                cost: data.image?.cost || data.cost || 0
+                cost: data.cost || 0
               }
             : row
         ));
@@ -249,137 +190,6 @@ export default function SimpleImageManager() {
     await generateImage(nodeKey);
   };
 
-  const generateWithCustomPrompt = async (nodeKey: string) => {
-    if (!selectedStory || !customPrompt.trim()) {
-      alert('❌ Please enter a custom prompt');
-      return;
-    }
-    
-    setGenerating(nodeKey);
-    
-    try {
-      const node = nodes.find(n => n.node_key === nodeKey);
-      if (!node) {
-        alert('❌ Node not found');
-        return;
-      }
-
-      const response = await fetch('/api/admin/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storySlug: selectedStory,
-          nodeId: nodeKey,
-          storyText: customPrompt, // Use custom prompt as story text
-          storyTitle: selectedStoryData?.title || selectedStory,
-          style: '', // No style prefix, use prompt as-is
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setImageRows(prev => prev.map(row => 
-          row.node_key === nodeKey 
-            ? { 
-                ...row, 
-                image_url: data.image?.url || data.imageUrl,
-                status: 'ready',
-                generated_at: new Date().toISOString(),
-                cost: data.image?.cost || data.cost || 0
-              }
-            : row
-        ));
-        setCustomPrompt('');
-        setCustomPromptNode(null);
-        loadStoryNodes();
-      } else {
-        alert(`❌ Failed to generate image: ${data.error}`);
-        setImageRows(prev => prev.map(row => 
-          row.node_key === nodeKey ? { ...row, status: 'error' } : row
-        ));
-      }
-    } catch (error) {
-      console.error('Generate with custom prompt error:', error);
-      alert('❌ Failed to generate image with custom prompt');
-      setImageRows(prev => prev.map(row => 
-        row.node_key === nodeKey ? { ...row, status: 'error' } : row
-      ));
-    } finally {
-      setGenerating(null);
-    }
-  };
-
-  const generateVideo = async (nodeKey: string) => {
-    if (!selectedStory) return;
-    
-    const confirmed = confirm('Generate video from this image? This will cost approximately $0.10 and take 1-2 minutes.');
-    if (!confirmed) return;
-    
-    setGeneratingVideo(nodeKey);
-    
-    try {
-      const response = await fetch('/api/admin/generate-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storySlug: selectedStory,
-          nodeId: nodeKey,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert(`✅ Video generated! URL: ${data.video.url}\nCost: $${data.video.cost}`);
-      } else {
-        alert(`❌ Failed to generate video: ${data.error}`);
-      }
-    } catch (error) {
-      console.error('Generate video error:', error);
-      alert('❌ Failed to generate video');
-    } finally {
-      setGeneratingVideo(null);
-    }
-  };
-
-  const generateAudio = async (nodeKey: string) => {
-    if (!selectedStory) return;
-    
-    setGeneratingAudio(nodeKey);
-    
-    try {
-      const response = await fetch('/api/admin/generate-audio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storySlug: selectedStory,
-          nodeId: nodeKey,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
-        
-        // Update the row to show audio is available
-        setImageRows(prev => prev.map(row => 
-          row.node_key === nodeKey 
-            ? { ...row, audio_url: data.audio.url }
-            : row
-        ));
-      } else {
-        alert(`❌ Failed to generate audio: ${data.error}`);
-      }
-    } catch (error) {
-      console.error('Generate audio error:', error);
-      alert('❌ Failed to generate audio');
-    } finally {
-      setGeneratingAudio(null);
-    }
-  };
-
   const deleteImage = async (nodeKey: string) => {
     if (!confirm('Are you sure you want to delete this image?')) return;
     
@@ -416,42 +226,6 @@ export default function SimpleImageManager() {
     router.push('/admin/login');
   };
 
-  const assignCharacterToNode = async (nodeKey: string) => {
-    if (!selectedStory || !assignForm.characterId) {
-      alert('Please select a character');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/admin/character-assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storySlug: selectedStory,
-          nodeKey: nodeKey,
-          assignments: [{
-            characterId: assignForm.characterId,
-            emotion: assignForm.emotion || null,
-            action: assignForm.action || null,
-            role: 'main',
-          }],
-        }),
-      });
-
-      if (response.ok) {
-        // Reload assignments
-        await loadCharacterAssignments();
-        setEditingNode(null);
-        setAssignForm({ characterId: '', emotion: '', action: '' });
-      } else {
-        alert('❌ Failed to assign character');
-      }
-    } catch (error) {
-      console.error('Assign character error:', error);
-      alert('❌ Failed to assign character');
-    }
-  };
-
   const selectedStoryData = stories.find(s => s.slug === selectedStory);
   const totalCost = imageRows.reduce((sum, row) => sum + (row.cost || 0), 0);
   const readyImages = imageRows.filter(row => row.status === 'ready').length;
@@ -462,7 +236,7 @@ export default function SimpleImageManager() {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">
-              🖼️ Image Manager
+              🖼️ Simple Image Manager
             </h1>
             <div className="space-x-4">
               <button
@@ -470,6 +244,12 @@ export default function SimpleImageManager() {
                 className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
               >
                 ← Back to Admin
+              </button>
+              <button
+                onClick={() => router.push('/admin/images')}
+                className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
+              >
+                🎨 AI Images
               </button>
               <button
                 onClick={handleLogout}
@@ -489,13 +269,13 @@ export default function SimpleImageManager() {
             <div className="space-y-8">
               {/* Story Selection */}
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
                   📚 Select Story
                 </h2>
                 <select
                   value={selectedStory}
                   onChange={(e) => setSelectedStory(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 font-medium"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Choose a story...</option>
                   {stories.map((story) => (
@@ -507,24 +287,13 @@ export default function SimpleImageManager() {
                 
                 {selectedStoryData && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold text-blue-900">{selectedStoryData.title}</h3>
-                        {selectedStoryData.description && (
-                          <p className="text-blue-700 mt-1">{selectedStoryData.description}</p>
-                        )}
-                        <p className="text-blue-600 text-sm mt-2">
-                          {selectedStoryData.node_count} nodes • {selectedStoryData.is_published ? 'Published' : 'Draft'}
-                          {characters.length > 0 && ` • ${characters.length} character${characters.length > 1 ? 's' : ''}`}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => router.push('/admin/characters')}
-                        className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 text-sm"
-                      >
-                        🎭 Manage Characters
-                      </button>
-                    </div>
+                    <h3 className="font-semibold text-blue-900">{selectedStoryData.title}</h3>
+                    {selectedStoryData.description && (
+                      <p className="text-blue-700 mt-1">{selectedStoryData.description}</p>
+                    )}
+                    <p className="text-blue-600 text-sm mt-2">
+                      {selectedStoryData.node_count} nodes • {selectedStoryData.is_published ? 'Published' : 'Draft'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -533,10 +302,10 @@ export default function SimpleImageManager() {
               {selectedStory && (
                 <div>
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-semibold text-gray-900">
+                    <h2 className="text-xl font-semibold text-gray-800">
                       🖼️ Story Images
                     </h2>
-                    <div className="text-sm text-gray-900 font-medium">
+                    <div className="text-sm text-gray-600">
                       {readyImages} / {imageRows.length} images ready • Total cost: ${totalCost.toFixed(2)}
                     </div>
                   </div>
@@ -545,99 +314,23 @@ export default function SimpleImageManager() {
                     <table className="w-full border-collapse border border-gray-300">
                       <thead>
                         <tr className="bg-gray-50">
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Node</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Text</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Characters</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Image</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Video</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Audio</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Actions</th>
-                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Status</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left">Node</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left">Text</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left">Image</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left">Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {imageRows.map((row) => (
                           <tr key={row.id} className="hover:bg-gray-50">
-                            <td className="border border-gray-300 px-4 py-2 font-mono text-sm text-gray-900 font-semibold">
+                            <td className="border border-gray-300 px-4 py-2 font-mono text-sm">
                               {row.node_key}
                             </td>
                             <td className="border border-gray-300 px-4 py-2 max-w-md">
-                              <div className="text-sm text-gray-900 font-medium">
+                              <div className="text-sm text-gray-700 line-clamp-3">
                                 {row.text.substring(0, 100)}...
                               </div>
-                              <button
-                                onClick={() => setExpandedText(row.node_key)}
-                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                              >
-                                📖 Read full text
-                              </button>
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2">
-                              {(() => {
-                                const nodeChars = characterAssignments.filter(a => a.node_key === row.node_key);
-                                
-                                if (editingNode === row.node_key) {
-                                  return (
-                                    <div className="space-y-2">
-                                      <select
-                                        value={assignForm.characterId}
-                                        onChange={(e) => setAssignForm({...assignForm, characterId: e.target.value})}
-                                        className="w-full text-xs px-2 py-1 border rounded"
-                                      >
-                                        <option value="">Select character...</option>
-                                        {characters.map(char => (
-                                          <option key={char.id} value={char.id}>{char.name}</option>
-                                        ))}
-                                      </select>
-                                      <input
-                                        type="text"
-                                        placeholder="Emotion (e.g. happy)"
-                                        value={assignForm.emotion}
-                                        onChange={(e) => setAssignForm({...assignForm, emotion: e.target.value})}
-                                        className="w-full text-xs px-2 py-1 border rounded"
-                                      />
-                                      <div className="flex space-x-1">
-                                        <button
-                                          onClick={() => assignCharacterToNode(row.node_key)}
-                                          className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
-                                        >
-                                          ✓ Save
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            setEditingNode(null);
-                                            setAssignForm({ characterId: '', emotion: '', action: '' });
-                                          }}
-                                          className="text-xs bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500"
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                }
-                                
-                                return (
-                                  <div className="space-y-1">
-                                    {nodeChars.length > 0 ? (
-                                      nodeChars.map((assignment, idx) => (
-                                        <div key={idx} className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                                          🎭 {assignment.character_name}
-                                          {assignment.emotion && ` • ${assignment.emotion}`}
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <div className="text-gray-600 text-xs">No characters</div>
-                                    )}
-                                    <button
-                                      onClick={() => setEditingNode(row.node_key)}
-                                      className="mt-1 text-xs text-purple-600 hover:text-purple-800 hover:underline"
-                                    >
-                                      {nodeChars.length > 0 ? '✏️ Edit' : '➕ Add Character'}
-                                    </button>
-                                  </div>
-                                );
-                              })()}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {row.image_url ? (
@@ -655,46 +348,7 @@ export default function SimpleImageManager() {
                                   </button>
                                 </div>
                               ) : (
-                                <div className="text-gray-600 text-sm">No image</div>
-                              )}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2">
-                              {row.video_url ? (
-                                <div className="flex items-center space-x-2">
-                                  <video
-                                    src={row.video_url}
-                                    className="w-16 h-16 object-cover rounded border"
-                                    controls={false}
-                                  />
-                                  <button
-                                    onClick={() => window.open(row.video_url, '_blank')}
-                                    className="text-blue-600 hover:text-blue-800 text-sm"
-                                  >
-                                    🎬 Play
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="text-gray-600 text-sm">No video</div>
-                              )}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2">
-                              {row.audio_url ? (
-                                <div className="flex items-center space-x-2">
-                                  <audio
-                                    src={row.audio_url}
-                                    controls
-                                    className="h-8"
-                                    style={{ maxWidth: '150px' }}
-                                  />
-                                  <button
-                                    onClick={() => window.open(row.audio_url, '_blank')}
-                                    className="text-blue-600 hover:text-blue-800 text-sm"
-                                  >
-                                    🔊 Open
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="text-gray-600 text-sm">No audio</div>
+                                <div className="text-gray-400 text-sm">No image</div>
                               )}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
@@ -716,30 +370,6 @@ export default function SimpleImageManager() {
                                       className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700"
                                     >
                                       🔄 Redo
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setCustomPromptNode(row.node_key);
-                                        setCustomPrompt('');
-                                      }}
-                                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
-                                    >
-                                      ✏️ Custom
-                                    </button>
-                                    <button
-                                      onClick={() => generateVideo(row.node_key)}
-                                      disabled={generatingVideo === row.node_key}
-                                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
-                                    >
-                                      {generatingVideo === row.node_key ? '⏳ Video...' : '🎬 Video'}
-                                    </button>
-                                    <button
-                                      onClick={() => generateAudio(row.node_key)}
-                                      disabled={generatingAudio === row.node_key}
-                                      className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-400"
-                                      title={row.audio_url ? 'Audio already generated - click to regenerate' : 'Generate audio with ElevenLabs'}
-                                    >
-                                      {generatingAudio === row.node_key ? '⏳ Audio...' : row.audio_url ? '🔊 ✓' : '🔊 Audio'}
                                     </button>
                                     <button
                                       onClick={() => deleteImage(row.node_key)}
@@ -795,100 +425,6 @@ export default function SimpleImageManager() {
           )}
         </div>
       </div>
-
-      {/* Custom Prompt Modal */}
-      {customPromptNode && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setCustomPromptNode(null)}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full p-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">
-                ✏️ Custom Prompt for Node {customPromptNode}
-              </h2>
-              <button
-                onClick={() => setCustomPromptNode(null)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-              >
-                ×
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Describe the exact scene you want:
-                </label>
-                <textarea
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="Example: A dark hollow tree interior, humid air, a large dog with eyes like teacups guarding a chest of copper coins, dramatic lighting, fantasy illustration style"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 h-32"
-                />
-                <p className="mt-2 text-xs text-gray-600">
-                  💡 Tip: Be specific! Include lighting, mood, colors, and style.
-                </p>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setCustomPromptNode(null)}
-                  className="bg-gray-400 text-white px-6 py-2 rounded-md hover:bg-gray-500"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => generateWithCustomPrompt(customPromptNode)}
-                  disabled={!customPrompt.trim() || generating === customPromptNode}
-                  className="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 disabled:bg-gray-400"
-                >
-                  {generating === customPromptNode ? '⏳ Generating...' : '🎨 Generate Image'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Full Text Modal */}
-      {expandedText && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setExpandedText(null)}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-auto p-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">
-                📖 Node {expandedText}
-              </h2>
-              <button
-                onClick={() => setExpandedText(null)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-              >
-                ×
-              </button>
-            </div>
-            <div className="prose max-w-none">
-              <p className="text-gray-900 text-base leading-relaxed whitespace-pre-wrap">
-                {imageRows.find(row => row.node_key === expandedText)?.text}
-              </p>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setExpandedText(null)}
-                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ export interface CloudinaryImageOptions {
   format?: string;
   crop?: string;
   gravity?: string;
+  resource_type?: 'image' | 'video' | 'raw';
 }
 
 /**

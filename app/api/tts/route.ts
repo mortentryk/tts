@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
         const { uploadImageToCloudinary } = await import('../../../lib/cloudinary');
         const { generateStoryAssetId } = await import('../../../lib/cloudinary');
         
-        const publicId = generateStoryAssetId(storyId, nodeKey, 'audio');
+        const publicId = generateStoryAssetId(storyId, nodeKey, 'video');
         const uploadResult = await uploadImageToCloudinary(
           Buffer.from(audioBuffer),
           `tts-audio/${storyId}`,

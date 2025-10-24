@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
+import { generateVideoWithRunway } from '../../../../lib/aiImageGenerator';
 import { uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     console.log('🖼️ Using existing image:', node.image_url);
 
     // Generate video from the image
-    const generatedVideo = await generateVideoWithReplicate(node.text_md, node.image_url);
+    const generatedVideo = await generateVideoWithRunway(node.text_md, 4);
 
     console.log('✅ Video generated:', generatedVideo.url);
 
