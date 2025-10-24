@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import LandmarkStop from './LandmarkStop';
 import PathAnimation from './PathAnimation';
+import JourneyIntro from './JourneyIntro';
+import CompletionVideo from './CompletionVideo';
 
 interface Story {
   id: string;
@@ -14,11 +16,6 @@ interface Story {
   thumbnail?: string;
 }
 
-interface JourneyMapProps {
-  stories: Story[];
-  onExit: () => void;
-}
-
 interface JourneyState {
   currentStopIndex: number;
   visitedStops: string[];
@@ -26,7 +23,13 @@ interface JourneyState {
   completedStories: string[];
 }
 
-export default function JourneyMap({ stories, onExit }: JourneyMapProps) {
+interface JourneyMapProps {
+  stories: Story[];
+  onExit: () => void;
+  showIntro?: boolean;
+}
+
+export default function JourneyMap({ stories, onExit, showIntro = true }: JourneyMapProps) {
   const router = useRouter();
   const mapRef = useRef<HTMLDivElement>(null);
   const [journeyState, setJourneyState] = useState<JourneyState>({
@@ -35,6 +38,8 @@ export default function JourneyMap({ stories, onExit }: JourneyMapProps) {
     isAnimating: false,
     completedStories: []
   });
+  const [showIntroVideo, setShowIntroVideo] = useState(showIntro);
+  const [showCompletionVideo, setShowCompletionVideo] = useState(false);
 
   // Get journey stories sorted by order
   const journeyStories = stories
@@ -98,11 +103,12 @@ export default function JourneyMap({ stories, onExit }: JourneyMapProps) {
         setJourneyState(prev => ({ ...prev, isAnimating: false }));
       }, 1000);
     } else {
-      // End of journey
+      // End of journey - show completion video
       setJourneyState(prev => ({
         ...prev,
         visitedStops: [...prev.visitedStops, journeyStories[prev.currentStopIndex].id]
       }));
+      setShowCompletionVideo(true);
     }
   };
 
@@ -112,6 +118,35 @@ export default function JourneyMap({ stories, onExit }: JourneyMapProps) {
 
   const currentStory = journeyStories[journeyState.currentStopIndex];
   const isJourneyComplete = journeyState.currentStopIndex >= journeyStories.length - 1;
+
+  // Show completion video
+  if (showCompletionVideo) {
+    return (
+      <CompletionVideo
+        onComplete={onExit}
+        onReplay={() => {
+          setShowCompletionVideo(false);
+          setJourneyState({
+            currentStopIndex: 0,
+            visitedStops: [],
+            isAnimating: false,
+            completedStories: []
+          });
+        }}
+      />
+    );
+  }
+
+  // Show intro video first
+  if (showIntroVideo) {
+    return (
+      <JourneyIntro
+        stories={stories}
+        onStorySelect={handleExploreStory}
+        onExit={onExit}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-dungeon-bg">

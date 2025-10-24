@@ -45,6 +45,41 @@ body {
   scrollbar-width: none;
 }
 
+/* Journey Intro Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes walking {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes trailGlow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  25% { transform: translateY(-10px) translateX(5px); }
+  50% { transform: translateY(-5px) translateX(-5px); }
+  75% { transform: translateY(-15px) translateX(3px); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-out;
+}
+
+.walking-character {
+  animation: walking 1s ease-in-out infinite;
+}
+
+.walking-character circle {
+  animation: trailGlow 2s ease-in-out infinite;
+}
+
 /* Mobile responsive adjustments */
 @media (max-width: 768px) {
   .journey-map {

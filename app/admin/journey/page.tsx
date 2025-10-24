@@ -17,6 +17,8 @@ export default function JourneyAdmin() {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [videoResult, setVideoResult] = useState<any>(null);
 
   useEffect(() => {
     loadStories();
@@ -78,6 +80,36 @@ export default function JourneyAdmin() {
     updateStoryJourney(storyId, { landmark_type: landmarkType });
   };
 
+  const generateMapVideo = async () => {
+    setGeneratingVideo(true);
+    try {
+      const response = await fetch('/api/admin/generate-map-video', {
+        method: 'POST',
+      });
+      const result = await response.json();
+      setVideoResult(result);
+    } catch (error) {
+      console.error('Failed to generate map video:', error);
+    } finally {
+      setGeneratingVideo(false);
+    }
+  };
+
+  const generateCompletionVideo = async () => {
+    setGeneratingVideo(true);
+    try {
+      const response = await fetch('/api/admin/generate-completion-video', {
+        method: 'POST',
+      });
+      const result = await response.json();
+      setVideoResult(result);
+    } catch (error) {
+      console.error('Failed to generate completion video:', error);
+    } finally {
+      setGeneratingVideo(false);
+    }
+  };
+
   const journeyStories = stories
     .filter(story => story.in_journey)
     .sort((a, b) => (a.journey_order || 0) - (b.journey_order || 0));
@@ -117,6 +149,57 @@ export default function JourneyAdmin() {
           <p className="text-dungeon-text">
             Configure which stories appear in the journey and their order
           </p>
+        </div>
+
+        {/* Video Generation */}
+        <div className="bg-dungeon-surface border border-dungeon-border rounded-lg p-6 mb-8">
+          <h2 className="text-xl font-bold text-white mb-4">AI Video Generation</h2>
+          <p className="text-dungeon-text mb-4">
+            Generate custom fantasy map videos using DALL-E and AI video generation
+          </p>
+          <div className="flex gap-4 mb-4">
+            <button
+              onClick={generateMapVideo}
+              disabled={generatingVideo}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
+            >
+              {generatingVideo ? '🎬 Generating...' : '🎬 Generate Map Video'}
+            </button>
+            <button
+              onClick={generateCompletionVideo}
+              disabled={generatingVideo}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
+            >
+              {generatingVideo ? '🎬 Generating...' : '🏆 Generate Completion Video'}
+            </button>
+          </div>
+          {videoResult && (
+            <div className={`p-4 rounded-lg ${
+              videoResult.success ? 'bg-green-900 border border-green-600' : 'bg-red-900 border border-red-600'
+            }`}>
+              {videoResult.success ? (
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-2">✅ Video Generated!</h3>
+                  <p className="text-white mb-2">{videoResult.message}</p>
+                  {videoResult.videoUrl && (
+                    <a 
+                      href={videoResult.videoUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:text-blue-300 underline"
+                    >
+                      View Generated Video
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-2">❌ Generation Failed</h3>
+                  <p className="text-white">{videoResult.error}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Journey Preview */}

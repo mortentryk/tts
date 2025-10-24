@@ -168,7 +168,8 @@ export default function Home() {
       {showJourney && (
         <JourneyMap 
           stories={stories} 
-          onExit={() => setShowJourney(false)} 
+          onExit={() => setShowJourney(false)}
+          showIntro={true}
         />
       )}
     </div>

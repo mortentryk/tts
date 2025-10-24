@@ -9,10 +9,10 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { storyId: string } }
+  { params }: { params: Promise<{ storyId: string }> }
 ) {
   try {
-    const { storyId } = params;
+    const { storyId } = await params;
     const updates = await request.json();
 
     console.log('Updating story:', storyId, updates);
