@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { generateImage } from '@/lib/aiImageGenerator';
-import { generateVideoWithReplicate } from '@/lib/aiImageGenerator';
-import { uploadVideoToCloudinary, generateStoryAssetId } from '@/lib/cloudinary';
+import { uploadImageToCloudinary, generateStoryAssetId } from '@/lib/cloudinary';
 
 export async function POST() {
   try {
-    console.log('🎨 Generating fantasy map image and video...');
+    console.log('🎨 Generating fantasy map image...');
     
     const prompt = `A beautiful fantasy adventure map for children, top-down view, horizontal landscape. Show a magical world with: a winding golden path that connects different landmarks, a large enchanted tree with glowing golden leaves in the center-left, a dark mysterious cave entrance on the left, a majestic castle with towers and flags on a hill in the upper right, a sparkling blue lake or ocean in the lower right, and dense enchanted forests with ancient trees. The path should be a clear golden trail that winds through all these locations. Add magical sparkles, glowing elements, and a sense of wonder. Hand-drawn illustration style, colorful, whimsical, suitable for children's adventure games. 16:9 aspect ratio, high detail, fantasy RPG map style.`;
     
@@ -18,45 +17,36 @@ export async function POST() {
     
     console.log('✅ Fantasy map image generated:', imageResult.url);
     
-    // 2. Generate video from the image
-    const videoResult = await generateVideoWithReplicate(
-      'An animated trail appearing on a fantasy map, showing a magical journey with a walking character following a golden path through enchanted lands',
-      imageResult.url
-    );
+    // 2. Upload image to Cloudinary
+    const imageResponse = await fetch(imageResult.url);
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
     
-    console.log('✅ Fantasy map video generated:', videoResult.url);
-    
-    // 3. Upload video to Cloudinary
-    const videoResponse = await fetch(videoResult.url);
-    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-    
-    const publicId = generateStoryAssetId('journey-map', 'intro', 'video');
-    const uploadResult = await uploadVideoToCloudinary(
-      videoBuffer,
+    const publicId = generateStoryAssetId('journey-map', 'intro', 'image');
+    const uploadResult = await uploadImageToCloudinary(
+      imageBuffer,
       'tts-journey',
       publicId,
       {
-        width: 1920,
-        height: 1080,
+        width: 1792,
+        height: 1024,
         quality: 'auto',
       }
     );
     
-    console.log('✅ Video uploaded to Cloudinary:', uploadResult.secure_url);
+    console.log('✅ Image uploaded to Cloudinary:', uploadResult.secure_url);
     
     return NextResponse.json({ 
       success: true, 
-      mapImageUrl: imageResult.url,
-      videoUrl: uploadResult.secure_url,
+      mapImageUrl: uploadResult.secure_url,
       cloudinaryPublicId: uploadResult.public_id,
-      message: 'Fantasy map image and video generated successfully'
+      message: 'Fantasy map image generated and stored successfully'
     });
     
   } catch (error) {
-    console.error('❌ Error generating map media:', error);
+    console.error('❌ Error generating map image:', error);
     return NextResponse.json({ 
       success: false, 
-      error: error instanceof Error ? error.message : 'Failed to generate map media'
+      error: error instanceof Error ? error.message : 'Failed to generate map image'
     }, { status: 500 });
   }
 }

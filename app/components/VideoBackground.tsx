@@ -32,23 +32,14 @@ export default function VideoBackground({
   // Generate AI map on component mount (only once)
   useEffect(() => {
     if (useAIGeneratedMap && !aiGeneratedMap && !isGeneratingMap) {
+      // Show fallback image immediately while generating
+      setAiGeneratedMap(fallbackImage);
       generateFantasyMap();
-      
-      // Fallback timeout - if generation takes too long, use fallback
-      const timeout = setTimeout(() => {
-        if (isGeneratingMap) {
-          console.log('Map generation timeout, using fallback');
-          setAiGeneratedMap(fallbackImage);
-          setIsGeneratingMap(false);
-        }
-      }, 10000); // 10 second timeout
-      
-      return () => clearTimeout(timeout);
     }
   }, []); // Empty dependency array to run only once
 
   const generateFantasyMap = async () => {
-    if (isGeneratingMap || aiGeneratedMap) return; // Prevent multiple calls
+    if (isGeneratingMap) return; // Prevent multiple calls
     
     setIsGeneratingMap(true);
     try {
@@ -63,13 +54,11 @@ export default function VideoBackground({
           setAiGeneratedVideo(result.videoUrl);
         }
       } else {
-        console.log('Using fallback image');
-        setAiGeneratedMap(fallbackImage);
+        console.log('Generation failed, keeping fallback image');
       }
     } catch (error) {
       console.error('Failed to generate fantasy map:', error);
-      // Use fallback image on error
-      setAiGeneratedMap(fallbackImage);
+      // Keep the fallback image that's already showing
     } finally {
       setIsGeneratingMap(false);
     }
@@ -114,61 +103,13 @@ export default function VideoBackground({
           </div>
         </div>
       ) : (
-        <>
-          {/* Static map background */}
-          <div 
-            className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
-            style={{
-              backgroundImage: `url("${aiGeneratedMap || fallbackImage}")`,
-              filter: 'brightness(0.9) contrast(1.1) saturate(1.2)'
-            }}
-          />
-          
-          {/* Animated video overlay with walking trail */}
-          <div className="absolute inset-0">
-            <svg className="w-full h-full" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet">
-              {/* Animated walking trail */}
-              <path
-                d="M 200 600 Q 400 500 600 400 Q 800 350 1000 300 Q 1200 250 1400 200 Q 1600 150 1800 200"
-                stroke="#ffd700"
-                strokeWidth="8"
-                fill="none"
-                strokeDasharray="20,10"
-                opacity="0.8"
-              >
-                <animate
-                  attributeName="stroke-dashoffset"
-                  values="0;100"
-                  dur="5s"
-                  repeatCount="1"
-                />
-              </path>
-              
-              {/* Walking character */}
-              <g className="walking-character">
-                <circle
-                  r="12"
-                  fill="#ffd700"
-                  stroke="#fff"
-                  strokeWidth="3"
-                >
-                  <animateMotion
-                    dur="5s"
-                    repeatCount="1"
-                    path="M 200 600 Q 400 500 600 400 Q 800 350 1000 300 Q 1200 250 1400 200 Q 1600 150 1800 200"
-                    rotate="auto"
-                  />
-                  <animate
-                    attributeName="r"
-                    values="8;16;8"
-                    dur="1s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
-              </g>
-            </svg>
-          </div>
-        </>
+        <div 
+          className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url("${aiGeneratedMap || fallbackImage}")`,
+            filter: 'brightness(0.9) contrast(1.1) saturate(1.2)'
+          }}
+        />
       )}
 
       {/* Subtle overlay to enhance the AI-generated map */}
