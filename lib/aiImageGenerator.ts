@@ -153,8 +153,8 @@ export function createStoryImagePrompt(
     action?: string;
   }>
 ): string {
-  // Extract key visual elements from the story text
-  const visualElements = extractVisualElements(storyText);
+  // Use the full story text as the main content
+  const fullStoryContext = storyText.trim();
   
   // Build character descriptions
   let characterDescriptions = '';
@@ -170,8 +170,8 @@ export function createStoryImagePrompt(
     characterDescriptions = `, featuring ${characterParts.join(', ')}`;
   }
   
-  // Create a comprehensive prompt
-  const prompt = `${style}, ${visualElements.join(', ')}${characterDescriptions}, detailed, high quality, book illustration style, vibrant colors, cinematic lighting, consistent character appearance`;
+  // Create a comprehensive prompt using the full story text
+  const prompt = `${style}, detailed scene showing: ${fullStoryContext}${characterDescriptions}, book illustration style, vibrant colors, cinematic lighting, consistent character appearance`;
   
   return prompt;
 }

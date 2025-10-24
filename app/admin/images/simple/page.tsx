@@ -76,13 +76,24 @@ export default function SimpleImageManager() {
 
   const loadStoryNodes = async () => {
     try {
-      const response = await fetch(`/api/stories/${selectedStory}`);
-      if (response.ok) {
-        const data = await response.json();
-        setNodes(data.nodes || []);
+      // First get the story to get the story ID
+      const storyResponse = await fetch(`/api/stories/${selectedStory}`);
+      if (!storyResponse.ok) {
+        console.error('Failed to load story');
+        return;
+      }
+      
+      const story = await storyResponse.json();
+      
+      // Now fetch the nodes directly from Supabase
+      const nodesResponse = await fetch(`/api/admin/stories/${selectedStory}/nodes`);
+      if (nodesResponse.ok) {
+        const nodesData = await nodesResponse.json();
+        const nodes = nodesData.nodes || [];
+        setNodes(nodes);
         
         // Create image rows for each node
-        const rows: ImageRow[] = data.nodes.map((node: StoryNode) => ({
+        const rows: ImageRow[] = nodes.map((node: StoryNode) => ({
           id: `node-${node.node_key}`,
           node_key: node.node_key,
           text: node.text_md,
@@ -93,6 +104,14 @@ export default function SimpleImageManager() {
         }));
         
         setImageRows(rows);
+      } else {
+        // Fallback: try to get nodes from the story loader
+        const storyLoaderResponse = await fetch(`/api/stories/${selectedStory}`);
+        if (storyLoaderResponse.ok) {
+          const storyData = await storyLoaderResponse.json();
+          // The story loader might have nodes in a different structure
+          console.log('Story data structure:', storyData);
+        }
       }
     } catch (error) {
       console.error('Failed to load story nodes:', error);
@@ -113,6 +132,8 @@ export default function SimpleImageManager() {
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeKey: nodeKey,
+          storyText: imageRows.find(row => row.node_key === nodeKey)?.text || '',
+          storyTitle: selectedStoryData?.title || '',
           style: 'fantasy adventure book illustration',
         }),
       });

@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { 
       storySlug, 
-      nodeId, 
+      nodeKey, 
       storyText, 
       storyTitle, 
       model = 'dalle3',
@@ -17,14 +17,14 @@ export async function POST(request: NextRequest) {
       quality = 'standard'
     } = body;
 
-    if (!storySlug || !nodeId || !storyText) {
+    if (!storySlug || !nodeKey || !storyText) {
       return NextResponse.json(
-        { error: 'Missing required fields: storySlug, nodeId, storyText' },
+        { error: 'Missing required fields: storySlug, nodeKey, storyText' },
         { status: 400 }
       );
     }
 
-    console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
+    console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeKey}`);
 
     // Create AI prompt from story text
     const prompt = createStoryImagePrompt(storyText, storyTitle || '', style);
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     const imageResponse = await fetch(generatedImage.url);
     const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
     
-    const publicId = generateStoryAssetId(storySlug, nodeId, 'image');
+    const publicId = generateStoryAssetId(storySlug, nodeKey, 'image');
     const uploadResult = await uploadImageToCloudinary(
       imageBuffer,
       `tts-books/${storySlug}`,
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         .eq('slug', storySlug)
         .single()
       ).data?.id)
-      .eq('node_key', nodeId);
+      .eq('node_key', nodeKey);
 
     if (updateError) {
       console.error('❌ Failed to update story node:', updateError);
