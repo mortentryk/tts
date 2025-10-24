@@ -411,6 +411,37 @@ export default function SimpleImageManager() {
     }
   };
 
+  const deleteVideo = async (nodeKey: string) => {
+    if (!confirm('Are you sure you want to delete this video?')) return;
+    
+    try {
+      // Update the image row
+      setImageRows(prev => prev.map(row => 
+        row.node_key === nodeKey 
+          ? { ...row, video_url: '' }
+          : row
+      ));
+      
+      // Update the database
+      const response = await fetch(`/api/stories/${selectedStory}/nodes/${nodeKey}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_url: null
+        }),
+      });
+
+      if (!response.ok) {
+        alert('❌ Failed to delete video');
+      }
+    } catch (error) {
+      console.error('Delete video error:', error);
+      alert('❌ Failed to delete video');
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('admin_logged_in');
     router.push('/admin/login');
@@ -462,7 +493,7 @@ export default function SimpleImageManager() {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">
-              🖼️ Image Manager
+              🎨 Media Manager
             </h1>
             <div className="space-x-4">
               <button
@@ -534,10 +565,10 @@ export default function SimpleImageManager() {
                 <div>
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-semibold text-gray-900">
-                      🖼️ Story Images
+                      🎨 Story Media
                     </h2>
                     <div className="text-sm text-gray-900 font-medium">
-                      {readyImages} / {imageRows.length} images ready • Total cost: ${totalCost.toFixed(2)}
+                      {readyImages} / {imageRows.length} media ready • Total cost: ${totalCost.toFixed(2)}
                     </div>
                   </div>
 
@@ -661,11 +692,17 @@ export default function SimpleImageManager() {
                             <td className="border border-gray-300 px-4 py-2">
                               {row.video_url ? (
                                 <div className="flex items-center space-x-2">
-                                  <video
-                                    src={row.video_url}
-                                    className="w-16 h-16 object-cover rounded border"
-                                    controls={false}
-                                  />
+                                  <div className="relative">
+                                    <video
+                                      src={row.video_url}
+                                      className="w-16 h-16 object-cover rounded border"
+                                      controls={false}
+                                      muted
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 rounded">
+                                      <span className="text-white text-lg">▶️</span>
+                                    </div>
+                                  </div>
                                   <button
                                     onClick={() => window.open(row.video_url, '_blank')}
                                     className="text-blue-600 hover:text-blue-800 text-sm"
@@ -726,13 +763,22 @@ export default function SimpleImageManager() {
                                     >
                                       ✏️ Custom
                                     </button>
-                                    <button
-                                      onClick={() => generateVideo(row.node_key)}
-                                      disabled={generatingVideo === row.node_key}
-                                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
-                                    >
-                                      {generatingVideo === row.node_key ? '⏳ Video...' : '🎬 Video'}
-                                    </button>
+                                    {!row.video_url ? (
+                                      <button
+                                        onClick={() => generateVideo(row.node_key)}
+                                        disabled={generatingVideo === row.node_key}
+                                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                                      >
+                                        {generatingVideo === row.node_key ? '⏳ Video...' : '🎬 Video'}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => deleteVideo(row.node_key)}
+                                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                                      >
+                                        🗑️ Delete Video
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => generateAudio(row.node_key)}
                                       disabled={generatingAudio === row.node_key}
@@ -770,7 +816,12 @@ export default function SimpleImageManager() {
                                   ? 'bg-red-100 text-red-800'
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {row.status === 'ready' && '✅ Ready'}
+                                {row.status === 'ready' && (
+                                  <span>
+                                    ✅ Ready
+                                    {row.video_url && ' 🎬'}
+                                  </span>
+                                )}
                                 {row.status === 'generating' && '⏳ Generating...'}
                                 {row.status === 'error' && '❌ Error'}
                                 {row.status === 'empty' && '⚪ Empty'}
