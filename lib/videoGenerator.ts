@@ -25,8 +25,8 @@ export async function generateFantasyMapImage(): Promise<string> {
       n: 1,
     });
 
-    console.log('✅ Fantasy map image generated:', response.data[0].url);
-    return response.data[0].url || '';
+    console.log('✅ Fantasy map image generated:', response.data?.[0]?.url);
+    return response.data?.[0]?.url || '';
   } catch (error) {
     console.error('❌ Error generating fantasy map:', error);
     throw error;
@@ -47,8 +47,8 @@ export async function generateCompletionVideo(): Promise<string> {
       n: 1,
     });
 
-    console.log('✅ Completion video image generated:', response.data[0].url);
-    return response.data[0].url || '';
+    console.log('✅ Completion video image generated:', response.data?.[0]?.url);
+    return response.data?.[0]?.url || '';
   } catch (error) {
     console.error('❌ Error generating completion video:', error);
     throw error;
@@ -77,18 +77,19 @@ export async function convertImageToVideo(imageUrl: string, options: VideoGenera
 
 export async function generateMapVideo(): Promise<string> {
   try {
-    // Generate the fantasy map image
+    console.log('🎬 Generating fantasy map video...');
+    
+    // 1. Generate fantasy map image
     const mapImageUrl = await generateFantasyMapImage();
     
-    // Convert to video (placeholder for now)
-    const videoUrl = await convertImageToVideo(mapImageUrl, {
-      prompt: "A magical fantasy map with an animated walking trail",
-      duration: 5,
-      style: 'fantasy',
-      quality: 'hd'
-    });
+    // 2. Convert to video using Replicate
+    const { generateVideoWithReplicate } = await import('./aiImageGenerator');
+    const videoResult = await generateVideoWithReplicate(
+      'An animated trail appearing on a fantasy map, showing a magical journey with a walking character following a golden path through enchanted lands',
+      mapImageUrl
+    );
     
-    return videoUrl;
+    return videoResult.url;
   } catch (error) {
     console.error('❌ Error generating map video:', error);
     throw error;

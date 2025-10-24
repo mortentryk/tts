@@ -18,6 +18,7 @@ export default function VideoBackground({
   const [videoError, setVideoError] = useState(false);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
   const [aiGeneratedMap, setAiGeneratedMap] = useState<string | null>(null);
+  const [aiGeneratedVideo, setAiGeneratedVideo] = useState<string | null>(null);
   const [isGeneratingMap, setIsGeneratingMap] = useState(false);
   const [mapGenerationTimeout, setMapGenerationTimeout] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -58,6 +59,9 @@ export default function VideoBackground({
       console.log('Map generation result:', result);
       if (result.success && result.mapImageUrl) {
         setAiGeneratedMap(result.mapImageUrl);
+        if (result.videoUrl) {
+          setAiGeneratedVideo(result.videoUrl);
+        }
       } else {
         console.log('Using fallback image');
         setAiGeneratedMap(fallbackImage);
@@ -83,7 +87,7 @@ export default function VideoBackground({
   return (
     <div className="relative w-full h-full overflow-hidden">
       {/* Video Background */}
-      {videoUrl && !videoError && (
+      {(videoUrl || aiGeneratedVideo) && !videoError && (
         <video
           ref={videoRef}
           className="absolute inset-0 w-full h-full object-cover"
@@ -94,8 +98,8 @@ export default function VideoBackground({
           onError={handleVideoError}
           onLoadedData={handleVideoLoaded}
         >
-          <source src={videoUrl} type="video/mp4" />
-          <source src={videoUrl} type="video/webm" />
+          <source src={aiGeneratedVideo || videoUrl} type="video/mp4" />
+          <source src={aiGeneratedVideo || videoUrl} type="video/webm" />
           Your browser does not support the video tag.
         </video>
       )}
