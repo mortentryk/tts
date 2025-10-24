@@ -93,16 +93,33 @@ export async function POST(request: NextRequest) {
 
     console.log("🎙️ Generating audio with ElevenLabs...");
 
-    // Use Danish multilingual voice (Adam is good for Danish)
-    const voiceId = "pNInz6obpgDQGcFmaJgB"; // Adam - multilingual
+    // Enhanced ElevenLabs voices for Danish/European content
+    const voices = {
+      // Danish/European voices
+      'adam': "pNInz6obpgDQGcFmaJgB", // Adam - multilingual, good for Danish
+      'antoni': "ErXwobaYiN019PkySvjV", // Antoni - multilingual, clear pronunciation
+      'arnold': "VR6AewLTigWG4xSOukaG", // Arnold - multilingual, deep voice
+      'bella': "EXAVITQu4vr4xnSDxMaL", // Bella - multilingual, female voice
+      'domi': "AZnzlk1XvdvUeBnXmlld", // Domi - multilingual, expressive
+      'elli': "MF3mGyEYCl7XYWbV9V6O", // Elli - multilingual, young female
+      'josh': "TxGEqnHWrfWFTfGW9XjX", // Josh - multilingual, male
+      'rachel': "21m00Tcm4TlvDq8ikWAM", // Rachel - multilingual, female
+      'sam': "yoZ06aMxZJJ28mfd3POQ", // Sam - multilingual, male
+    };
+
+    // Default to Adam for Danish content, but allow voice selection
+    const selectedVoice = process.env.ELEVENLABS_VOICE_ID || 'adam';
+    const voiceId = voices[selectedVoice as keyof typeof voices] || voices.adam;
+
+    console.log(`🎙️ Using ElevenLabs voice: ${selectedVoice} (${voiceId})`);
 
     const body = {
       text: clean,
-      model_id: "eleven_multilingual_v2",
+      model_id: "eleven_multilingual_v2", // Best model for Danish
       voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.0,
+        stability: 0.6, // Slightly higher for more consistent pronunciation
+        similarity_boost: 0.8, // Higher for better voice consistency
+        style: 0.2, // Slight style for more natural speech
         use_speaker_boost: true
       }
     };
@@ -123,10 +140,48 @@ export async function POST(request: NextRequest) {
     }
 
     const audioBuffer = await audioResponse.arrayBuffer();
+    
+    // Upload to Cloudinary for caching if we have story context
+    if (nodeKey && storyId) {
+      try {
+        const { uploadImageToCloudinary } = await import('../../../lib/cloudinary');
+        const { generateStoryAssetId } = await import('../../../lib/cloudinary');
+        
+        const publicId = generateStoryAssetId(storyId, nodeKey, 'audio');
+        const uploadResult = await uploadImageToCloudinary(
+          Buffer.from(audioBuffer),
+          `tts-audio/${storyId}`,
+          publicId,
+          {
+            resource_type: 'video', // Cloudinary treats audio as video
+            format: 'mp3',
+            quality: 'auto'
+          }
+        );
+        
+        // Update the story node with the audio URL and hash
+        await supabase
+          .from('story_nodes')
+          .update({ 
+            audio_url: uploadResult.secure_url,
+            text_hash: textHash,
+            updated_at: new Date().toISOString()
+          })
+          .eq('story_id', storyId)
+          .eq('node_key', nodeKey);
+        
+        console.log(`☁️ Audio cached to Cloudinary: ${uploadResult.secure_url}`);
+      } catch (uploadError) {
+        console.warn('⚠️ Failed to cache audio to Cloudinary:', uploadError);
+        // Continue without caching - audio will still be returned
+      }
+    }
+    
     const response = new NextResponse(audioBuffer, {
       status: 200,
       headers: {
         "Content-Type": "audio/mpeg",
+        "Cache-Control": "public, max-age=31536000", // Cache for 1 year
       },
     });
     
