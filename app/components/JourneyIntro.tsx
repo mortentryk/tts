@@ -32,12 +32,12 @@ interface JourneyIntroProps {
 
 export default function JourneyIntro({ stories, onStorySelect, onExit }: JourneyIntroProps) {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false); // Start false to prevent flash
   const [showJourneyStory, setShowJourneyStory] = useState(false);
   const [showQuestPopup, setShowQuestPopup] = useState(false);
   const [journeySegments, setJourneySegments] = useState<JourneySegment[]>([]);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
-  const [loadingJourney, setLoadingJourney] = useState(false);
+  const [loadingJourney, setLoadingJourney] = useState(true);
 
   // Get journey stories sorted by order
   const journeyStories = stories
@@ -53,6 +53,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
     const fetchJourneySegments = async () => {
       setLoadingJourney(true);
       setCurrentSegmentIndex(0);
+      setIsVideoPlaying(false);
       try {
         const response = await fetch(`/api/stories/${currentStory.id}/journey`);
         if (response.ok) {
@@ -69,6 +70,8 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         setJourneySegments([]);
       } finally {
         setLoadingJourney(false);
+        // Start playing after segments loaded
+        setIsVideoPlaying(true);
       }
     };
 
@@ -199,7 +202,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                   />
                 </div>
                 <p className="text-white text-lg opacity-80">
-                  📖 {currentSegmentIndex < journeySegments.length - 1 ? 'Continue watching...' : 'Preparing quest...'}
+                  {currentSegment.video_url ? '🎬' : '🖼️'} {currentSegment.journey_text.substring(0, 80)}...
                 </p>
               </div>
             </div>
@@ -279,6 +282,12 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                 className="w-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 ⚔️ Accept Quest
+              </button>
+              <button
+                onClick={onExit}
+                className="w-full bg-blue-700 hover:bg-blue-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-blue-500"
+              >
+                📖 Go to Adventure Journal
               </button>
               <button
                 onClick={handleQuestDecline}

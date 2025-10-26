@@ -32,11 +32,19 @@ export default function JourneyTimelineManager() {
   const [generatingImage, setGeneratingImage] = useState<string | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingSegment, setEditingSegment] = useState<string | null>(null);
   const [expandedSegment, setExpandedSegment] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
     nodeKey: '1',
+    title: '',
+    text: '',
+    duration: 5,
+  });
+
+  // Edit form state
+  const [editData, setEditData] = useState({
     title: '',
     text: '',
     duration: 5,
@@ -122,6 +130,47 @@ export default function JourneyTimelineManager() {
       console.error('Create error:', error);
       alert('❌ Failed to create segment');
     }
+  };
+
+  const updateSegment = async (id: string) => {
+    if (!editData.title || !editData.text) {
+      alert('❌ Please fill in title and text');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/journey', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          journeyId: id,
+          journey_title: editData.title,
+          journey_text: editData.text,
+          duration_seconds: editData.duration,
+        }),
+      });
+
+      if (response.ok) {
+        alert('✅ Segment updated!');
+        setEditingSegment(null);
+        loadSegments();
+      } else {
+        const data = await response.json();
+        alert(`❌ Failed: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Update error:', error);
+      alert('❌ Failed to update segment');
+    }
+  };
+
+  const startEditing = (segment: JourneySegment) => {
+    setEditingSegment(segment.id);
+    setEditData({
+      title: segment.journey_title,
+      text: segment.journey_text,
+      duration: segment.duration_seconds,
+    });
   };
 
   const deleteSegment = async (id: string) => {
@@ -375,33 +424,81 @@ export default function JourneyTimelineManager() {
                           key={segment.id}
                           className="bg-white border-2 border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors"
                         >
-                          <div className="flex items-start gap-6">
-                            {/* Sequence Number */}
-                            <div className="flex-shrink-0">
-                              <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center text-2xl font-bold">
-                                {index + 1}
+                          {editingSegment === segment.id ? (
+                            /* Edit Mode */
+                            <div className="space-y-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">Title</label>
+                                <input
+                                  type="text"
+                                  value={editData.title}
+                                  onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
+                                />
                               </div>
-                              <div className="text-center mt-2 text-sm text-gray-600">
-                                {segment.duration_seconds}s
+                              <div>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">Text</label>
+                                <textarea
+                                  value={editData.text}
+                                  onChange={(e) => setEditData({ ...editData, text: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 h-32"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-900 mb-2">Duration (seconds)</label>
+                                <input
+                                  type="number"
+                                  value={editData.duration}
+                                  onChange={(e) => setEditData({ ...editData, duration: parseInt(e.target.value) || 5 })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
+                                  min="1"
+                                  max="30"
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => updateSegment(segment.id)}
+                                  className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700"
+                                >
+                                  ✅ Save
+                                </button>
+                                <button
+                                  onClick={() => setEditingSegment(null)}
+                                  className="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700"
+                                >
+                                  Cancel
+                                </button>
                               </div>
                             </div>
+                          ) : (
+                            /* View Mode */
+                            <div className="flex items-start gap-6">
+                              {/* Sequence Number */}
+                              <div className="flex-shrink-0">
+                                <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center text-2xl font-bold">
+                                  {index + 1}
+                                </div>
+                                <div className="text-center mt-2 text-sm text-gray-600">
+                                  {segment.duration_seconds}s
+                                </div>
+                              </div>
 
-                            {/* Content */}
-                            <div className="flex-grow">
-                              <h4 className="text-lg font-bold text-gray-900 mb-2">
-                                {segment.journey_title}
-                              </h4>
-                              <p className="text-gray-700 text-sm mb-4">
-                                {segment.journey_text.substring(0, 150)}...
-                                {segment.journey_text.length > 150 && (
-                                  <button
-                                    onClick={() => setExpandedSegment(segment.id)}
-                                    className="text-blue-600 hover:underline ml-2"
-                                  >
-                                    Read more
-                                  </button>
-                                )}
-                              </p>
+                              {/* Content */}
+                              <div className="flex-grow">
+                                <h4 className="text-lg font-bold text-gray-900 mb-2">
+                                  {segment.journey_title}
+                                </h4>
+                                <p className="text-gray-700 text-sm mb-4">
+                                  {segment.journey_text.substring(0, 150)}...
+                                  {segment.journey_text.length > 150 && (
+                                    <button
+                                      onClick={() => setExpandedSegment(segment.id)}
+                                      className="text-blue-600 hover:underline ml-2"
+                                    >
+                                      Read more
+                                    </button>
+                                  )}
+                                </p>
 
                               {/* Media Preview */}
                               <div className="flex gap-4 mb-4">
@@ -422,49 +519,56 @@ export default function JourneyTimelineManager() {
                                 )}
                   </div>
 
-                              {/* Actions */}
-                              <div className="flex flex-wrap gap-2">
-                                {!segment.image_url && (
+                                {/* Actions */}
+                                <div className="flex flex-wrap gap-2">
                                   <button
-                                    onClick={() => generateImage(segment.id, segment.journey_text, segment.journey_title)}
-                                    disabled={generatingImage === segment.id}
-                                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                                    onClick={() => startEditing(segment)}
+                                    className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700"
                                   >
-                                    {generatingImage === segment.id ? '⏳ Generating...' : '🎨 Generate Image'}
+                                    ✏️ Edit
                                   </button>
-                                )}
-                                {segment.image_url && !segment.video_url && (
+                                  {!segment.image_url && (
+                                    <button
+                                      onClick={() => generateImage(segment.id, segment.journey_text, segment.journey_title)}
+                                      disabled={generatingImage === segment.id}
+                                      className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                                    >
+                                      {generatingImage === segment.id ? '⏳ Generating...' : '🎨 Generate Image'}
+                                    </button>
+                                  )}
+                                  {segment.image_url && !segment.video_url && (
+                                    <button
+                                      onClick={() => generateVideo(segment.id)}
+                                      disabled={generatingVideo === segment.id}
+                                      className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                      {generatingVideo === segment.id ? '⏳ Video...' : '🎬 Make Video'}
+                                    </button>
+                                  )}
                                   <button
-                                    onClick={() => generateVideo(segment.id)}
-                                    disabled={generatingVideo === segment.id}
-                                    className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                                    onClick={() => moveSegment(segment.id, 'up')}
+                                    disabled={index === 0}
+                                    className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 disabled:bg-gray-300"
                                   >
-                                    {generatingVideo === segment.id ? '⏳ Video...' : '🎬 Make Video'}
+                                    ↑ Move Up
                                   </button>
-                                )}
-                                <button
-                                  onClick={() => moveSegment(segment.id, 'up')}
-                                  disabled={index === 0}
-                                  className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 disabled:bg-gray-300"
-                                >
-                                  ↑ Move Up
-                                </button>
-                                <button
-                                  onClick={() => moveSegment(segment.id, 'down')}
-                                  disabled={index === segments.length - 1}
-                                  className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 disabled:bg-gray-300"
-                                >
-                                  ↓ Move Down
-                                </button>
-                                <button
-                                  onClick={() => deleteSegment(segment.id)}
-                                  className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
-                                >
-                                  🗑️ Delete
-                                </button>
+                                  <button
+                                    onClick={() => moveSegment(segment.id, 'down')}
+                                    disabled={index === segments.length - 1}
+                                    className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 disabled:bg-gray-300"
+                                  >
+                                    ↓ Move Down
+                                  </button>
+                                  <button
+                                    onClick={() => deleteSegment(segment.id)}
+                                    className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
+                                  >
+                                    🗑️ Delete
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       ))}
                   </div>
