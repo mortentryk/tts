@@ -16,12 +16,30 @@ export async function GET(
       );
     }
 
-    // Get the story to find its ID
-    const { data: story, error: storyError } = await supabase
+    // Get the story - try by slug first, then by UUID
+    let story;
+    let storyError;
+
+    // First try as slug
+    const slugResult = await supabase
       .from('stories')
       .select('id, slug')
       .eq('slug', storyId)
       .single();
+
+    if (slugResult.data) {
+      story = slugResult.data;
+    } else {
+      // Try as UUID
+      const uuidResult = await supabase
+        .from('stories')
+        .select('id, slug')
+        .eq('id', storyId)
+        .single();
+      
+      story = uuidResult.data;
+      storyError = uuidResult.error;
+    }
 
     if (storyError || !story) {
       return NextResponse.json(
