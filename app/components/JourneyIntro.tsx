@@ -270,6 +270,12 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                 ✅ Yes, I'll take this quest!
               </button>
               <button
+                onClick={onExit}
+                className="w-full bg-blue-700 hover:bg-blue-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-blue-500"
+              >
+                📖 Go to Adventure Journal
+              </button>
+              <button
                 onClick={handleQuestDecline}
                 className="w-full bg-gray-700 hover:bg-gray-600 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-colors border-2 border-gray-500"
               >
