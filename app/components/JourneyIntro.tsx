@@ -90,8 +90,14 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   }, [isVideoPlaying, currentStoryIndex, journeyData]);
 
   const handleJourneyStoryRead = () => {
-    setShowJourneyStory(false);
-    setShowQuestPopup(true);
+    // If we have journey data, accept quest directly
+    // Otherwise, show the quest popup for stories without journey data
+    if (journeyData) {
+      onStorySelect(currentStory);
+    } else {
+      setShowJourneyStory(false);
+      setShowQuestPopup(true);
+    }
   };
 
   const handleQuestAccept = () => {
@@ -233,13 +239,21 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
               </p>
             </div>
 
-            {/* Continue button */}
-            <button
-              onClick={handleJourneyStoryRead}
-              className="w-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
-            >
-              ⚔️ Continue to Quest
-            </button>
+            {/* Action buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={handleJourneyStoryRead}
+                className="w-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+              >
+                ⚔️ Accept Quest
+              </button>
+              <button
+                onClick={handleQuestDecline}
+                className="w-full bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-gray-500"
+              >
+                ❌ Decline Quest
+              </button>
+            </div>
           </div>
         </div>
       )}
