@@ -14,6 +14,9 @@ export async function GET() {
       .from('stories')
       .select(`
         *,
+        journey_order,
+        landmark_type,
+        in_journey,
         story_nodes!inner(
           image_url,
           sort_index
