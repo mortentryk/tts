@@ -174,46 +174,44 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
             </div>
           </div>
         </div>
-      ) : (
+      ) : isVideoPlaying ? (
         /* Default background with map animation */
         <VideoBackground useAIGeneratedMap={true}>
           {/* Video Content Overlay */}
-          {isVideoPlaying && (
-            <div className="absolute inset-0 flex items-center justify-center z-10">
-              <div className="text-center text-white max-w-4xl mx-auto px-6">
-                {/* Story Title Overlay */}
-                <div className="bg-black bg-opacity-60 backdrop-blur-sm rounded-2xl p-8 border border-yellow-400 border-opacity-30">
-                  <div className="text-8xl mb-6">
-                    {currentStory.landmark_type === 'tree' && '🌳'}
-                    {currentStory.landmark_type === 'sea' && '🌊'}
-                    {currentStory.landmark_type === 'cave' && '🕳️'}
-                    {currentStory.landmark_type === 'castle' && '🏰'}
-                    {currentStory.landmark_type === 'forest' && '🌲'}
-                    {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '📍'}
-                  </div>
-                  <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
-                    {currentStory.title}
-                  </h1>
-                  <p className="text-2xl text-yellow-200 opacity-90 mb-8 animate-fade-in">
-                    {currentStory.description}
-                  </p>
-                  
-                  {/* Video Progress Timer */}
-                  <div className="w-full bg-white bg-opacity-20 rounded-full h-3 mb-4">
-                    <div 
-                      className="bg-yellow-400 h-3 rounded-full transition-all duration-5000 ease-linear"
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                  <p className="text-white text-lg opacity-80">
-                    🚶‍♂️ Following the magical path to your destination...
-                  </p>
+          <div className="absolute inset-0 flex items-center justify-center z-10">
+            <div className="text-center text-white max-w-4xl mx-auto px-6">
+              {/* Story Title Overlay */}
+              <div className="bg-black bg-opacity-60 backdrop-blur-sm rounded-2xl p-8 border border-yellow-400 border-opacity-30">
+                <div className="text-8xl mb-6">
+                  {currentStory.landmark_type === 'tree' && '🌳'}
+                  {currentStory.landmark_type === 'sea' && '🌊'}
+                  {currentStory.landmark_type === 'cave' && '🕳️'}
+                  {currentStory.landmark_type === 'castle' && '🏰'}
+                  {currentStory.landmark_type === 'forest' && '🌲'}
+                  {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '📍'}
                 </div>
+                <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
+                  {currentStory.title}
+                </h1>
+                <p className="text-2xl text-yellow-200 opacity-90 mb-8 animate-fade-in">
+                  {currentStory.description}
+                </p>
+                
+                {/* Video Progress Timer */}
+                <div className="w-full bg-white bg-opacity-20 rounded-full h-3 mb-4">
+                  <div 
+                    className="bg-yellow-400 h-3 rounded-full transition-all duration-5000 ease-linear"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <p className="text-white text-lg opacity-80">
+                  🚶‍♂️ Following the magical path to your destination...
+                </p>
               </div>
             </div>
-          )}
+          </div>
         </VideoBackground>
-      )}
+      ) : null}
 
       {/* Journey Story Modal - Shows AFTER video/image */}
       {showJourneyStory && journeyData && (
@@ -289,16 +287,15 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         </div>
       )}
 
-        {/* Skip overlay */}
-        <div className="absolute top-4 right-4 z-20">
-          <button
-            onClick={handleSkip}
-            className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm hover:bg-opacity-70 transition-colors"
-          >
-            Exit
-          </button>
-        </div>
-      </VideoBackground>
+      {/* Skip overlay */}
+      <div className="absolute top-4 right-4 z-40">
+        <button
+          onClick={handleSkip}
+          className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm hover:bg-opacity-70 transition-colors"
+        >
+          Exit
+        </button>
+      </div>
     </div>
   );
 }
