@@ -12,14 +12,16 @@ interface Story {
   thumbnail?: string;
 }
 
-interface JourneyStory {
+interface JourneySegment {
   id: string;
   story_id: string;
   node_key: string;
+  sequence_number: number;
   journey_title: string;
   journey_text: string;
   image_url?: string;
   video_url?: string;
+  duration_seconds: number;
 }
 
 interface JourneyIntroProps {
@@ -33,7 +35,8 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [showJourneyStory, setShowJourneyStory] = useState(false);
   const [showQuestPopup, setShowQuestPopup] = useState(false);
-  const [journeyData, setJourneyData] = useState<JourneyStory | null>(null);
+  const [journeySegments, setJourneySegments] = useState<JourneySegment[]>([]);
+  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [loadingJourney, setLoadingJourney] = useState(false);
 
   // Get journey stories sorted by order
@@ -43,56 +46,65 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
 
   const currentStory = journeyStories[currentStoryIndex];
 
-  // Fetch journey data for current story
+  // Fetch journey segments for current story
   useEffect(() => {
     if (!currentStory) return;
 
-    const fetchJourneyData = async () => {
+    const fetchJourneySegments = async () => {
       setLoadingJourney(true);
+      setCurrentSegmentIndex(0);
       try {
         const response = await fetch(`/api/stories/${currentStory.id}/journey`);
         if (response.ok) {
           const data = await response.json();
-          // Get the first journey story for this story (could be for a specific node)
+          // data is an array of segments, ordered by sequence_number
           if (data && data.length > 0) {
-            setJourneyData(data[0]);
+            setJourneySegments(data);
           } else {
-            setJourneyData(null);
+            setJourneySegments([]);
           }
         }
       } catch (error) {
-        console.error('Failed to load journey data:', error);
-        setJourneyData(null);
+        console.error('Failed to load journey segments:', error);
+        setJourneySegments([]);
       } finally {
         setLoadingJourney(false);
       }
     };
 
-    fetchJourneyData();
+    fetchJourneySegments();
   }, [currentStory]);
 
-  // 5-second video/image cycle
+  // Segment playback timer
   useEffect(() => {
     if (!isVideoPlaying) return;
 
+    const currentSegment = journeySegments[currentSegmentIndex];
+    const duration = currentSegment ? currentSegment.duration_seconds * 1000 : 5000;
+
     const timer = setTimeout(() => {
-      setIsVideoPlaying(false);
-      // If we have journey data with custom text, show story modal first
-      if (journeyData?.journey_text) {
-        setShowJourneyStory(true);
+      // Check if there are more segments to play
+      if (currentSegmentIndex < journeySegments.length - 1) {
+        // Move to next segment
+        setCurrentSegmentIndex(prev => prev + 1);
       } else {
-        // Otherwise go straight to quest popup
-        setShowQuestPopup(true);
+        // All segments played, now show story modal or quest popup
+        setIsVideoPlaying(false);
+        if (journeySegments.length > 0) {
+          setShowJourneyStory(true);
+        } else {
+          setShowQuestPopup(true);
+        }
       }
-    }, 5000); // 5 seconds
+    }, duration);
 
     return () => clearTimeout(timer);
-  }, [isVideoPlaying, currentStoryIndex, journeyData]);
+  }, [isVideoPlaying, currentSegmentIndex, journeySegments]);
 
   const handleJourneyStoryRead = () => {
-    // If we have journey data, accept quest directly
+    // If we have journey segments, accept quest directly
     // Otherwise, show the quest popup for stories without journey data
-    if (journeyData) {
+    if (journeySegments.length > 0) {
       onStorySelect(currentStory);
     } else {
       setShowJourneyStory(false);
@@ -107,7 +119,8 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   const handleQuestDecline = () => {
     setShowQuestPopup(false);
     setShowJourneyStory(false);
-    setJourneyData(null); // Reset journey data
+    setJourneySegments([]); // Reset journey segments
+    setCurrentSegmentIndex(0);
     // Move to next story or loop back to first
     const nextIndex = (currentStoryIndex + 1) % journeyStories.length;
     setCurrentStoryIndex(nextIndex);
@@ -134,23 +147,28 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
     );
   }
 
+  const currentSegment = journeySegments[currentSegmentIndex];
+  const hasJourneyContent = journeySegments.length > 0;
+
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      {/* Journey Image/Video Background (if custom media exists) */}
-      {isVideoPlaying && journeyData && (journeyData.video_url || journeyData.image_url) ? (
+      {/* Journey Segment Display (if custom media exists) */}
+      {isVideoPlaying && hasJourneyContent && currentSegment && (currentSegment.video_url || currentSegment.image_url) ? (
         <div className="absolute inset-0">
-          {journeyData.video_url ? (
+          {currentSegment.video_url ? (
             <video
-              src={journeyData.video_url}
+              key={currentSegment.id}
+              src={currentSegment.video_url}
               autoPlay
               loop
               muted
               className="w-full h-full object-cover"
             />
-          ) : journeyData.image_url ? (
+          ) : currentSegment.image_url ? (
             <img
-              src={journeyData.image_url}
-              alt={journeyData.journey_title}
+              key={currentSegment.id}
+              src={currentSegment.image_url}
+              alt={currentSegment.journey_title}
               className="w-full h-full object-cover"
             />
           ) : null}
@@ -162,19 +180,26 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <div className="text-center text-white max-w-4xl mx-auto px-6">
               <div className="bg-black bg-opacity-70 backdrop-blur-sm rounded-2xl p-8 border border-yellow-400 border-opacity-50">
+                {/* Segment counter */}
+                <div className="text-yellow-400 text-sm font-semibold mb-2">
+                  Segment {currentSegmentIndex + 1} of {journeySegments.length}
+                </div>
                 <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
-                  {journeyData.journey_title}
+                  {currentSegment.journey_title}
                 </h1>
                 
                 {/* Progress Timer */}
                 <div className="w-full bg-white bg-opacity-20 rounded-full h-3 mb-4">
                   <div 
-                    className="bg-yellow-400 h-3 rounded-full transition-all duration-5000 ease-linear"
-                    style={{ width: '100%' }}
+                    className="bg-yellow-400 h-3 rounded-full transition-all"
+                    style={{ 
+                      width: '100%',
+                      transition: `width ${currentSegment.duration_seconds}s linear`
+                    }}
                   />
                 </div>
                 <p className="text-white text-lg opacity-80">
-                  📖 Preparing your quest story...
+                  📖 {currentSegmentIndex < journeySegments.length - 1 ? 'Continue watching...' : 'Preparing quest...'}
                 </p>
               </div>
             </div>
@@ -219,24 +244,32 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         </VideoBackground>
       ) : null}
 
-      {/* Journey Story Modal - Shows AFTER video/image */}
-      {showJourneyStory && journeyData && (
+      {/* Journey Story Modal - Shows AFTER all segments */}
+      {showJourneyStory && hasJourneyContent && (
         <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-30 p-4 animate-fade-in">
           <div className="bg-gradient-to-b from-yellow-900 to-yellow-950 border-4 border-yellow-500 rounded-xl p-8 max-w-3xl w-full max-h-[85vh] overflow-y-auto shadow-2xl">
             {/* Decorative header */}
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">📜</div>
               <h2 className="text-4xl font-bold text-yellow-100 mb-2">
-                {journeyData.journey_title}
+                {currentStory.title}
               </h2>
               <div className="w-24 h-1 bg-yellow-400 mx-auto"></div>
             </div>
 
-            {/* Story text in parchment-style box */}
+            {/* Combined story text from all segments */}
             <div className="bg-amber-50 bg-opacity-95 rounded-lg p-8 mb-6 border-2 border-yellow-600 shadow-inner">
-              <p className="text-gray-900 text-xl leading-relaxed whitespace-pre-wrap font-serif">
-                {journeyData.journey_text}
-              </p>
+              {journeySegments.map((segment, index) => (
+                <div key={segment.id} className="mb-6 last:mb-0">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">{segment.journey_title}</h3>
+                  <p className="text-gray-900 text-lg leading-relaxed whitespace-pre-wrap font-serif">
+                    {segment.journey_text}
+                  </p>
+                  {index < journeySegments.length - 1 && (
+                    <div className="my-4 border-t-2 border-yellow-600"></div>
+                  )}
+                </div>
+              ))}
             </div>
 
             {/* Action buttons */}
@@ -274,7 +307,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
 
             {/* Quest Title */}
             <h2 className="text-3xl font-bold text-yellow-400 mb-3">
-              {journeyData ? journeyData.journey_title : currentStory.title}
+              {currentStory.title}
             </h2>
 
             {/* Quest Question */}

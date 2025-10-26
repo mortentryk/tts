@@ -48,13 +48,13 @@ export async function GET(
       );
     }
 
-    // Get journey stories for this story (only active ones)
+    // Get journey stories for this story (only active ones), ordered by sequence
     const { data: journeyStories, error: journeyError } = await supabase
       .from('journey_stories')
       .select('*')
       .eq('story_id', story.id)
       .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+      .order('sequence_number', { ascending: true });
 
     if (journeyError) {
       console.error('Error fetching journey stories:', journeyError);

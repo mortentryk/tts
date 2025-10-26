@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
           title
         )
       `)
-      .order('sort_order', { ascending: true });
+      .order('sequence_number', { ascending: true });
 
     // Filter by story if provided
     if (storyId) {
@@ -65,7 +65,8 @@ export async function POST(request: NextRequest) {
       nodeKey,
       journeyTitle,
       journeyText,
-      sortOrder = 0,
+      sequenceNumber,
+      durationSeconds = 5,
     } = body;
 
     if (!storySlug || !nodeKey || !journeyTitle || !journeyText) {
@@ -74,6 +75,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // If no sequence number provided, find the next available one
+    let finalSequenceNumber = sequenceNumber;
 
     // Get story ID from slug
     const { data: story, error: storyError } = await supabase
@@ -89,15 +93,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!finalSequenceNumber) {
+      // Get the highest sequence number for this story/node
+      const { data: existing } = await supabase
+        .from('journey_stories')
+        .select('sequence_number')
+        .eq('story_id', story.id)
+        .eq('node_key', nodeKey)
+        .order('sequence_number', { ascending: false })
+        .limit(1);
+
+      finalSequenceNumber = existing && existing.length > 0 ? existing[0].sequence_number + 1 : 1;
+    }
+
     // Insert journey story
-    const { data: journey, error: insertError } = await supabase
+    const { data: journey, error: insertError} = await supabase
       .from('journey_stories')
       .insert({
         story_id: story.id,
         node_key: nodeKey,
+        sequence_number: finalSequenceNumber,
         journey_title: journeyTitle,
         journey_text: journeyText,
-        sort_order: sortOrder,
+        duration_seconds: durationSeconds,
         is_active: true,
       })
       .select()
@@ -131,14 +149,16 @@ export async function PATCH(request: NextRequest) {
       journeyText,
       imageUrl,
       videoUrl,
-      sortOrder,
+      sequenceNumber,
+      durationSeconds,
       isActive,
       is_active,
       journey_title,
       journey_text,
       image_url,
       video_url,
-      sort_order,
+      sequence_number,
+      duration_seconds,
     } = body;
 
     if (!journeyId) {
@@ -157,7 +177,8 @@ export async function PATCH(request: NextRequest) {
     if (journeyText !== undefined || journey_text !== undefined) updates.journey_text = journeyText || journey_text;
     if (imageUrl !== undefined || image_url !== undefined) updates.image_url = imageUrl || image_url;
     if (videoUrl !== undefined || video_url !== undefined) updates.video_url = videoUrl || video_url;
-    if (sortOrder !== undefined || sort_order !== undefined) updates.sort_order = sortOrder || sort_order;
+    if (sequenceNumber !== undefined || sequence_number !== undefined) updates.sequence_number = sequenceNumber || sequence_number;
+    if (durationSeconds !== undefined || duration_seconds !== undefined) updates.duration_seconds = durationSeconds || duration_seconds;
     if (isActive !== undefined || is_active !== undefined) updates.is_active = isActive !== undefined ? isActive : is_active;
 
     const { data: journey, error: updateError } = await supabase
