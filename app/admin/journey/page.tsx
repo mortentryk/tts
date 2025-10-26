@@ -1,32 +1,75 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface Story {
   id: string;
+  slug: string;
   title: string;
-  description: string;
-  journey_order: number | null;
-  landmark_type: string | null;
-  in_journey: boolean;
+  is_published: boolean;
 }
 
-export default function JourneyAdmin() {
+interface Journey {
+  id: string;
+  story_id: string;
+  node_key: string;
+  journey_title: string;
+  journey_text: string;
+  image_url?: string;
+  video_url?: string;
+  sort_order: number;
+  is_active: boolean;
+  stories?: {
+    slug: string;
+    title: string;
+  };
+}
+
+export default function JourneyManager() {
   const router = useRouter();
   const [stories, setStories] = useState<Story[]>([]);
+  const [selectedStory, setSelectedStory] = useState<string>('');
+  const [journeys, setJourneys] = useState<Journey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [generatingVideo, setGeneratingVideo] = useState(false);
-  const [videoResult, setVideoResult] = useState<any>(null);
+  const [generatingImage, setGeneratingImage] = useState<string | null>(null);
+  const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [expandedText, setExpandedText] = useState<string | null>(null);
 
+  // Form state
+  const [formData, setFormData] = useState({
+    nodeKey: '',
+    journeyTitle: '',
+    journeyText: '',
+    sortOrder: 0,
+  });
+
+  // Check if user is logged in
+  useEffect(() => {
+    const isLoggedIn = localStorage.getItem('admin_logged_in');
+    if (!isLoggedIn) {
+      router.push('/admin/login');
+    }
+  }, [router]);
+
+  // Load stories on mount
   useEffect(() => {
     loadStories();
   }, []);
 
+  // Load journeys when story changes
+  useEffect(() => {
+    if (selectedStory) {
+      loadJourneys();
+    } else {
+      setJourneys([]);
+    }
+  }, [selectedStory]);
+
   const loadStories = async () => {
     try {
-      const response = await fetch('/api/stories');
+      const response = await fetch('/api/admin/stories');
       if (response.ok) {
         const data = await response.json();
         setStories(data);
@@ -38,262 +81,509 @@ export default function JourneyAdmin() {
     }
   };
 
-  const updateStoryJourney = async (storyId: string, updates: Partial<Story>) => {
-    setSaving(true);
+  const loadJourneys = async () => {
+    if (!selectedStory) return;
+
     try {
-      const response = await fetch(`/api/admin/stories/${storyId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
+      const response = await fetch(`/api/admin/journey?storySlug=${selectedStory}`);
+      if (response.ok) {
+        const data = await response.json();
+        setJourneys(data);
+      }
+    } catch (error) {
+      console.error('Failed to load journeys:', error);
+    }
+  };
+
+  const createJourney = async () => {
+    if (!selectedStory || !formData.journeyTitle || !formData.journeyText || !formData.nodeKey) {
+      alert('❌ Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/journey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storySlug: selectedStory,
+          nodeKey: formData.nodeKey,
+          journeyTitle: formData.journeyTitle,
+          journeyText: formData.journeyText,
+          sortOrder: formData.sortOrder,
+        }),
       });
 
       if (response.ok) {
-        setStories(prev => 
-          prev.map(story => 
-            story.id === storyId ? { ...story, ...updates } : story
-          )
-        );
+        alert('✅ Journey created successfully!');
+        setShowCreateForm(false);
+        setFormData({ nodeKey: '', journeyTitle: '', journeyText: '', sortOrder: 0 });
+        loadJourneys();
+      } else {
+        const data = await response.json();
+        alert(`❌ Failed to create journey: ${data.error}`);
       }
     } catch (error) {
-      console.error('Failed to update story:', error);
-    } finally {
-      setSaving(false);
+      console.error('Create journey error:', error);
+      alert('❌ Failed to create journey');
     }
   };
 
-  const toggleJourney = (storyId: string, inJourney: boolean) => {
-    const updates = {
-      in_journey: inJourney,
-      journey_order: inJourney ? (stories.filter(s => s.in_journey).length + 1) : null,
-      landmark_type: inJourney ? 'tree' : null
-    };
-    updateStoryJourney(storyId, updates);
-  };
-
-  const updateJourneyOrder = (storyId: string, newOrder: number) => {
-    updateStoryJourney(storyId, { journey_order: newOrder });
-  };
-
-  const updateLandmarkType = (storyId: string, landmarkType: string) => {
-    updateStoryJourney(storyId, { landmark_type: landmarkType });
-  };
-
-  const generateMapVideo = async () => {
-    setGeneratingVideo(true);
+  const updateJourney = async (journeyId: string, updates: Partial<Journey>) => {
     try {
-      const response = await fetch('/api/admin/generate-map-video', {
-        method: 'POST',
+      const response = await fetch('/api/admin/journey', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          journeyId,
+          ...updates,
+        }),
       });
-      const result = await response.json();
-      setVideoResult(result);
+
+      if (response.ok) {
+        loadJourneys();
+      } else {
+        const data = await response.json();
+        alert(`❌ Failed to update journey: ${data.error}`);
+      }
     } catch (error) {
-      console.error('Failed to generate map video:', error);
-    } finally {
-      setGeneratingVideo(false);
+      console.error('Update journey error:', error);
+      alert('❌ Failed to update journey');
     }
   };
 
-  const generateCompletionVideo = async () => {
-    setGeneratingVideo(true);
+  const deleteJourney = async (journeyId: string) => {
+    if (!confirm('Are you sure you want to delete this journey?')) return;
+
     try {
-      const response = await fetch('/api/admin/generate-completion-video', {
-        method: 'POST',
+      const response = await fetch(`/api/admin/journey?journeyId=${journeyId}`, {
+        method: 'DELETE',
       });
-      const result = await response.json();
-      setVideoResult(result);
+
+      if (response.ok) {
+        alert('✅ Journey deleted successfully');
+        loadJourneys();
+      } else {
+        const data = await response.json();
+        alert(`❌ Failed to delete journey: ${data.error}`);
+      }
     } catch (error) {
-      console.error('Failed to generate completion video:', error);
-    } finally {
-      setGeneratingVideo(false);
+      console.error('Delete journey error:', error);
+      alert('❌ Failed to delete journey');
     }
   };
 
-  const journeyStories = stories
-    .filter(story => story.in_journey)
-    .sort((a, b) => (a.journey_order || 0) - (b.journey_order || 0));
+  const generateImage = async (journeyId: string, journeyText: string, journeyTitle: string) => {
+    setGeneratingImage(journeyId);
 
-  const landmarkTypes = [
-    { value: 'tree', label: '🌳 Tree', description: 'Magical tree' },
-    { value: 'sea', label: '🌊 Sea', description: 'Ocean with rocks' },
-    { value: 'cave', label: '🕳️ Cave', description: 'Dark cave entrance' },
-    { value: 'castle', label: '🏰 Castle', description: 'Castle on hill' },
-    { value: 'forest', label: '🌲 Forest', description: 'Enchanted forest' },
-    { value: 'village', label: '🏘️ Village', description: 'Small village' },
-  ];
+    try {
+      const response = await fetch('/api/admin/journey/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          journeyId,
+          journeyText,
+          journeyTitle,
+          style: 'epic fantasy adventure map illustration, dramatic lighting, cinematic, map style',
+        }),
+      });
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-dungeon-text">Loading stories...</p>
-        </div>
-      </div>
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`✅ Image generated!\nCost: $${data.image.cost.toFixed(2)}`);
+        loadJourneys();
+      } else {
+        alert(`❌ Failed to generate image: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Generate image error:', error);
+      alert('❌ Failed to generate image');
+    } finally {
+      setGeneratingImage(null);
+    }
+  };
+
+  const generateVideo = async (journeyId: string) => {
+    const confirmed = confirm(
+      'Generate video from this image? This will cost approximately $0.10 and take 1-2 minutes.'
     );
-  }
+    if (!confirmed) return;
+
+    setGeneratingVideo(journeyId);
+
+    try {
+      const response = await fetch('/api/admin/journey/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journeyId }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`✅ Video generated!\nCost: $${data.video.cost}`);
+        loadJourneys();
+      } else {
+        alert(`❌ Failed to generate video: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Generate video error:', error);
+      alert('❌ Failed to generate video');
+    } finally {
+      setGeneratingVideo(null);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_logged_in');
+    router.push('/admin/login');
+  };
+
+  const selectedStoryData = stories.find((s) => s.slug === selectedStory);
 
   return (
-    <div className="min-h-screen bg-dungeon-bg text-white p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-gray-100 py-8">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">🗺️ Journey Map Manager</h1>
+            <div className="space-x-4">
           <button
             onClick={() => router.push('/admin')}
-            className="mb-4 bg-dungeon-surface hover:bg-dungeon-accent text-white px-4 py-2 rounded-lg border border-dungeon-border transition-colors"
+                className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
           >
             ← Back to Admin
           </button>
-          <h1 className="text-3xl font-bold text-white mb-2">Journey Adventure Map</h1>
-          <p className="text-dungeon-text">
-            Configure which stories appear in the journey and their order
-          </p>
+            <button
+                onClick={handleLogout}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+            >
+                Logout
+            </button>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="text-gray-600 mt-2">Loading stories...</p>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Story Selection */}
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">📚 Select Story</h2>
+                <select
+                  value={selectedStory}
+                  onChange={(e) => setSelectedStory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 font-medium"
+                >
+                  <option value="">Choose a story...</option>
+                  {stories.map((story) => (
+                    <option key={story.slug} value={story.slug}>
+                      {story.title}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedStoryData && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                    <h3 className="font-semibold text-blue-900">{selectedStoryData.title}</h3>
+                    <p className="text-blue-600 text-sm mt-2">
+                      {selectedStoryData.is_published ? 'Published' : 'Draft'} • {journeys.length}{' '}
+                      journey{journeys.length !== 1 ? 's' : ''}
+                    </p>
+            </div>
+          )}
         </div>
 
-        {/* Video Generation */}
-        <div className="bg-dungeon-surface border border-dungeon-border rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-bold text-white mb-4">AI Video Generation</h2>
-          <p className="text-dungeon-text mb-4">
-            Generate custom fantasy map videos using DALL-E and AI video generation
-          </p>
-          <div className="flex gap-4 mb-4">
-            <button
-              onClick={generateMapVideo}
-              disabled={generatingVideo}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
-            >
-              {generatingVideo ? '🎬 Generating...' : '🎬 Generate Map Video'}
-            </button>
-            <button
-              onClick={generateCompletionVideo}
-              disabled={generatingVideo}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
-            >
-              {generatingVideo ? '🎬 Generating...' : '🏆 Generate Completion Video'}
-            </button>
-          </div>
-          {videoResult && (
-            <div className={`p-4 rounded-lg ${
-              videoResult.success ? 'bg-green-900 border border-green-600' : 'bg-red-900 border border-red-600'
-            }`}>
-              {videoResult.success ? (
+              {/* Create Journey Button */}
+              {selectedStory && (
                 <div>
-                  <h3 className="text-lg font-semibold text-white mb-2">✅ Video Generated!</h3>
-                  <p className="text-white mb-2">{videoResult.message}</p>
-                  {videoResult.videoUrl && (
-                    <a 
-                      href={videoResult.videoUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 underline"
-                    >
-                      View Generated Video
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-2">❌ Generation Failed</h3>
-                  <p className="text-white">{videoResult.error}</p>
+                  <button
+                    onClick={() => setShowCreateForm(!showCreateForm)}
+                    className="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 text-lg font-semibold"
+                  >
+                    {showCreateForm ? '❌ Cancel' : '➕ Create New Journey'}
+                  </button>
                 </div>
               )}
-            </div>
-          )}
-        </div>
 
-        {/* Journey Preview */}
-        <div className="bg-dungeon-surface border border-dungeon-border rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-bold text-white mb-4">Journey Preview</h2>
-          {journeyStories.length === 0 ? (
-            <p className="text-dungeon-text">No stories in journey yet. Add some below!</p>
-          ) : (
-            <div className="flex flex-wrap gap-4">
-              {journeyStories.map((story, index) => (
-                <div key={story.id} className="flex items-center bg-dungeon-bg rounded-lg p-3">
-                  <span className="text-yellow-400 font-bold mr-2">{index + 1}.</span>
-                  <span className="mr-2">
-                    {landmarkTypes.find(t => t.value === story.landmark_type)?.label || '📍'}
-                  </span>
-                  <span className="text-white">{story.title}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Stories List */}
-        <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-white mb-4">All Stories</h2>
-          
-          {stories.map((story) => (
-            <div key={story.id} className="bg-dungeon-surface border border-dungeon-border rounded-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-white">{story.title}</h3>
-                  <p className="text-dungeon-text text-sm">{story.description}</p>
-                </div>
-                
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center">
+              {/* Create Journey Form */}
+              {showCreateForm && (
+                <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Create New Journey</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Node Key (e.g., "1" or "start")
+                      </label>
                     <input
-                      type="checkbox"
-                      checked={story.in_journey}
-                      onChange={(e) => toggleJourney(story.id, e.target.checked)}
-                      className="mr-2"
-                    />
-                    <span className="text-white">Include in Journey</span>
+                        type="text"
+                        value={formData.nodeKey}
+                        onChange={(e) => setFormData({ ...formData, nodeKey: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
+                        placeholder="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Journey Title
                   </label>
+                      <input
+                        type="text"
+                        value={formData.journeyTitle}
+                        onChange={(e) => setFormData({ ...formData, journeyTitle: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
+                        placeholder="The Dragon's Lair"
+                      />
                 </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Journey Text (shown before accepting quest)
+                      </label>
+                      <textarea
+                        value={formData.journeyText}
+                        onChange={(e) => setFormData({ ...formData, journeyText: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 h-32"
+                        placeholder="A dark shadow looms over the kingdom. The ancient dragon has awakened and threatens to destroy everything in its path. Will you accept this perilous quest?"
+                      />
               </div>
-
-              {story.in_journey && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {/* Journey Order */}
                   <div>
-                    <label className="block text-sm font-medium text-dungeon-text mb-2">
-                      Journey Order
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        Sort Order (optional)
                     </label>
                     <input
                       type="number"
-                      min="1"
-                      max={stories.filter(s => s.in_journey).length}
-                      value={story.journey_order || 1}
-                      onChange={(e) => updateJourneyOrder(story.id, parseInt(e.target.value))}
-                      className="w-full bg-dungeon-bg border border-dungeon-border rounded-lg px-3 py-2 text-white"
-                    />
-                  </div>
-
-                  {/* Landmark Type */}
-                  <div>
-                    <label className="block text-sm font-medium text-dungeon-text mb-2">
-                      Landmark Type
-                    </label>
-                    <select
-                      value={story.landmark_type || 'tree'}
-                      onChange={(e) => updateLandmarkType(story.id, e.target.value)}
-                      className="w-full bg-dungeon-bg border border-dungeon-border rounded-lg px-3 py-2 text-white"
+                        value={formData.sortOrder}
+                        onChange={(e) =>
+                          setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
+                      />
+                    </div>
+                    <button
+                      onClick={createJourney}
+                      className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700"
                     >
-                      {landmarkTypes.map(type => (
-                        <option key={type.value} value={type.value}>
-                          {type.label} {type.description}
-                        </option>
-                      ))}
-                    </select>
+                      ✅ Create Journey
+                    </button>
                   </div>
                 </div>
               )}
+
+              {/* Journeys Table */}
+              {selectedStory && journeys.length > 0 && (
+                  <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">🗺️ Journey Stories</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">
+                            Node
+                          </th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">
+                            Title
+                          </th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">
+                            Journey Text
+                          </th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">
+                            Image
+                          </th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">
+                            Video
+                          </th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">
+                            Actions
+                          </th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {journeys.map((journey) => (
+                          <tr key={journey.id} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 px-4 py-2 font-mono text-sm text-gray-900 font-semibold">
+                              {journey.node_key}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2 text-gray-900 font-medium">
+                              {journey.journey_title}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2 max-w-md">
+                              <div className="text-sm text-gray-900">
+                                {journey.journey_text.substring(0, 100)}...
+                              </div>
+                              <button
+                                onClick={() => setExpandedText(journey.id)}
+                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                              >
+                                📖 Read full text
+                              </button>
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              {journey.image_url ? (
+                                <div className="flex items-center space-x-2">
+                                  <img
+                                    src={journey.image_url}
+                                    alt={journey.journey_title}
+                                    className="w-16 h-16 object-cover rounded border"
+                                  />
+                                  <button
+                                    onClick={() => window.open(journey.image_url, '_blank')}
+                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                  >
+                                    👁️ View
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="text-gray-600 text-sm">No image</div>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              {journey.video_url ? (
+                                <div className="flex items-center space-x-2">
+                                  <video
+                                    src={journey.video_url}
+                                    className="w-16 h-16 object-cover rounded border"
+                                    controls={false}
+                                  />
+                                  <button
+                                    onClick={() => window.open(journey.video_url, '_blank')}
+                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                  >
+                                    🎬 Play
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="text-gray-600 text-sm">No video</div>
+                              )}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              <div className="flex flex-wrap gap-2">
+                                {!journey.image_url ? (
+                                  <button
+                                    onClick={() =>
+                                      generateImage(journey.id, journey.journey_text, journey.journey_title)
+                                    }
+                                    disabled={generatingImage === journey.id}
+                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                                  >
+                                    {generatingImage === journey.id
+                                      ? '⏳ Generating...'
+                                      : '🎨 Make Image'}
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() =>
+                                        generateImage(journey.id, journey.journey_text, journey.journey_title)
+                                      }
+                                      className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700"
+                                    >
+                                      🔄 Redo Image
+                                    </button>
+                                    <button
+                                      onClick={() => generateVideo(journey.id)}
+                                      disabled={generatingVideo === journey.id}
+                                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                                    >
+                                      {generatingVideo === journey.id ? '⏳ Video...' : '🎬 Video'}
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() =>
+                                    updateJourney(journey.id, { isActive: !journey.is_active })
+                                  }
+                                  className={`${
+                                    journey.is_active ? 'bg-orange-600' : 'bg-gray-600'
+                                  } text-white px-3 py-1 rounded text-sm hover:opacity-80`}
+                                >
+                                  {journey.is_active ? '⏸️ Deactivate' : '▶️ Activate'}
+                                </button>
+                                <button
+                                  onClick={() => deleteJourney(journey.id)}
+                                  className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              <div
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  journey.is_active
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}
+                              >
+                                {journey.is_active ? '✅ Active' : '⏸️ Inactive'}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {selectedStory && journeys.length === 0 && !showCreateForm && (
+                <div className="text-center py-12 text-gray-500">
+                  <div className="text-6xl mb-4">🗺️</div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Journeys Yet</h3>
+                  <p className="text-gray-600">
+                    Click "Create New Journey" to add your first journey story.
+                  </p>
+                </div>
+              )}
             </div>
-          ))}
+          )}
+        </div>
         </div>
 
-        {/* Save Status */}
-        {saving && (
-          <div className="fixed bottom-4 right-4 bg-yellow-600 text-white px-4 py-2 rounded-lg">
-            Saving changes...
+      {/* Full Text Modal */}
+      {expandedText && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedText(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-auto p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">📖 Journey Text</h2>
+              <button
+                onClick={() => setExpandedText(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="prose max-w-none">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                {journeys.find((j) => j.id === expandedText)?.journey_title}
+              </h3>
+              <p className="text-gray-900 text-base leading-relaxed whitespace-pre-wrap">
+                {journeys.find((j) => j.id === expandedText)?.journey_text}
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setExpandedText(null)}
+                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
           </div>
         )}
-      </div>
     </div>
   );
 }
