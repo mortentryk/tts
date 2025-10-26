@@ -133,6 +133,12 @@ export async function PATCH(request: NextRequest) {
       videoUrl,
       sortOrder,
       isActive,
+      is_active,
+      journey_title,
+      journey_text,
+      image_url,
+      video_url,
+      sort_order,
     } = body;
 
     if (!journeyId) {
@@ -147,12 +153,12 @@ export async function PATCH(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    if (journeyTitle !== undefined) updates.journey_title = journeyTitle;
-    if (journeyText !== undefined) updates.journey_text = journeyText;
-    if (imageUrl !== undefined) updates.image_url = imageUrl;
-    if (videoUrl !== undefined) updates.video_url = videoUrl;
-    if (sortOrder !== undefined) updates.sort_order = sortOrder;
-    if (isActive !== undefined) updates.is_active = isActive;
+    if (journeyTitle !== undefined || journey_title !== undefined) updates.journey_title = journeyTitle || journey_title;
+    if (journeyText !== undefined || journey_text !== undefined) updates.journey_text = journeyText || journey_text;
+    if (imageUrl !== undefined || image_url !== undefined) updates.image_url = imageUrl || image_url;
+    if (videoUrl !== undefined || video_url !== undefined) updates.video_url = videoUrl || video_url;
+    if (sortOrder !== undefined || sort_order !== undefined) updates.sort_order = sortOrder || sort_order;
+    if (isActive !== undefined || is_active !== undefined) updates.is_active = isActive !== undefined ? isActive : is_active;
 
     const { data: journey, error: updateError } = await supabase
       .from('journey_stories')

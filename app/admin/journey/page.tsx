@@ -497,7 +497,7 @@ export default function JourneyManager() {
                                 )}
                                 <button
                                   onClick={() =>
-                                    updateJourney(journey.id, { isActive: !journey.is_active })
+                                    updateJourney(journey.id, { is_active: !journey.is_active })
                                   }
                                   className={`${
                                     journey.is_active ? 'bg-orange-600' : 'bg-gray-600'
