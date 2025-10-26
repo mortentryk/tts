@@ -91,13 +91,9 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         // Move to next segment
         setCurrentSegmentIndex(prev => prev + 1);
       } else {
-        // All segments played, now show story modal or quest popup
+        // All segments played, go directly to quest popup
         setIsVideoPlaying(false);
-        if (journeySegments.length > 0) {
-          setShowJourneyStory(true);
-        } else {
-          setShowQuestPopup(true);
-        }
+        setShowQuestPopup(true);
       }
     }, duration);
 
@@ -105,14 +101,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   }, [isVideoPlaying, currentSegmentIndex, journeySegments]);
 
   const handleJourneyStoryRead = () => {
-    // If we have journey segments, accept quest directly
-    // Otherwise, show the quest popup for stories without journey data
-    if (journeySegments.length > 0) {
-      onStorySelect(currentStory);
-    } else {
-      setShowJourneyStory(false);
-      setShowQuestPopup(true);
-    }
+    onStorySelect(currentStory);
   };
 
   const handleQuestAccept = () => {
@@ -247,58 +236,6 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         </VideoBackground>
       ) : null}
 
-      {/* Journey Story Modal - Shows AFTER all segments */}
-      {showJourneyStory && hasJourneyContent && (
-        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-30 p-4 animate-fade-in">
-          <div className="bg-gradient-to-b from-yellow-900 to-yellow-950 border-4 border-yellow-500 rounded-xl p-8 max-w-3xl w-full max-h-[85vh] overflow-y-auto shadow-2xl">
-            {/* Decorative header */}
-            <div className="text-center mb-6">
-              <div className="text-6xl mb-4">📜</div>
-              <h2 className="text-4xl font-bold text-yellow-100 mb-2">
-                {currentStory.title}
-              </h2>
-              <div className="w-24 h-1 bg-yellow-400 mx-auto"></div>
-            </div>
-
-            {/* Combined story text from all segments */}
-            <div className="bg-amber-50 bg-opacity-95 rounded-lg p-8 mb-6 border-2 border-yellow-600 shadow-inner">
-              {journeySegments.map((segment, index) => (
-                <div key={segment.id} className="mb-6 last:mb-0">
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">{segment.journey_title}</h3>
-                  <p className="text-gray-900 text-lg leading-relaxed whitespace-pre-wrap font-serif">
-                    {segment.journey_text}
-                  </p>
-                  {index < journeySegments.length - 1 && (
-                    <div className="my-4 border-t-2 border-yellow-600"></div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Action buttons */}
-            <div className="space-y-3">
-              <button
-                onClick={handleJourneyStoryRead}
-                className="w-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
-              >
-                ⚔️ Accept Quest
-              </button>
-              <button
-                onClick={onExit}
-                className="w-full bg-blue-700 hover:bg-blue-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-blue-500"
-              >
-                📖 Go to Adventure Journal
-              </button>
-              <button
-                onClick={handleQuestDecline}
-                className="w-full bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-gray-500"
-              >
-                ❌ Decline Quest
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Quest Acceptance Popup - Simple decision */}
       {showQuestPopup && (
