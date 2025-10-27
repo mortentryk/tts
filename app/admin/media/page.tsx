@@ -52,6 +52,34 @@ interface CharacterAssignment {
   action?: string;
 }
 
+interface ImageRow {
+  id: string;
+  node_key: string;
+  text: string;
+  image_url: string;
+  video_url?: string;
+  audio_url?: string;
+  status: 'empty' | 'generating' | 'ready' | 'error';
+  generated_at?: string;
+  cost?: number;
+}
+
+interface Character {
+  id: string;
+  name: string;
+  description?: string;
+  appearance_prompt?: string;
+}
+
+interface CharacterAssignment {
+  node_key: string;
+  character_id: string;
+  character_name: string;
+  role?: string;
+  emotion?: string;
+  action?: string;
+}
+
 export default function MediaManager() {
   const router = useRouter();
   const [stories, setStories] = useState<Story[]>([]);
@@ -62,10 +90,13 @@ export default function MediaManager() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
   const [promptText, setPromptText] = useState<string>('');
 =======
+=======
+>>>>>>> Stashed changes
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
   const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
   const [expandedText, setExpandedText] = useState<string | null>(null);
@@ -75,6 +106,9 @@ export default function MediaManager() {
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 
   // Check if user is logged in
@@ -302,6 +336,11 @@ export default function MediaManager() {
 
   const generateAudio = async (nodeKey: string) => {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+    if (!selectedStory) return;
+    
+>>>>>>> Stashed changes
 =======
     if (!selectedStory) return;
     
@@ -322,6 +361,7 @@ export default function MediaManager() {
 
       if (response.ok) {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         alert(`✅ Audio generated!\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
         
         // Update the node with new audio URL
@@ -330,6 +370,8 @@ export default function MediaManager() {
             ? { ...node, audio_url: data.audio.url }
             : node
 =======
+=======
+>>>>>>> Stashed changes
         alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
         
         // Update the row to show audio is available
@@ -337,6 +379,9 @@ export default function MediaManager() {
           row.node_key === nodeKey 
             ? { ...row, audio_url: data.audio.url }
             : row
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
         ));
       } else {
@@ -351,6 +396,7 @@ export default function MediaManager() {
   };
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   const startEditPrompt = (nodeKey: string, currentPrompt?: string) => {
     setEditingPrompt(nodeKey);
     setPromptText(currentPrompt || '');
@@ -364,6 +410,8 @@ export default function MediaManager() {
         body: JSON.stringify({
           image_prompt: promptText,
 =======
+=======
+>>>>>>> Stashed changes
   const deleteImage = async (nodeKey: string) => {
     if (!confirm('Are you sure you want to delete this image?')) return;
     
@@ -450,11 +498,15 @@ export default function MediaManager() {
             action: assignForm.action || null,
             role: 'main',
           }],
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
         }),
       });
 
       if (response.ok) {
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
         setNodes(prev => prev.map(node => 
           node.node_key === nodeKey 
@@ -479,6 +531,8 @@ export default function MediaManager() {
   };
 
 =======
+=======
+>>>>>>> Stashed changes
         // Reload assignments
         await loadCharacterAssignments();
         setEditingNode(null);
@@ -557,6 +611,9 @@ export default function MediaManager() {
   const totalCost = imageRows.reduce((sum, row) => sum + (row.cost || 0), 0);
   const readyImages = imageRows.filter(row => row.status === 'ready').length;
 
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
   return (
     <div className="min-h-screen bg-gray-100 py-8">
@@ -1007,6 +1064,7 @@ export default function MediaManager() {
               </div>
             </div>
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
             {/* Node Management */}
             <div className="bg-white rounded-lg shadow">
@@ -1055,6 +1113,8 @@ export default function MediaManager() {
                             )}
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
                           </div>
 
                           {node.image_prompt && (
@@ -1063,6 +1123,7 @@ export default function MediaManager() {
                             </div>
                           )}
                         </div>
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
                         
                         <div className="flex flex-col space-y-2 ml-4">
@@ -1115,6 +1176,28 @@ export default function MediaManager() {
                 onClick={() => setExpandedText(null)}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
                           >
+=======
+      )}
+
+      {/* Full Text Modal */}
+      {expandedText && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedText(null)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-auto p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">
+                📖 Node {expandedText}
+              </h2>
+                          <button
+                onClick={() => setExpandedText(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+                          >
+>>>>>>> Stashed changes
                 ×
                           </button>
             </div>
@@ -1129,6 +1212,9 @@ export default function MediaManager() {
                 className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
                           >
                 Close
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
                           </button>
                         </div>
