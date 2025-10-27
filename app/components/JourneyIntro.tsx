@@ -5,6 +5,7 @@ import VideoBackground from './VideoBackground';
 
 interface Story {
   id: string;
+  slug: string;
   title: string;
   description: string;
   journey_order: number;
@@ -297,12 +298,6 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                   className="w-full bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
                 >
                   ✅ Yes, I'll take this quest!
-                </button>
-                <button
-                  onClick={onExit}
-                  className="w-full bg-blue-700 hover:bg-blue-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-blue-500"
-                >
-                  📖 Go to Adventure Journal
                 </button>
                 <button
                   onClick={handleQuestDecline}
