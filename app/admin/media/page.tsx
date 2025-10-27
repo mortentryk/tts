@@ -89,14 +89,6 @@ export default function MediaManager() {
   const [imageRows, setImageRows] = useState<ImageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<string | null>(null);
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-  const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
-  const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
-  const [promptText, setPromptText] = useState<string>('');
-=======
-=======
->>>>>>> Stashed changes
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
   const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
   const [expandedText, setExpandedText] = useState<string | null>(null);
@@ -106,10 +98,6 @@ export default function MediaManager() {
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 
   // Check if user is logged in
   useEffect(() => {
@@ -360,18 +348,6 @@ export default function MediaManager() {
       const data = await response.json();
 
       if (response.ok) {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        alert(`✅ Audio generated!\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
-        
-        // Update the node with new audio URL
-        setNodes(prev => prev.map(node => 
-          node.node_key === nodeKey 
-            ? { ...node, audio_url: data.audio.url }
-            : node
-=======
-=======
->>>>>>> Stashed changes
         alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
         
         // Update the row to show audio is available
@@ -379,10 +355,6 @@ export default function MediaManager() {
           row.node_key === nodeKey 
             ? { ...row, audio_url: data.audio.url }
             : row
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
         ));
       } else {
         alert(`❌ Failed to generate audio: ${data.error}`);
@@ -395,23 +367,6 @@ export default function MediaManager() {
     }
   };
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-  const startEditPrompt = (nodeKey: string, currentPrompt?: string) => {
-    setEditingPrompt(nodeKey);
-    setPromptText(currentPrompt || '');
-  };
-
-  const savePrompt = async (nodeKey: string) => {
-    try {
-      const response = await fetch(`/api/stories/${selectedStory}/nodes/${nodeKey}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image_prompt: promptText,
-=======
-=======
->>>>>>> Stashed changes
   const deleteImage = async (nodeKey: string) => {
     if (!confirm('Are you sure you want to delete this image?')) return;
     
@@ -498,41 +453,10 @@ export default function MediaManager() {
             action: assignForm.action || null,
             role: 'main',
           }],
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
         }),
       });
 
       if (response.ok) {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        setNodes(prev => prev.map(node => 
-          node.node_key === nodeKey 
-            ? { ...node, image_prompt: promptText }
-            : node
-        ));
-        setEditingPrompt(null);
-        setPromptText('');
-        alert('✅ Prompt saved successfully!');
-      } else {
-        alert('❌ Failed to save prompt');
-      }
-    } catch (error) {
-      console.error('Save prompt error:', error);
-      alert('❌ Failed to save prompt');
-    }
-  };
-
-  const cancelEditPrompt = () => {
-    setEditingPrompt(null);
-    setPromptText('');
-  };
-
-=======
-=======
->>>>>>> Stashed changes
         // Reload assignments
         await loadCharacterAssignments();
         setEditingNode(null);
@@ -611,10 +535,6 @@ export default function MediaManager() {
   const totalCost = imageRows.reduce((sum, row) => sum + (row.cost || 0), 0);
   const readyImages = imageRows.filter(row => row.status === 'ready').length;
 
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-7xl mx-auto px-4">
@@ -1128,19 +1048,19 @@ export default function MediaManager() {
                         
                         <div className="flex flex-col space-y-2 ml-4">
                           <div className="flex space-x-2">
-                            <button
-                              onClick={() => generateMedia(node.node_key, 'image')}
-                              disabled={generating === node.node_key}
-                              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                            >
-                              {generating === node.node_key ? '⏳' : '🖼️'} Image
-                            </button>
-                            <button
-                              onClick={() => generateMedia(node.node_key, 'video')}
-                              disabled={generating === node.node_key || !selectedStoryData.video_enabled}
-                              className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
-                            >
-                              {generating === node.node_key ? '⏳' : '🎬'} Video
+                          <button
+                            onClick={() => generateMedia(node.node_key, 'image')}
+                            disabled={generating === node.node_key}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {generating === node.node_key ? '⏳' : '🖼️'} Image
+                          </button>
+                          <button
+                            onClick={() => generateMedia(node.node_key, 'video')}
+                            disabled={generating === node.node_key || !selectedStoryData.video_enabled}
+                            className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
+                          >
+                            {generating === node.node_key ? '⏳' : '🎬'} Video
                             </button>
                             <button
                               onClick={() => generateAudio(node.node_key)}
@@ -1246,10 +1166,10 @@ export default function MediaManager() {
                             >
                               ❌ Cancel
                             </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
+                </div>
+              )}
+            </div>
         )}
     </div>
   );
