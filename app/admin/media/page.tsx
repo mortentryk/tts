@@ -323,16 +323,8 @@ export default function MediaManager() {
   };
 
   const generateAudio = async (nodeKey: string) => {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-=======
     if (!selectedStory) return;
     
->>>>>>> Stashed changes
-=======
-    if (!selectedStory) return;
-    
->>>>>>> Stashed changes
     setGeneratingAudio(nodeKey);
     
     try {
@@ -983,99 +975,8 @@ export default function MediaManager() {
                 </button>
               </div>
             </div>
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-
-            {/* Node Management */}
-            <div className="bg-white rounded-lg shadow">
-              <h2 className="text-xl font-semibold p-6 border-b">📝 Story Nodes</h2>
-              
-              {loading ? (
-                <div className="p-6 text-center">Loading nodes...</div>
-              ) : (
-                <div className="divide-y">
-                  {nodes.map((node) => (
-                    <div key={node.node_key} className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-4 mb-2">
-                            <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                              {node.node_key}
-                            </span>
-                            <select
-                              value={node.media_type || selectedStoryData.default_media_type || 'image'}
-                              onChange={(e) => updateNodeMediaType(node.node_key, e.target.value)}
-                              className="text-sm border border-gray-300 rounded px-2 py-1"
-                            >
-                              <option value="image">Image</option>
-                              <option value="video">Video</option>
-                              <option value="both">Both</option>
-                              <option value="none">None</option>
-                            </select>
                           </div>
-                          
-                          <p className="text-gray-700 text-sm mb-3 line-clamp-2">
-                            {node.text_md.substring(0, 150)}...
-                          </p>
-                          
-                          <div className="flex items-center space-x-4 text-sm mb-2">
-                            {node.image_url && (
-                              <span className="text-green-600">✅ Image</span>
-                            )}
-                            {node.video_url && (
-                              <span className="text-purple-600">✅ Video</span>
-                            )}
-                            {node.audio_url && (
-                              <span className="text-orange-600">✅ Audio</span>
-                            )}
-                            {!node.image_url && !node.video_url && !node.audio_url && (
-                              <span className="text-gray-500">No media</span>
-                            )}
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-                          </div>
-
-                          {node.image_prompt && (
-                            <div className="text-xs text-gray-500 italic mt-1">
-                              Prompt: {node.image_prompt.substring(0, 100)}...
                             </div>
-                          )}
-                        </div>
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                        
-                        <div className="flex flex-col space-y-2 ml-4">
-                          <div className="flex space-x-2">
-                          <button
-                            onClick={() => generateMedia(node.node_key, 'image')}
-                            disabled={generating === node.node_key}
-                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            {generating === node.node_key ? '⏳' : '🖼️'} Image
-                          </button>
-                          <button
-                            onClick={() => generateMedia(node.node_key, 'video')}
-                            disabled={generating === node.node_key || !selectedStoryData.video_enabled}
-                            className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
-                          >
-                            {generating === node.node_key ? '⏳' : '🎬'} Video
-                            </button>
-                            <button
-                              onClick={() => generateAudio(node.node_key)}
-                              disabled={generatingAudio === node.node_key}
-                              className="px-3 py-1 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 disabled:opacity-50"
-                            >
-                              {generatingAudio === node.node_key ? '⏳' : '🔊'} Audio
-                            </button>
-                          </div>
-                          <button
-                            onClick={() => startEditPrompt(node.node_key, node.image_prompt)}
-                            className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-                          >
-                            ✏️ Change Prompt
-=======
       )}
 
       {/* Full Text Modal */}
@@ -1096,28 +997,6 @@ export default function MediaManager() {
                 onClick={() => setExpandedText(null)}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
                           >
-=======
-      )}
-
-      {/* Full Text Modal */}
-      {expandedText && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setExpandedText(null)}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-auto p-8"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900">
-                📖 Node {expandedText}
-              </h2>
-                          <button
-                onClick={() => setExpandedText(null)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-                          >
->>>>>>> Stashed changes
                 ×
                           </button>
             </div>
@@ -1132,45 +1011,105 @@ export default function MediaManager() {
                 className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
                           >
                 Close
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
                           </button>
                         </div>
                       </div>
-
-                      {/* Prompt Editor */}
-                      {editingPrompt === node.node_key && (
-                        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-300">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Image Generation Prompt
-                          </label>
-                          <textarea
-                            value={promptText}
-                            onChange={(e) => setPromptText(e.target.value)}
-                            placeholder="Enter a custom prompt for image generation..."
-                            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            rows={4}
-                          />
-                          <div className="flex space-x-2 mt-3">
-                            <button
-                              onClick={() => savePrompt(node.node_key)}
-                              className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                            >
-                              ✅ Save Prompt
-                            </button>
-                            <button
-                              onClick={cancelEditPrompt}
-                              className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-                            >
-                              ❌ Cancel
-                            </button>
-                    </div>
-                </div>
-              )}
             </div>
         )}
+
+      {/* Custom Prompt Modal */}
+      {customPromptNode && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setCustomPromptNode(null)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">
+                ✏️ Custom Prompt for Node {customPromptNode}
+              </h2>
+              <button
+                onClick={() => setCustomPromptNode(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Describe the exact scene you want:
+                </label>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Example: A dark hollow tree interior, humid air, a large dog with eyes like teacups guarding a chest of copper coins, dramatic lighting, fantasy illustration style"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 h-32"
+                />
+                <p className="mt-2 text-xs text-gray-600">
+                  💡 Tip: Be specific! Include lighting, mood, colors, and style.
+                </p>
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setCustomPromptNode(null)}
+                  className="bg-gray-400 text-white px-6 py-2 rounded-md hover:bg-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => generateWithCustomPrompt(customPromptNode)}
+                  disabled={!customPrompt.trim() || generating === customPromptNode}
+                  className="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 disabled:bg-gray-400"
+                >
+                  {generating === customPromptNode ? '⏳ Generating...' : '🎨 Generate Image'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Text Modal */}
+      {expandedText && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedText(null)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-auto p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900">
+                📖 Node {expandedText}
+              </h2>
+              <button
+                onClick={() => setExpandedText(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="prose max-w-none">
+              <p className="text-gray-900 text-base leading-relaxed whitespace-pre-wrap">
+                {imageRows.find(row => row.node_key === expandedText)?.text}
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setExpandedText(null)}
+                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
