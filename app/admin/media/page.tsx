@@ -17,7 +17,9 @@ interface StoryNode {
   text_md: string;
   image_url?: string;
   video_url?: string;
+  audio_url?: string;
   media_type?: string;
+  image_prompt?: string;
 }
 
 export default function MediaManager() {
@@ -28,6 +30,9 @@ export default function MediaManager() {
   const [nodes, setNodes] = useState<StoryNode[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
+  const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
+  const [promptText, setPromptText] = useState<string>('');
 
   // Load stories
   useEffect(() => {
@@ -186,6 +191,79 @@ export default function MediaManager() {
     }
   };
 
+  const generateAudio = async (nodeKey: string) => {
+    setGeneratingAudio(nodeKey);
+    
+    try {
+      const response = await fetch('/api/admin/generate-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storySlug: selectedStory,
+          nodeId: nodeKey,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`✅ Audio generated!\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
+        
+        // Update the node with new audio URL
+        setNodes(prev => prev.map(node => 
+          node.node_key === nodeKey 
+            ? { ...node, audio_url: data.audio.url }
+            : node
+        ));
+      } else {
+        alert(`❌ Failed to generate audio: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Generate audio error:', error);
+      alert('❌ Failed to generate audio');
+    } finally {
+      setGeneratingAudio(null);
+    }
+  };
+
+  const startEditPrompt = (nodeKey: string, currentPrompt?: string) => {
+    setEditingPrompt(nodeKey);
+    setPromptText(currentPrompt || '');
+  };
+
+  const savePrompt = async (nodeKey: string) => {
+    try {
+      const response = await fetch(`/api/stories/${selectedStory}/nodes/${nodeKey}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_prompt: promptText,
+        }),
+      });
+
+      if (response.ok) {
+        setNodes(prev => prev.map(node => 
+          node.node_key === nodeKey 
+            ? { ...node, image_prompt: promptText }
+            : node
+        ));
+        setEditingPrompt(null);
+        setPromptText('');
+        alert('✅ Prompt saved successfully!');
+      } else {
+        alert('❌ Failed to save prompt');
+      }
+    } catch (error) {
+      console.error('Save prompt error:', error);
+      alert('❌ Failed to save prompt');
+    }
+  };
+
+  const cancelEditPrompt = () => {
+    setEditingPrompt(null);
+    setPromptText('');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -292,7 +370,7 @@ export default function MediaManager() {
                 <div className="divide-y">
                   {nodes.map((node) => (
                     <div key={node.node_key} className="p-6">
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
                           <div className="flex items-center space-x-4 mb-2">
                             <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
@@ -314,36 +392,90 @@ export default function MediaManager() {
                             {node.text_md.substring(0, 150)}...
                           </p>
                           
-                          <div className="flex items-center space-x-4 text-sm">
+                          <div className="flex items-center space-x-4 text-sm mb-2">
                             {node.image_url && (
                               <span className="text-green-600">✅ Image</span>
                             )}
                             {node.video_url && (
                               <span className="text-purple-600">✅ Video</span>
                             )}
-                            {!node.image_url && !node.video_url && (
+                            {node.audio_url && (
+                              <span className="text-orange-600">✅ Audio</span>
+                            )}
+                            {!node.image_url && !node.video_url && !node.audio_url && (
                               <span className="text-gray-500">No media</span>
                             )}
                           </div>
+
+                          {node.image_prompt && (
+                            <div className="text-xs text-gray-500 italic mt-1">
+                              Prompt: {node.image_prompt.substring(0, 100)}...
+                            </div>
+                          )}
                         </div>
                         
-                        <div className="flex space-x-2 ml-4">
+                        <div className="flex flex-col space-y-2 ml-4">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => generateMedia(node.node_key, 'image')}
+                              disabled={generating === node.node_key}
+                              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {generating === node.node_key ? '⏳' : '🖼️'} Image
+                            </button>
+                            <button
+                              onClick={() => generateMedia(node.node_key, 'video')}
+                              disabled={generating === node.node_key || !selectedStoryData.video_enabled}
+                              className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
+                            >
+                              {generating === node.node_key ? '⏳' : '🎬'} Video
+                            </button>
+                            <button
+                              onClick={() => generateAudio(node.node_key)}
+                              disabled={generatingAudio === node.node_key}
+                              className="px-3 py-1 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 disabled:opacity-50"
+                            >
+                              {generatingAudio === node.node_key ? '⏳' : '🔊'} Audio
+                            </button>
+                          </div>
                           <button
-                            onClick={() => generateMedia(node.node_key, 'image')}
-                            disabled={generating === node.node_key}
-                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                            onClick={() => startEditPrompt(node.node_key, node.image_prompt)}
+                            className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
                           >
-                            {generating === node.node_key ? '⏳' : '🖼️'} Image
-                          </button>
-                          <button
-                            onClick={() => generateMedia(node.node_key, 'video')}
-                            disabled={generating === node.node_key || !selectedStoryData.video_enabled}
-                            className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
-                          >
-                            {generating === node.node_key ? '⏳' : '🎬'} Video
+                            ✏️ Change Prompt
                           </button>
                         </div>
                       </div>
+
+                      {/* Prompt Editor */}
+                      {editingPrompt === node.node_key && (
+                        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-300">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Image Generation Prompt
+                          </label>
+                          <textarea
+                            value={promptText}
+                            onChange={(e) => setPromptText(e.target.value)}
+                            placeholder="Enter a custom prompt for image generation..."
+                            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            rows={4}
+                          />
+                          <div className="flex space-x-2 mt-3">
+                            <button
+                              onClick={() => savePrompt(node.node_key)}
+                              className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                            >
+                              ✅ Save Prompt
+                            </button>
+                            <button
+                              onClick={cancelEditPrompt}
+                              className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                            >
+                              ❌ Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
