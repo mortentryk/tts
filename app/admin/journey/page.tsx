@@ -19,6 +19,7 @@ interface JourneySegment {
   journey_text: string;
   image_url?: string;
   video_url?: string;
+  audio_url?: string;
   duration_seconds: number;
   is_active: boolean;
 }
@@ -31,6 +32,7 @@ export default function JourneyTimelineManager() {
   const [loading, setLoading] = useState(true);
   const [generatingImage, setGeneratingImage] = useState<string | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
+  const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingSegment, setEditingSegment] = useState<string | null>(null);
   const [expandedSegment, setExpandedSegment] = useState<string | null>(null);
@@ -282,6 +284,30 @@ export default function JourneyTimelineManager() {
     }
   };
 
+  const generateAudio = async (id: string) => {
+    setGeneratingAudio(id);
+    try {
+      const response = await fetch('/api/admin/journey/generate-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journeyId: id }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
+        loadSegments();
+      } else {
+        alert(`❌ Failed: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Generate audio error:', error);
+      alert('❌ Failed to generate audio');
+    } finally {
+      setGeneratingAudio(null);
+    }
+  };
+
   const selectedStoryData = stories.find((s) => s.slug === selectedStory);
   const totalDuration = segments.reduce((sum, s) => sum + s.duration_seconds, 0);
 
@@ -517,6 +543,11 @@ export default function JourneyTimelineManager() {
                                     No Media
                                   </div>
                                 )}
+                                {segment.audio_url && (
+                                  <div className="flex items-center bg-purple-100 px-4 py-2 rounded border-2 border-purple-500">
+                                    <span className="text-purple-700 text-sm font-semibold">🎵 Audio Available</span>
+                                  </div>
+                                )}
                   </div>
 
                                 {/* Actions */}
@@ -543,6 +574,15 @@ export default function JourneyTimelineManager() {
                                       className="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
                                     >
                                       {generatingVideo === segment.id ? '⏳ Video...' : '🎬 Make Video'}
+                                    </button>
+                                  )}
+                                  {!segment.audio_url && (
+                                    <button
+                                      onClick={() => generateAudio(segment.id)}
+                                      disabled={generatingAudio === segment.id}
+                                      className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700 disabled:bg-gray-400"
+                                    >
+                                      {generatingAudio === segment.id ? '⏳ Audio...' : '🎙️ Add Audio'}
                                     </button>
                                   )}
                                   <button

@@ -22,6 +22,7 @@ interface JourneySegment {
   journey_text: string;
   image_url?: string;
   video_url?: string;
+  audio_url?: string;
   duration_seconds: number;
 }
 
@@ -39,6 +40,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   const [journeySegments, setJourneySegments] = useState<JourneySegment[]>([]);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [loadingJourney, setLoadingJourney] = useState(true);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // Get journey stories sorted by order
   const journeyStories = stories
@@ -79,6 +81,34 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
     fetchJourneySegments();
   }, [currentStory]);
 
+  // Play audio for current segment
+  useEffect(() => {
+    if (!isVideoPlaying) return;
+    
+    const currentSegment = journeySegments[currentSegmentIndex];
+    if (currentSegment?.audio_url) {
+      // Stop any existing audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      
+      // Play new audio
+      audioRef.current = new Audio(currentSegment.audio_url);
+      audioRef.current.volume = 0.7;
+      audioRef.current.play().catch(err => {
+        console.error('Failed to play audio:', err);
+      });
+    }
+
+    // Cleanup: stop audio when component unmounts or segment changes
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, [isVideoPlaying, currentSegmentIndex, journeySegments]);
+
   // Segment playback timer
   useEffect(() => {
     if (!isVideoPlaying) return;
@@ -87,6 +117,11 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
     const duration = currentSegment ? currentSegment.duration_seconds * 1000 : 5000;
 
     const timer = setTimeout(() => {
+      // Stop audio before moving to next segment
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+
       // Check if there are more segments to play
       if (currentSegmentIndex < journeySegments.length - 1) {
         // Move to next segment
@@ -110,6 +145,11 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   };
 
   const handleQuestDecline = () => {
+    // Stop audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    
     setShowQuestPopup(false);
     setShowJourneyStory(false);
     setJourneySegments([]); // Reset journey segments
@@ -121,6 +161,10 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   };
 
   const handleSkip = () => {
+    // Stop audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
     onExit();
   };
 
@@ -155,7 +199,15 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
               autoPlay
               loop
               muted
+              playsInline
               className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error('Video failed to load:', currentSegment.video_url);
+                console.error('Error details:', e);
+              }}
+              onLoadedData={() => {
+                console.log('Video loaded successfully:', currentSegment.video_url);
+              }}
             />
           ) : currentSegment.image_url ? (
             <img
@@ -163,6 +215,12 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
               src={currentSegment.image_url}
               alt={currentSegment.journey_title}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error('Image failed to load:', currentSegment.image_url);
+              }}
+              onLoad={() => {
+                console.log('Image loaded successfully:', currentSegment.image_url);
+              }}
             />
           ) : null}
           
