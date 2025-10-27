@@ -9,6 +9,7 @@ import CompletionVideo from './CompletionVideo';
 
 interface Story {
   id: string;
+  slug: string;
   title: string;
   description: string;
   journey_order: number;
