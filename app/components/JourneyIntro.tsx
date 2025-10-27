@@ -237,50 +237,80 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
       ) : null}
 
 
-      {/* Quest Acceptance Popup - Simple decision */}
+      {/* Quest Acceptance Popup - Enhanced with story info */}
       {showQuestPopup && (
-        <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center z-20 p-4">
-          <div className="bg-gradient-to-b from-gray-900 to-black border-4 border-yellow-500 rounded-xl p-8 max-w-lg w-full text-center shadow-2xl">
-            {/* Icon */}
-            <div className="text-7xl mb-4">
-              {currentStory.landmark_type === 'tree' && '🌳'}
-              {currentStory.landmark_type === 'sea' && '🌊'}
-              {currentStory.landmark_type === 'cave' && '🕳️'}
-              {currentStory.landmark_type === 'castle' && '🏰'}
-              {currentStory.landmark_type === 'forest' && '🌲'}
-              {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '⚔️'}
-            </div>
+        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-20 p-4">
+          <div className="bg-gradient-to-b from-gray-900 to-black border-4 border-yellow-500 rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden">
+            
+            {/* Hero Image - First segment's image */}
+            {journeySegments.length > 0 && journeySegments[0].image_url && (
+              <div className="h-48 overflow-hidden relative">
+                <img 
+                  src={journeySegments[0].image_url} 
+                  alt={currentStory.title}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-gray-900"></div>
+              </div>
+            )}
 
-            {/* Quest Title */}
-            <h2 className="text-3xl font-bold text-yellow-400 mb-3">
-              {currentStory.title}
-            </h2>
+            <div className="p-8 text-center">
+              {/* Icon */}
+              <div className="text-7xl mb-4">
+                {currentStory.landmark_type === 'tree' && '🌳'}
+                {currentStory.landmark_type === 'sea' && '🌊'}
+                {currentStory.landmark_type === 'cave' && '🕳️'}
+                {currentStory.landmark_type === 'castle' && '🏰'}
+                {currentStory.landmark_type === 'forest' && '🌲'}
+                {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '⚔️'}
+              </div>
 
-            {/* Quest Question */}
-            <p className="text-white text-2xl font-semibold mb-8">
-              Will you accept this quest?
-            </p>
+              {/* Quest Title */}
+              <h2 className="text-4xl font-bold text-yellow-400 mb-3">
+                {currentStory.title}
+              </h2>
 
-            {/* Action Buttons */}
-            <div className="space-y-4">
-              <button
-                onClick={handleQuestAccept}
-                className="w-full bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
-              >
-                ✅ Yes, I'll take this quest!
-              </button>
-              <button
-                onClick={onExit}
-                className="w-full bg-blue-700 hover:bg-blue-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-blue-500"
-              >
-                📖 Go to Adventure Journal
-              </button>
-              <button
-                onClick={handleQuestDecline}
-                className="w-full bg-gray-700 hover:bg-gray-600 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-colors border-2 border-gray-500"
-              >
-                ❌ No, show me another quest
-              </button>
+              {/* Story Description */}
+              <p className="text-gray-300 text-lg mb-6 leading-relaxed">
+                {currentStory.description}
+              </p>
+
+              {/* Metadata badges */}
+              <div className="flex justify-center gap-4 mb-8">
+                <span className="bg-yellow-600 text-white px-4 py-2 rounded-full text-sm font-semibold">
+                  🟡 MEDIUM
+                </span>
+                <span className="bg-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold">
+                  ⏱️ 15-20 min
+                </span>
+              </div>
+
+              {/* Quest Question */}
+              <p className="text-white text-2xl font-semibold mb-6">
+                Will you accept this quest?
+              </p>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <button
+                  onClick={handleQuestAccept}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+                >
+                  ✅ Yes, I'll take this quest!
+                </button>
+                <button
+                  onClick={onExit}
+                  className="w-full bg-blue-700 hover:bg-blue-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-blue-500"
+                >
+                  📖 Go to Adventure Journal
+                </button>
+                <button
+                  onClick={handleQuestDecline}
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-gray-500"
+                >
+                  ❌ No, show me another quest
+                </button>
+              </div>
             </div>
           </div>
         </div>
