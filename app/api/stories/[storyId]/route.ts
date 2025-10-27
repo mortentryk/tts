@@ -15,15 +15,28 @@ export async function GET(
   try {
     const { storyId } = await params;
 
-    // Get story metadata
-    const { data: story, error: storyError } = await supabase
+    // Try to get story by slug first
+    let { data: story, error: storyError } = await supabase
       .from('stories')
       .select('*')
       .eq('slug', storyId)
       .eq('is_published', true)
       .single();
 
-    if (storyError) {
+    // If not found by slug, try by id (UUID)
+    if (storyError || !story) {
+      const result = await supabase
+        .from('stories')
+        .select('*')
+        .eq('id', storyId)
+        .eq('is_published', true)
+        .single();
+      
+      story = result.data;
+      storyError = result.error;
+    }
+
+    if (storyError || !story) {
       console.error('❌ Story fetch error:', storyError);
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
