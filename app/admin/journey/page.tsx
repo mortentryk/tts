@@ -310,18 +310,18 @@ export default function JourneyTimelineManager() {
               >
                 Logout
             </button>
-            </div>
+          </div>
           </div>
 
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="text-gray-600 mt-2">Loading...</p>
-            </div>
-          ) : (
+                </div>
+              ) : (
             <div className="space-y-6">
               {/* Story Selection */}
-              <div>
+                <div>
                 <label className="block text-lg font-semibold text-gray-900 mb-3">Select Story</label>
                 <select
                   value={selectedStory}
@@ -355,14 +355,14 @@ export default function JourneyTimelineManager() {
                       >
                         {showCreateForm ? '❌ Cancel' : '➕ Add Segment'}
                       </button>
-                </div>
-              </div>
+            </div>
+        </div>
 
                   {/* Create Form */}
                   {showCreateForm && (
                     <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-6">
                       <h3 className="text-xl font-bold text-gray-900 mb-4">Add New Timeline Segment</h3>
-                      <div className="space-y-4">
+        <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-900 mb-2">Segment Title</label>
                           <input
@@ -383,7 +383,7 @@ export default function JourneyTimelineManager() {
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                          <div>
+                <div>
                             <label className="block text-sm font-medium text-gray-900 mb-2">Node Key</label>
                             <input
                               type="text"
@@ -392,7 +392,7 @@ export default function JourneyTimelineManager() {
                               className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
                               placeholder="1"
                             />
-                          </div>
+                </div>
                   <div>
                             <label className="block text-sm font-medium text-gray-900 mb-2">Duration (seconds)</label>
                     <input
@@ -411,8 +411,8 @@ export default function JourneyTimelineManager() {
                         >
                           ✅ Add to Timeline
                         </button>
-                      </div>
-                    </div>
+                </div>
+              </div>
                   )}
 
                   {/* Timeline View */}
@@ -444,14 +444,14 @@ export default function JourneyTimelineManager() {
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900 h-32"
                                 />
                               </div>
-                              <div>
+                  <div>
                                 <label className="block text-sm font-medium text-gray-900 mb-2">Duration (seconds)</label>
-                                <input
-                                  type="number"
+                    <input
+                      type="number"
                                   value={editData.duration}
                                   onChange={(e) => setEditData({ ...editData, duration: parseInt(e.target.value) || 5 })}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-900"
-                                  min="1"
+                      min="1"
                                   max="30"
                                 />
                               </div>
@@ -566,12 +566,12 @@ export default function JourneyTimelineManager() {
                                     🗑️ Delete
                                   </button>
                                 </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
                   </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
                   ) : (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-6xl mb-4">🎬</div>
@@ -581,9 +581,9 @@ export default function JourneyTimelineManager() {
                   )}
                 </>
               )}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
         </div>
 
       {/* Text Modal */}
