@@ -14,15 +14,28 @@ export async function GET(
   try {
     const { storyId, nodeKey } = await params;
 
-    // First get the story to verify it exists and is published
-    const { data: story, error: storyError } = await supabase
+    // Try to get story by slug first
+    let { data: story, error: storyError } = await supabase
       .from('stories')
       .select('id')
       .eq('slug', storyId)
       .eq('is_published', true)
       .single();
 
-    if (storyError) {
+    // If not found by slug, try by id (UUID)
+    if (storyError || !story) {
+      const result = await supabase
+        .from('stories')
+        .select('id')
+        .eq('id', storyId)
+        .eq('is_published', true)
+        .single();
+      
+      story = result.data;
+      storyError = result.error;
+    }
+
+    if (storyError || !story) {
       console.error('❌ Story not found or not published:', storyError);
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
@@ -74,12 +87,24 @@ export async function PATCH(
     const { storyId, nodeKey } = await params;
     const body = await request.json();
 
-    // Get story ID
-    const { data: story, error: storyError } = await supabase
+    // Try to get story by slug first
+    let { data: story, error: storyError } = await supabase
       .from('stories')
       .select('id')
       .eq('slug', storyId)
       .single();
+
+    // If not found by slug, try by id (UUID)
+    if (storyError || !story) {
+      const result = await supabase
+        .from('stories')
+        .select('id')
+        .eq('id', storyId)
+        .single();
+      
+      story = result.data;
+      storyError = result.error;
+    }
 
     if (storyError || !story) {
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
