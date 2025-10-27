@@ -3,175 +3,303 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import JourneyMap from './components/JourneyMap';
+import PurchaseButton from '../components/PurchaseButton';
+import { getUserEmail, getUserPurchases } from '@/lib/purchaseVerification';
 
 export default function Home() {
   const router = useRouter();
   const [stories, setStories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showJourney, setShowJourney] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userPurchases, setUserPurchases] = useState({
+    purchasedStories: [] as string[],
+    hasActiveSubscription: false,
+    subscriptionPeriodEnd: null as string | null,
+  });
 
   useEffect(() => {
-    const loadStories = async () => {
-      console.log('🚀 Starting to load stories...');
-      try {
-        // Try to load from Supabase first
-        const response = await fetch('/api/stories');
-        if (response.ok) {
-          const data = await response.json();
-          setStories(data);
-        } else {
-          throw new Error('Supabase not available');
-        }
-      } catch (error) {
-        console.error('❌ Failed to load stories:', error);
-        console.log('🔄 Using fallback stories...');
-        // Fallback to hardcoded stories if Supabase fails
-        setStories([
-          { id: 'cave-adventure', title: 'Cave Adventure', description: 'Explore a mysterious cave filled with treasures and dangers.' },
-          { id: 'forest-quest', title: 'The Enchanted Forest', description: 'Journey through magical woods where ancient trees whisper secrets.' },
-          { id: 'dragon-lair', title: 'Dragon\'s Lair', description: 'Face the ultimate challenge in the dragon\'s lair.' },
-          { id: 'skonhedenogudyret', title: 'Skønhed og Udyret', description: 'En dansk fortælling om skønhed, mod og forvandling.' }
-        ]);
-      } finally {
-        console.log('🏁 Finished loading stories');
-        setLoading(false);
-      }
-    };
     loadStories();
+    loadUserData();
   }, []);
 
-  const handleStorySelect = async (story: any) => {
-    // Use slug for navigation, fallback to id for backwards compatibility
-    const storySlug = story.slug || story.id;
-    
-    // Track click analytics (fire and forget)
-    try {
-      await fetch('/api/stories/track-click', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ storySlug }),
-      });
-    } catch (error) {
-      // Ignore analytics errors - don't block navigation
-      console.log('Analytics tracking failed:', error);
+  const loadUserData = async () => {
+    const email = getUserEmail();
+    setUserEmail(email);
+
+    if (email) {
+      const purchases = await getUserPurchases(email);
+      setUserPurchases(purchases);
     }
-    
-    // Navigate to story
-    router.push(`/story/${storySlug}`);
+  };
+
+  const loadStories = async () => {
+    console.log('🚀 Starting to load stories...');
+    try {
+      const response = await fetch('/api/stories');
+      if (response.ok) {
+        const data = await response.json();
+        setStories(data);
+      } else {
+        throw new Error('Supabase not available');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load stories:', error);
+      console.log('🔄 Using fallback stories...');
+      setStories([
+        { id: 'cave-adventure', title: 'Cave Adventure', description: 'Explore a mysterious cave filled with treasures and dangers.', is_free: true, price: 0 },
+      ]);
+    } finally {
+      console.log('🏁 Finished loading stories');
+      setLoading(false);
+    }
+  };
+
+  const checkAccess = (story: any): boolean => {
+    // Free stories are accessible
+    if (story.is_free) return true;
+
+    // Check if user has active subscription
+    if (userPurchases.hasActiveSubscription) return true;
+
+    // Check if user purchased this specific story
+    return userPurchases.purchasedStories.includes(story.id);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-dungeon-text">Loading stories...</p>
+          <p className="text-gray-300">Loading magical stories...</p>
         </div>
       </div>
     );
   }
 
+  const freeStories = stories.filter(s => s.is_free || s.price === 0);
+  const paidStories = stories.filter(s => !s.is_free && s.price > 0);
+
   return (
-    <div className="min-h-screen bg-dungeon-bg text-white">
-      {/* Hero Section - Journey Mode */}
-      <section className="bg-gradient-to-b from-dungeon-bg to-dungeon-surface py-16 px-4">
-        <div className="text-center max-w-4xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-6">
-            Choose Your Adventure
+    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900 text-white">
+      {/* Hero Section */}
+      <section className="py-20 px-4">
+        <div className="max-w-6xl mx-auto text-center">
+          <h1 className="text-5xl sm:text-7xl font-bold mb-6 bg-gradient-to-r from-yellow-300 to-pink-400 bg-clip-text text-transparent">
+            Interactive Story Adventures
           </h1>
-          <p className="text-dungeon-text text-lg sm:text-xl mb-8">
-            Follow the magical path and discover stories, or browse all adventures below
+          <p className="text-xl sm:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
+            Magical stories with voice narration, interactive choices, and stunning visuals. 
+            Perfect for children and families.
           </p>
-          
-          <button
-            onClick={() => setShowJourney(true)}
-            className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
-          >
-            🗺️ Start Your Adventure Journey
-          </button>
-          
-          <p className="text-dungeon-text text-sm mt-4">
-            Follow an animated path through magical lands and discover stories along the way
-          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+            <button
+              onClick={() => setShowJourney(true)}
+              className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-10 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+            >
+              🗺️ Start Adventure Journey
+            </button>
+            
+            {userPurchases.hasActiveSubscription && (
+              <div className="bg-green-600 px-6 py-4 rounded-lg font-semibold">
+                ✅ Active Subscription - Full Access
+              </div>
+            )}
+          </div>
+
+          {/* Features */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16">
+            <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-white/20">
+              <div className="text-4xl mb-4">🎙️</div>
+              <h3 className="text-xl font-bold mb-2">Voice Narration</h3>
+              <p className="text-gray-300">Every story comes to life with professional voice narration</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-white/20">
+              <div className="text-4xl mb-4">🎮</div>
+              <h3 className="text-xl font-bold mb-2">Interactive Choices</h3>
+              <p className="text-gray-300">Make decisions that shape your story</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-white/20">
+              <div className="text-4xl mb-4">🖼️</div>
+              <h3 className="text-xl font-bold mb-2">Stunning Visuals</h3>
+              <p className="text-gray-300">Beautiful images and videos accompany each story</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Browse All Stories Section */}
-      <section className="py-12 px-4">
-        <div className="text-center max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-white mb-4">Or Browse All Stories</h2>
-          <p className="text-dungeon-text text-lg mb-8">
-            Select any story to begin your interactive adventure with voice narration
-          </p>
-        <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
-          {stories.map((story) => (
-            <div 
-              key={story.id}
-              className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg overflow-hidden hover:border-yellow-500 transition-all duration-300 cursor-pointer group"
-              onClick={() => handleStorySelect(story)}
-            >
-              {/* Story Cover Image */}
-              {story.cover_image_url && (
-                <div className="h-40 sm:h-48 overflow-hidden">
-                  <img 
-                    src={story.cover_image_url} 
-                    alt={`${story.title} cover`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
-              
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-white mb-2">{story.title}</h3>
-                <p className="text-dungeon-text mb-4">{story.description}</p>
-                <div className="text-sm text-dungeon-text mb-4">
-                  <span className="px-3 py-1 rounded-full text-sm font-semibold bg-yellow-900 text-yellow-400">
-                    🟡 MEDIUM
-                  </span>
-                  <span className="ml-4">⏱️ {story.estimatedTime || '15-20 min'}</span>
-                </div>
-                
-                {/* Click anywhere to start - no button needed */}
-                <div className="text-center">
-                  <div className="inline-flex items-center text-yellow-400 font-semibold text-sm group-hover:text-yellow-300 transition-colors">
-                    <span className="mr-2">▶️</span>
-                    <span>Click to Start Story</span>
-                  </div>
-                </div>
+      {/* Free Stories Section */}
+      {freeStories.length > 0 && (
+        <section className="py-12 px-4 bg-black/30">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-4 text-center">✨ Free Stories</h2>
+            <p className="text-center text-gray-300 mb-8">Try these stories for free!</p>
+            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {freeStories.map((story) => (
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  hasAccess={checkAccess(story)}
+                  userEmail={userEmail}
+                  onSelect={(story) => router.push(`/story/${story.slug || story.id}`)}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Premium Stories Section */}
+      {paidStories.length > 0 && (
+        <section className="py-12 px-4">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-4 text-center">⭐ Premium Stories</h2>
+            <p className="text-center text-gray-300 mb-8">Unlock exclusive adventures</p>
+            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {paidStories.map((story) => (
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  hasAccess={checkAccess(story)}
+                  userEmail={userEmail}
+                  onSelect={(story) => {
+                    if (checkAccess(story)) {
+                      router.push(`/story/${story.slug || story.id}`);
+                    } else {
+                      router.push(`/purchase/${story.id}`);
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Pricing Section */}
+      <section className="py-16 px-4 bg-black/30">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-4xl font-bold mb-4 text-center">Choose Your Plan</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
+            {/* Single Purchase */}
+            <div className="bg-white/10 backdrop-blur-sm p-8 rounded-lg border-2 border-yellow-500">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold mb-4">Individual Stories</h3>
+                <div className="text-4xl font-bold mb-2">$2.99</div>
+                <div className="text-gray-300 mb-6">per story</div>
+                <ul className="text-left space-y-3 mb-8">
+                  <li>✅ Lifetime access</li>
+                  <li>✅ Voice narration</li>
+                  <li>✅ Interactive choices</li>
+                  <li>✅ All content</li>
+                </ul>
+                <p className="text-sm text-gray-400">One-time purchase</p>
               </div>
             </div>
-          ))}
-        </div>
-        
-        <div className="mt-8 text-dungeon-text text-sm">
-          🎙️ All stories feature voice narration and voice commands
-        </div>
-        
-        {/* Admin Button */}
-        <div className="mt-8">
-          <button
-            onClick={() => router.push('/admin')}
-            className="bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-lg border-2 border-gray-600 transition-all duration-300 transform hover:scale-105"
-          >
-            🔧 Admin Dashboard
-          </button>
-        </div>
+
+            {/* Subscription */}
+            <div className="bg-gradient-to-br from-yellow-600 to-orange-600 p-8 rounded-lg border-2 border-yellow-400">
+              <div className="text-center">
+                <div className="text-sm font-bold mb-2 text-yellow-200">POPULAR</div>
+                <h3 className="text-2xl font-bold mb-4">All Access</h3>
+                <div className="text-4xl font-bold mb-2">$9.99</div>
+                <div className="text-gray-100 mb-6">per month</div>
+                <ul className="text-left space-y-3 mb-8">
+                  <li>✅ All stories unlocked</li>
+                  <li>✅ New stories added automatically</li>
+                  <li>✅ Cancel anytime</li>
+                  <li>✅ Best value</li>
+                </ul>
+                <button
+                  onClick={() => {
+                    alert('Subscription coming soon!');
+                  }}
+                  className="bg-white text-orange-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100"
+                >
+                  Subscribe Now
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Journey Modal/Overlay */}
+      {/* Journey Modal */}
       {showJourney && (
-        <JourneyMap 
-          stories={stories} 
+        <JourneyMap
+          stories={stories}
           onExit={() => setShowJourney(false)}
           showIntro={true}
         />
       )}
+
+      {/* Footer */}
+      <footer className="bg-black/50 py-12 px-4 border-t border-white/10">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <h4 className="font-bold mb-4">Platform</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li><a href="/" className="hover:text-white">Home</a></li>
+                <li><a href="/admin" className="hover:text-white">Admin</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-bold mb-4">Legal</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li><a href="/terms" className="hover:text-white">Terms</a></li>
+                <li><a href="/privacy" className="hover:text-white">Privacy</a></li>
+                <li><a href="/refund" className="hover:text-white">Refunds</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-bold mb-4">Support</h4>
+              <p className="text-gray-400">Need help? Contact us</p>
+            </div>
+            <div>
+              <h4 className="font-bold mb-4">© 2024</h4>
+              <p className="text-gray-400 text-sm">TTS Story Platform</p>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// Story Card Component
+function StoryCard({ story, hasAccess, userEmail, onSelect }: any) {
+  return (
+    <div className="bg-white/10 backdrop-blur-sm border-2 border-white/20 rounded-lg overflow-hidden hover:border-yellow-500 transition-all duration-300">
+      {story.cover_image_url && (
+        <div className="h-48 overflow-hidden">
+          <img
+            src={story.cover_image_url}
+            alt={`${story.title} cover`}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
+      <div className="p-6">
+        <h3 className="text-xl font-bold mb-2">{story.title}</h3>
+        <p className="text-gray-300 mb-4">{story.description}</p>
+
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-sm text-gray-400">
+            {story.is_free ? '🆓 FREE' : `$${Number(story.price).toFixed(2)}`}
+          </span>
+          <span className="px-3 py-1 rounded-full text-xs bg-yellow-900 text-yellow-300">
+            MEDIUM
+          </span>
+        </div>
+
+        <PurchaseButton story={story} hasAccess={hasAccess} userEmail={userEmail} />
+      </div>
     </div>
   );
 }
