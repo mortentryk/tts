@@ -139,6 +139,10 @@ async function handleCheckoutCompleted(session: any) {
     if (subscriptionId) {
       // Get subscription details
       const stripe = (await import('@/lib/stripe')).stripe;
+      if (!stripe) {
+        console.error('Stripe not configured');
+        return;
+      }
       const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
 
       // Update user subscription
@@ -234,6 +238,10 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   // Get subscription details
   const stripe = (await import('@/lib/stripe')).stripe;
+  if (!stripe) {
+    console.error('Stripe not configured');
+    return;
+  }
   const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
 
   // Find user

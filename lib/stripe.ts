@@ -1,12 +1,14 @@
 import Stripe from 'stripe';
 
 if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set');
+  console.warn('STRIPE_SECRET_KEY is not set - Stripe functionality will be disabled');
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-09-30.clover',
-});
+export const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-09-30.clover',
+    })
+  : null;
 
 export interface CreateCheckoutSessionParams {
   userEmail: string;
@@ -31,6 +33,10 @@ export async function createCheckoutSession({
   price,
   stripePriceId,
 }: CreateCheckoutSessionParams) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
+
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
   const session = await stripe.checkout.sessions.create({
@@ -62,6 +68,10 @@ export async function createSubscriptionSession({
   userEmail,
   stripePriceId,
 }: CreateSubscriptionSessionParams) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
+
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
   const session = await stripe.checkout.sessions.create({
@@ -93,6 +103,10 @@ export async function createSubscriptionSession({
  * Verify a Stripe checkout session and extract metadata
  */
 export async function verifyCheckoutSession(sessionId: string) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
+
   const session = await stripe.checkout.sessions.retrieve(sessionId);
 
   if (!session) {
@@ -112,6 +126,10 @@ export async function verifyCheckoutSession(sessionId: string) {
  * Create or retrieve a Stripe customer
  */
 export async function getOrCreateCustomer(email: string) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
+
   // Try to find existing customer by email
   const existingCustomers = await stripe.customers.list({
     email,
@@ -141,6 +159,10 @@ export async function createStoryProduct(
   storyId: string,
   price: number
 ) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
+
   // Create product
   const product = await stripe.products.create({
     name: storyTitle,
@@ -167,6 +189,10 @@ export function verifyWebhookSignature(
   payload: string | Buffer,
   signature: string
 ) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
+
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
