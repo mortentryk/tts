@@ -269,7 +269,14 @@ export default function Home() {
 }
 
 // Story Card Component
-function StoryCard({ story, hasAccess, userEmail, onSelect }: any) {
+interface StoryCardProps {
+  story: any;
+  hasAccess: boolean;
+  userEmail: string | null;
+  onSelect?: (story: any) => void;
+}
+
+function StoryCard({ story, hasAccess, userEmail, onSelect }: StoryCardProps) {
   return (
     <div className="bg-white/10 backdrop-blur-sm border-2 border-white/20 rounded-lg overflow-hidden hover:border-yellow-500 transition-all duration-300">
       {story.cover_image_url && (

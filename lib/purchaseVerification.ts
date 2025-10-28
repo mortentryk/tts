@@ -10,7 +10,7 @@ import type { SupabaseStory } from './supabaseStoryManager';
  */
 export async function canUserAccessStory(
   userEmail: string | null,
-  story: Pick<SupabaseStory, 'id' | 'is_free'>
+  story: Pick<SupabaseStory, 'id' | 'is_free'> & { is_free?: boolean }
 ): Promise<{ hasAccess: boolean; reason: 'free' | 'purchased' | 'subscription' | 'none' }> {
   // If story is free, grant access
   if (story.is_free) {

@@ -139,7 +139,7 @@ async function handleCheckoutCompleted(session: any) {
     if (subscriptionId) {
       // Get subscription details
       const stripe = (await import('@/lib/stripe')).stripe;
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
 
       // Update user subscription
       await supabaseAdmin
@@ -147,7 +147,9 @@ async function handleCheckoutCompleted(session: any) {
         .update({
           subscription_status: subscription.status,
           subscription_id: subscriptionId,
-          subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+          subscription_period_end: subscription.current_period_end 
+            ? new Date(subscription.current_period_end * 1000).toISOString() 
+            : null,
         })
         .eq('id', user.id);
     }
@@ -181,12 +183,15 @@ async function handleSubscriptionUpdate(subscription: any) {
   }
 
   // Update subscription status
+  const subscriptionData = subscription as any;
   await supabaseAdmin
     .from('users')
     .update({
-      subscription_status: subscription.status,
-      subscription_id: subscription.id,
-      subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      subscription_status: subscriptionData.status,
+      subscription_id: subscriptionData.id,
+      subscription_period_end: subscriptionData.current_period_end 
+        ? new Date(subscriptionData.current_period_end * 1000).toISOString() 
+        : null,
     })
     .eq('id', user.id);
 }
@@ -229,7 +234,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   // Get subscription details
   const stripe = (await import('@/lib/stripe')).stripe;
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
 
   // Find user
   const { data: user } = await supabaseAdmin
@@ -248,7 +253,9 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
     .from('users')
     .update({
       subscription_status: subscription.status,
-      subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      subscription_period_end: subscription.current_period_end 
+        ? new Date(subscription.current_period_end * 1000).toISOString() 
+        : null,
     })
     .eq('id', user.id);
 }
