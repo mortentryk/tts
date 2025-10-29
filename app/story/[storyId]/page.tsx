@@ -91,24 +91,44 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   if (preGeneratedAudioUrl && preGeneratedAudioUrl.includes('cloudinary.com')) {
     console.log('🎵 Using pre-generated audio from:', preGeneratedAudioUrl);
     const audio = new Audio(preGeneratedAudioUrl);
-    audioRef.current = audio;
     
     try {
+      // Set up callbacks before playing
+      audio.onended = () => {
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+        onComplete?.();
+      };
+      audio.onerror = () => {
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+        onComplete?.();
+      };
+      
+      // Start playing first, then set ref to avoid race condition
       await audio.play();
+      audioRef.current = audio;
+      
+      // Wait for audio to finish
       return new Promise<void>((resolve) => {
         audio.onended = () => {
-          audioRef.current = null;
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
           onComplete?.();
           resolve();
         };
         audio.onerror = () => {
-          audioRef.current = null;
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
           onComplete?.();
           resolve();
         };
       });
     } catch (playError: any) {
-      audioRef.current = null;
       // Handle autoplay policy errors
       if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
         console.log('⚠️ Autoplay blocked (non-critical):', playError);
@@ -125,37 +145,44 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     if (cached) {
       const audio = new Audio(cached);
       
-      // Store the audio element in the ref
-      audioRef.current = audio;
-      
-      // Clear the ref when audio ends or errors
-      audio.onended = () => { 
-        audioRef.current = null;
-        onComplete?.(); // Call completion callback
-      };
-      
-      audio.onerror = () => {
-        audioRef.current = null;
-        onComplete?.(); // Call completion callback even on error
-      };
-      
       try { 
+        // Set up callbacks before playing
+        audio.onended = () => { 
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
+          onComplete?.();
+        };
+        
+        audio.onerror = () => {
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
+          onComplete?.();
+        };
+        
+        // Start playing first, then set ref to avoid race condition
         await audio.play();
+        audioRef.current = audio;
+        
         // Wait for audio to finish playing
         return new Promise<void>((resolve) => {
           audio.onended = () => {
-            audioRef.current = null;
+            if (audioRef.current === audio) {
+              audioRef.current = null;
+            }
             onComplete?.();
             resolve();
           };
           audio.onerror = () => {
-            audioRef.current = null;
+            if (audioRef.current === audio) {
+              audioRef.current = null;
+            }
             onComplete?.();
             resolve();
           };
         });
       } catch (playError: any) {
-        audioRef.current = null;
         try { 
           URL.revokeObjectURL(cached); 
         } catch {}
@@ -194,26 +221,43 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
 
   const audio = new Audio(url);
   
-  // Store the audio element in the ref
-  audioRef.current = audio;
-  
   try { 
+    // Set up callbacks before playing
+    audio.onended = () => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+      onComplete?.();
+    };
+    audio.onerror = () => {
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+      onComplete?.();
+    };
+    
+    // Start playing first, then set ref to avoid race condition
     await audio.play();
+    audioRef.current = audio;
+    
     // Wait for audio to finish playing
     return new Promise<void>((resolve) => {
       audio.onended = () => {
-        audioRef.current = null;
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
         onComplete?.();
         resolve();
       };
       audio.onerror = () => {
-        audioRef.current = null;
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
         onComplete?.();
         resolve();
       };
     });
   } catch (playError: any) {
-    audioRef.current = null;
     URL.revokeObjectURL(url);
     audioCache.delete(key);
     
@@ -367,15 +411,23 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       audioRef.current = null; // Clear ref on error
       setSpeaking(false);
       isTTSRunningRef.current = false;
-      console.log('🎙️ TTS error, isTTSRunningRef set to false');
-      // Show a more user-friendly error message
-      if (e?.message?.includes("API key not configured")) {
-        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
-      } else if (e?.message?.includes("Incorrect API key")) {
-        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
+      
+      // Log errors for admin/debugging only - don't show to users
+      const errorMsg = e?.message || "";
+      
+      if (errorMsg.includes("API key not configured")) {
+        console.error("❌ [ADMIN] TTS not configured - missing ElevenLabs API key");
+      } else if (errorMsg.includes("Incorrect API key")) {
+        console.error("❌ [ADMIN] TTS API key invalid or expired");
+      } else if (errorMsg.includes("quota_exceeded") || errorMsg.includes("401")) {
+        console.error("❌ [ADMIN] TTS quota exceeded - check ElevenLabs account");
+      } else if (e?.code === "AUTOPLAY") {
+        console.log("⚠️ [ADMIN] Autoplay blocked - user interaction required");
       } else {
-        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+        console.error("❌ [ADMIN] TTS Error:", errorMsg);
       }
+      
+      // Silently fail for users - they can just continue reading without voice
     }
   }, [passage?.choices, passage?.audio, startVoiceListening, speaking]);
 
@@ -1136,24 +1188,28 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         {showDiceRollButton && passage?.check && (
           <div className="mb-6 p-4 bg-dungeon-surface border-2 border-dungeon-accent rounded-lg">
             <div className="text-center mb-4">
-              <h3 className="text-xl font-bold text-dungeon-accent mb-2">🎲 Evnecheck Påkrævet</h3>
-              <p className="text-white mb-2">
-                Du skal lave en <span className="font-semibold text-dungeon-accent">{passage.check.stat}</span> check 
-                (SV {passage.check.dc}). Din nuværende {passage.check.stat} er <span className="font-semibold">{stats[passage.check.stat]}</span>.
+              <h3 className="text-2xl font-bold text-white mb-3">🔥 KRITISK ØJEBLIK! 🔥</h3>
+              <p className="text-white text-lg mb-3">
+                Dit <span className="font-bold text-dungeon-accent">{passage.check.stat}</span> bliver sat på prøve!
               </p>
-              <p className="text-dungeon-text text-sm">
-                <span className="font-semibold">2d6</span> = 2 sekssidede terninger (2-12). Dit resultat + din {passage.check.stat} skal være {passage.check.dc} eller højere for at lykkes.
-              </p>
+              <div className="text-white text-base mb-3 space-y-1">
+                <p>🎯 Du skal slå: <span className="font-bold text-yellow-400">{passage.check.dc}</span> eller mere</p>
+                <p>💪 Din <span className="font-semibold">{passage.check.stat}</span>: <span className="font-bold text-green-400">{stats[passage.check.stat]}</span> | 🎲 Terningerne: <span className="font-bold">?</span></p>
+              </div>
+              <div className="text-white text-sm space-y-1 pt-2 border-t border-dungeon-border">
+                <p>✅ <span className="text-green-400 font-semibold">Succes:</span> Du kommer videre!</p>
+                <p>❌ <span className="text-red-400 font-semibold">Fiasko:</span> Du mister 2 {passage.check.stat} point!</p>
+              </div>
             </div>
             
             <div className="flex justify-center">
               <button
                 onClick={handleDiceRoll}
                 disabled={diceRolling}
-                className={`px-8 py-4 text-white font-semibold rounded-lg transition-colors text-lg ${
+                className={`px-8 py-4 text-white font-bold rounded-lg transition-all text-lg ${
                   diceRolling 
                     ? 'bg-gray-600 cursor-not-allowed' 
-                    : 'bg-dungeon-accent hover:bg-dungeon-accent-active'
+                    : 'bg-dungeon-accent hover:bg-dungeon-accent-active animate-[dicePulse_2s_ease-in-out_infinite]'
                 }`}
               >
                 {diceRolling ? '🎲 Kaster...' : '🎲 Kast Terninger (2d6)'}

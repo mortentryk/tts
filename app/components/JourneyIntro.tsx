@@ -86,25 +86,42 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
     if (!isVideoPlaying) return;
     
     const currentSegment = journeySegments[currentSegmentIndex];
-    if (currentSegment?.audio_url) {
-      // Stop any existing audio
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-      
-      // Play new audio
-      audioRef.current = new Audio(currentSegment.audio_url);
-      audioRef.current.volume = 0.7;
-      audioRef.current.play().catch(err => {
-        console.error('Failed to play audio:', err);
-      });
+    if (!currentSegment?.audio_url) return;
+
+    let isCancelled = false;
+    
+    // Stop any existing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
     }
+    
+    // Play new audio
+    const audio = new Audio(currentSegment.audio_url);
+    audio.volume = 0.7;
+    audioRef.current = audio;
+    
+    // Use async function to properly handle play promise
+    const playAudio = async () => {
+      try {
+        await audio.play();
+      } catch (err) {
+        // Only log error if we haven't cancelled
+        if (!isCancelled) {
+          console.error('Failed to play audio:', err);
+        }
+      }
+    };
+    
+    playAudio();
 
     // Cleanup: stop audio when component unmounts or segment changes
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
+      isCancelled = true;
+      if (audioRef.current === audio) {
+        audio.pause();
+        audioRef.current = null;
       }
     };
   }, [isVideoPlaying, currentSegmentIndex, journeySegments]);
