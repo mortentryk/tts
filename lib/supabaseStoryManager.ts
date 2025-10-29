@@ -12,6 +12,8 @@ export interface SupabaseStory {
   version: number;
   created_at: string;
   updated_at: string;
+  is_free?: boolean;
+  price?: number;
 }
 
 export interface SupabaseStoryNode {

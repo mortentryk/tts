@@ -77,7 +77,7 @@ function hashText(t: string): string {
 const audioCache = new Map<string, string>(); // key -> objectURL
 
 // Cloud TTS for web — OpenAI only
-async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void): Promise<void> {
+async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string): Promise<void> {
   if (!text || !text.trim()) return;
 
   // Stop any existing audio first
@@ -85,6 +85,38 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     audioRef.current.pause();
     audioRef.current.currentTime = 0;
     audioRef.current = null;
+  }
+
+  // If we have pre-generated audio URL, use it directly
+  if (preGeneratedAudioUrl && preGeneratedAudioUrl.includes('cloudinary.com')) {
+    console.log('🎵 Using pre-generated audio from:', preGeneratedAudioUrl);
+    const audio = new Audio(preGeneratedAudioUrl);
+    audioRef.current = audio;
+    
+    try {
+      await audio.play();
+      return new Promise<void>((resolve) => {
+        audio.onended = () => {
+          audioRef.current = null;
+          onComplete?.();
+          resolve();
+        };
+        audio.onerror = () => {
+          audioRef.current = null;
+          onComplete?.();
+          resolve();
+        };
+      });
+    } catch (playError: any) {
+      audioRef.current = null;
+      // Handle autoplay policy errors
+      if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
+        console.log('⚠️ Autoplay blocked (non-critical):', playError);
+        return;
+      }
+      console.log('⚠️ Failed to play pre-generated audio, falling back to TTS:', playError);
+      // Fall through to generate TTS
+    }
   }
 
   const key = `elevenlabs-${hashText(text)}`;
@@ -329,7 +361,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         isTTSRunningRef.current = false;
         lastTTSFinishTimeRef.current = Date.now();
         console.log('🎙️ TTS completed, isTTSRunningRef set to false');
-      });
+      }, passage?.audio); // Pass pre-generated audio URL
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
@@ -345,7 +377,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
       }
     }
-  }, [passage?.choices, startVoiceListening, speaking]);
+  }, [passage?.choices, passage?.audio, startVoiceListening, speaking]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -415,9 +447,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             })),
             check: nodeData.dice_check,
             image: nodeData.image_url,
-            video: undefined,
+            video: nodeData.video_url,
             backgroundImage: undefined,
-            audio: undefined
+            audio: nodeData.audio_url
           }
         };
         
@@ -526,9 +558,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           })),
           check: nodeData.dice_check,
           image: nodeData.image_url,
-          video: undefined,
+          video: nodeData.video_url,
           backgroundImage: undefined,
-          audio: undefined
+          audio: nodeData.audio_url
         }
       }));
       

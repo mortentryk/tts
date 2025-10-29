@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-// Fixed to return nodes for Simple Image Manager
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ooyzdksmeglhocjlaouo.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MzMzODksImV4cCI6MjA3NjIwOTM4OX0.DbgORlJkyBae_VIg0b6Pk-bSuzZ8vmb2hNHVnhE7wI8';
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabaseAdmin } from '@/lib/supabase';
+import { canUserAccessStory } from '@/lib/purchaseVerification';
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +10,7 @@ export async function GET(
     const { storyId } = await params;
 
     // Try to get story by slug first
-    let { data: story, error: storyError } = await supabase
+    let { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
       .select('*')
       .eq('slug', storyId)
@@ -25,7 +19,7 @@ export async function GET(
 
     // If not found by slug, try by id (UUID)
     if (storyError || !story) {
-      const result = await supabase
+      const result = await supabaseAdmin
         .from('stories')
         .select('*')
         .eq('id', storyId)
@@ -41,8 +35,27 @@ export async function GET(
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
+    // Check if user has access to this story (only for paid stories)
+    if (!story.is_free) {
+      const userEmail = request.headers.get('user-email');
+      const access = await canUserAccessStory(userEmail, story);
+      
+      if (!access.hasAccess) {
+        return NextResponse.json(
+          { 
+            error: 'Purchase required',
+            requiresPurchase: true,
+            storyId: story.id,
+            storyTitle: story.title,
+            price: story.price
+          }, 
+          { status: 403 }
+        );
+      }
+    }
+
     // Get story nodes
-    const { data: nodes, error: nodesError } = await supabase
+    const { data: nodes, error: nodesError } = await supabaseAdmin
       .from('story_nodes')
       .select('*')
       .eq('story_id', story.id)
