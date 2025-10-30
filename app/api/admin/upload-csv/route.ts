@@ -174,30 +174,62 @@ export async function POST(request: NextRequest) {
 
     console.log(`📄 Created ${nodes.length} nodes and ${choices.length} choices`);
 
-    // Upsert story
-    const storyData = {
-      slug: storySlug,
-      title: metadata.title || storySlug,
-      description: metadata.description || null,
-      cover_image_url: metadata.cover_image_url || null,
-      is_published: publishStory,
-      version: 1
-    };
-    
-    console.log('📚 Creating story with data:', storyData);
-    
-    const { data: story, error: storyError } = await supabaseAdmin
+    // Check if story already exists
+    const { data: existingStory } = await supabaseAdmin
       .from('stories')
-      .upsert(storyData, { 
-        onConflict: 'slug',
-        ignoreDuplicates: false 
-      })
       .select('id, version')
+      .eq('slug', storySlug)
       .single();
 
-    if (storyError) {
+    let story;
+    let storyError;
+
+    if (existingStory) {
+      // Update existing story
+      console.log('📝 Updating existing story:', existingStory.id);
+      const updateData = {
+        title: metadata.title || storySlug,
+        description: metadata.description || null,
+        cover_image_url: metadata.cover_image_url || null,
+        is_published: publishStory,
+        version: (existingStory.version || 1) + 1,
+        updated_at: new Date().toISOString()
+      };
+      
+      const result = await supabaseAdmin
+        .from('stories')
+        .update(updateData)
+        .eq('id', existingStory.id)
+        .select('id, version')
+        .single();
+      
+      story = result.data;
+      storyError = result.error;
+    } else {
+      // Create new story
+      console.log('✨ Creating new story with slug:', storySlug);
+      const insertData = {
+        slug: storySlug,
+        title: metadata.title || storySlug,
+        description: metadata.description || null,
+        cover_image_url: metadata.cover_image_url || null,
+        is_published: publishStory,
+        version: 1
+      };
+      
+      const result = await supabaseAdmin
+        .from('stories')
+        .insert(insertData)
+        .select('id, version')
+        .single();
+      
+      story = result.data;
+      storyError = result.error;
+    }
+
+    if (storyError || !story) {
       console.error('❌ Story error:', storyError);
-      return NextResponse.json({ error: `Story error: ${storyError.message}` }, { status: 500 });
+      return NextResponse.json({ error: `Story error: ${storyError?.message || 'Unknown error'}` }, { status: 500 });
     }
 
     console.log('✅ Story created/updated:', story.id);
