@@ -1082,23 +1082,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         {/* Main Content */}
         <div className="mb-4">
-          {/* Scene Image */}
-          {passage?.image && passage.image.includes('cloudinary.com') && (
-            <div className="mb-4 sm:mb-6 flex justify-center">
-              <img 
-                src={passage.image} 
-                alt="Scene illustration"
-                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                onError={(e) => {
-                  console.error('Failed to load image:', passage.image);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
-          )}
-          
-          {/* Scene Video */}
-          {passage?.video && passage.video.includes('cloudinary.com') && (
+          {/* Scene Video (prioritize video over image) */}
+          {passage?.video && passage.video.includes('cloudinary.com') ? (
             <div className="mb-4 sm:mb-6 flex justify-center">
               <video 
                 src={passage.video}
@@ -1112,7 +1097,20 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                 Your browser does not support the video tag.
               </video>
             </div>
-          )}
+          ) : passage?.image && passage.image.includes('cloudinary.com') ? (
+            /* Scene Image (fallback if no video) */
+            <div className="mb-4 sm:mb-6 flex justify-center">
+              <img 
+                src={passage.image} 
+                alt="Scene illustration"
+                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                onError={(e) => {
+                  console.error('Failed to load image:', passage.image);
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
+          ) : null}
           
           {/* Background Audio */}
           {passage?.audio && (

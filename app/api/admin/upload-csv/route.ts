@@ -111,7 +111,8 @@ export async function POST(request: NextRequest) {
     const nodes: any[] = [];
     const choices: any[] = [];
 
-    for (const row of rows) {
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const row = rows[rowIndex];
       if (!row.id || !row.text) continue;
 
       // Create node
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
         image_url: null, // Will be set based on image field
         tts_ssml: null,
         dice_check: null,
-        sort_index: parseInt(row.id) || 0
+        sort_index: rowIndex // Use row position in CSV, not parsed node_key
       };
 
       // Handle image field - check if it's an asset reference or full URL
@@ -206,7 +207,71 @@ export async function POST(request: NextRequest) {
     nodes.forEach(node => node.story_id = storyId);
     choices.forEach(choice => choice.story_id = storyId);
 
-    // Upsert nodes
+    // Get existing nodes to preserve their media URLs
+    const { data: existingNodes } = await supabaseAdmin
+      .from('story_nodes')
+      .select('node_key, image_url, video_url, audio_url, image_prompt')
+      .eq('story_id', storyId);
+
+    console.log('📦 Found', existingNodes?.length || 0, 'existing nodes');
+
+    // Create a map of existing node media for quick lookup
+    const existingMediaMap = new Map(
+      (existingNodes || []).map(node => [
+        node.node_key,
+        {
+          image_url: node.image_url,
+          video_url: node.video_url,
+          audio_url: node.audio_url,
+          image_prompt: node.image_prompt
+        }
+      ])
+    );
+
+    // Preserve media URLs for nodes that already exist (only if CSV doesn't specify new ones)
+    nodes.forEach(node => {
+      const existingMedia = existingMediaMap.get(node.node_key);
+      if (existingMedia) {
+        // Keep existing media unless CSV explicitly provides new URLs
+        if (!node.image_url && existingMedia.image_url) {
+          node.image_url = existingMedia.image_url;
+          console.log(`✅ Preserving image for node ${node.node_key}`);
+        }
+        if (!node.video_url && existingMedia.video_url) {
+          node.video_url = existingMedia.video_url;
+          console.log(`✅ Preserving video for node ${node.node_key}`);
+        }
+        if (!node.audio_url && existingMedia.audio_url) {
+          node.audio_url = existingMedia.audio_url;
+          console.log(`✅ Preserving audio for node ${node.node_key}`);
+        }
+        if (!node.image_prompt && existingMedia.image_prompt) {
+          node.image_prompt = existingMedia.image_prompt;
+        }
+      }
+    });
+
+    // Get list of node_keys from CSV
+    const csvNodeKeys = nodes.map(n => n.node_key);
+
+    // Delete nodes that are NOT in the new CSV (like old END3)
+    if (existingNodes && existingNodes.length > 0) {
+      const nodesToDelete = existingNodes
+        .filter(n => !csvNodeKeys.includes(n.node_key))
+        .map(n => n.node_key);
+      
+      if (nodesToDelete.length > 0) {
+        console.log('🗑️ Deleting removed nodes:', nodesToDelete.join(', '));
+        await supabaseAdmin
+          .from('story_nodes')
+          .delete()
+          .eq('story_id', storyId)
+          .in('node_key', nodesToDelete);
+      }
+    }
+
+    // Upsert nodes (update existing, insert new)
+    console.log('📝 Upserting', nodes.length, 'nodes from CSV');
     const { error: nodesError } = await supabaseAdmin
       .from('story_nodes')
       .upsert(nodes, { 
