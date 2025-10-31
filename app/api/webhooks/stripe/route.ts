@@ -129,8 +129,8 @@ async function handleCheckoutCompleted(session: any) {
       .eq('id', user.id);
   }
 
-  // Handle based on session mode
-  const { type, storyId } = session.metadata || {};
+  // Handle based on session mode and metadata
+  const { type } = session.metadata || {};
 
   if (session.mode === 'subscription') {
     // Get subscription ID from line items
@@ -157,15 +157,17 @@ async function handleCheckoutCompleted(session: any) {
         })
         .eq('id', user.id);
     }
-  } else if (type === 'one-time' && storyId) {
-    // Record purchase
-    await supabaseAdmin.from('purchases').upsert({
-      user_id: user.id,
-      story_id: storyId,
-      stripe_session_id: session.id,
-      stripe_checkout_session_id: session.id,
-      amount_paid: (session.amount_total || 0) / 100, // Convert from cents
-    });
+  } else if (session.mode === 'payment' && type === 'lifetime-access') {
+    // Grant lifetime access
+    await supabaseAdmin
+      .from('users')
+      .update({
+        lifetime_access: true,
+        lifetime_access_purchased_at: new Date().toISOString(),
+      })
+      .eq('id', user.id);
+    
+    console.log('Lifetime access granted to:', customerEmail);
   }
 }
 

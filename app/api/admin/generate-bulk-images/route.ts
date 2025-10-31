@@ -79,7 +79,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Process each node
-    for (const node of nodes) {
+    for (let index = 0; index < nodes.length; index++) {
+      const node = nodes[index];
       try {
         // Skip if image already exists and not replacing
         if (node.image_url && !replaceExisting) {
@@ -110,8 +111,11 @@ export async function POST(request: NextRequest) {
             };
           }) || [];
 
+        // Check if this is the first node (cover image)
+        const isFirstNode = index === 0 || node.node_key === '1' || node.node_key === 1;
+
         // Create AI prompt from story text with character consistency
-        const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+        const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters, isFirstNode);
         
         // Generate image with AI
         const generatedImage = await generateImage(prompt, {

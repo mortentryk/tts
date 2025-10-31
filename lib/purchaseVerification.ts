@@ -5,13 +5,13 @@ import type { SupabaseStory } from './supabaseStoryManager';
  * Check if a user has access to a story
  * Access is granted if:
  * 1. Story is free (is_free = true)
- * 2. User has purchased the story individually
+ * 2. User has lifetime access (one-time payment for all stories)
  * 3. User has an active subscription
  */
 export async function canUserAccessStory(
   userEmail: string | null,
   story: Pick<SupabaseStory, 'id' | 'is_free'> & { is_free?: boolean }
-): Promise<{ hasAccess: boolean; reason: 'free' | 'purchased' | 'subscription' | 'none' }> {
+): Promise<{ hasAccess: boolean; reason: 'free' | 'lifetime' | 'subscription' | 'none' }> {
   // If story is free, grant access
   if (story.is_free) {
     return { hasAccess: true, reason: 'free' };
@@ -25,12 +25,17 @@ export async function canUserAccessStory(
   // Get or create user
   const { data: user } = await supabaseAdmin
     .from('users')
-    .select('id, subscription_status, subscription_period_end')
+    .select('id, subscription_status, subscription_period_end, lifetime_access')
     .eq('email', userEmail)
     .single();
 
   if (!user) {
     return { hasAccess: false, reason: 'none' };
+  }
+
+  // Check if user has lifetime access (highest priority)
+  if (user.lifetime_access) {
+    return { hasAccess: true, reason: 'lifetime' };
   }
 
   // Check if user has active subscription
@@ -43,18 +48,6 @@ export async function canUserAccessStory(
         return { hasAccess: true, reason: 'subscription' };
       }
     }
-  }
-
-  // Check if user has purchased this specific story
-  const { data: purchase } = await supabaseAdmin
-    .from('purchases')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('story_id', story.id)
-    .single();
-
-  if (purchase) {
-    return { hasAccess: true, reason: 'purchased' };
   }
 
   return { hasAccess: false, reason: 'none' };
@@ -74,7 +67,7 @@ export async function getUserPurchases(userEmail: string | null) {
 
   const { data: user } = await supabaseAdmin
     .from('users')
-    .select('id, subscription_status, subscription_period_end')
+    .select('id, subscription_status, subscription_period_end, lifetime_access')
     .eq('email', userEmail)
     .single();
 
@@ -82,17 +75,10 @@ export async function getUserPurchases(userEmail: string | null) {
     return {
       purchasedStories: [],
       hasActiveSubscription: false,
+      hasLifetimeAccess: false,
       subscriptionPeriodEnd: null,
     };
   }
-
-  // Get purchased stories
-  const { data: purchases } = await supabaseAdmin
-    .from('purchases')
-    .select('story_id')
-    .eq('user_id', user.id);
-
-  const purchasedStoryIds = purchases?.map((p) => p.story_id) || [];
 
   // Check subscription status
   const hasActiveSubscription =
@@ -101,8 +87,9 @@ export async function getUserPurchases(userEmail: string | null) {
     new Date(user.subscription_period_end) > new Date();
 
   return {
-    purchasedStories: purchasedStoryIds,
+    purchasedStories: [], // No longer tracking individual purchases
     hasActiveSubscription,
+    hasLifetimeAccess: user.lifetime_access || false,
     subscriptionPeriodEnd: user.subscription_period_end,
   };
 }

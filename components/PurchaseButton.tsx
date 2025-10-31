@@ -31,13 +31,13 @@ export default function PurchaseButton({ story, hasAccess, userEmail }: Purchase
     // Story is locked, initiate purchase
     if (!userEmail) {
       // Prompt for email before purchasing
-      const email = prompt('Please enter your email to purchase this story:');
+      const email = prompt('Indtast venligst din e-mail for at købe denne historie:');
       if (!email) {
         return;
       }
       
       if (!validateEmail(email)) {
-        alert('Please enter a valid email address');
+        alert('Indtast venligst en gyldig e-mailadresse');
         return;
       }
 
@@ -70,13 +70,13 @@ export default function PurchaseButton({ story, hasAccess, userEmail }: Purchase
       `}
     >
       {loading ? (
-        'Loading...'
+        'Indlæser...'
       ) : hasAccess ? (
-        '▶️ Play Story'
+        '▶️ Spil Historie'
       ) : story.is_free ? (
-        '▶️ Play Free'
+        '▶️ Spil Gratis'
       ) : (
-        `🔒 Buy for $${Number(story.price).toFixed(2)}`
+        `🔒 Køb for $${Number(story.price).toFixed(2)}`
       )}
     </button>
   );

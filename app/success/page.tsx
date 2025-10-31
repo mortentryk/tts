@@ -57,33 +57,33 @@ function SuccessContent() {
         {verifying ? (
           <>
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
-            <h1 className="text-2xl font-bold mb-2">Verifying your purchase...</h1>
-            <p className="text-gray-400">Please wait a moment</p>
+            <h1 className="text-2xl font-bold mb-2">Bekræfter dit køb...</h1>
+            <p className="text-gray-400">Vent venligst et øjeblik</p>
           </>
         ) : error ? (
           <>
             <div className="text-6xl mb-4">❌</div>
-            <h1 className="text-2xl font-bold mb-2">Verification Failed</h1>
+            <h1 className="text-2xl font-bold mb-2">Bekræftelse Fejlede</h1>
             <p className="text-gray-400 mb-6">{error}</p>
             <button
               onClick={() => router.push('/')}
               className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg"
             >
-              Back to Stories
+              Tilbage til Historier
             </button>
           </>
         ) : (
           <>
             <div className="text-6xl mb-4">✅</div>
-            <h1 className="text-3xl font-bold mb-2">Purchase Successful!</h1>
+            <h1 className="text-3xl font-bold mb-2">Køb Gennemført!</h1>
             <p className="text-gray-400 mb-6">
-              Thank you for your purchase. Your story is now available!
+              Tak for dit køb. Din historie er nu tilgængelig!
             </p>
             <button
               onClick={() => router.push('/')}
               className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg"
             >
-              Go to Stories
+              Gå til Historier
             </button>
           </>
         )}
@@ -98,7 +98,7 @@ export default function SuccessPage() {
       <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-gray-800 rounded-lg p-8 shadow-xl text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
-          <h1 className="text-2xl font-bold mb-2">Loading...</h1>
+          <h1 className="text-2xl font-bold mb-2">Indlæser...</h1>
         </div>
       </div>
     }>

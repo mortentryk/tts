@@ -1,83 +1,83 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Refund Policy - TTS Story Platform',
-  description: 'Refund Policy for our interactive TTS story platform',
+  title: 'Refusionspolitik - TTS Historier Platform',
+  description: 'Refusionspolitik for vores interaktive TTS historier platform',
 };
 
 export default function RefundPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8">Refund Policy</h1>
+        <h1 className="text-4xl font-bold mb-8">Refusionspolitik</h1>
         
         <div className="space-y-6 text-gray-300">
           <section className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-2xl font-semibold mb-4 text-white">Digital Content Policy</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Digitalt Indhold Politik</h2>
             <p>
-              Due to the digital nature of our interactive stories, our general policy is no refunds 
-              once a purchase is completed. This is because you receive immediate access to the content.
+              På grund af den digitale karakter af vores interaktive historier, er vores generelle politik ingen refusioner 
+              når et køb er gennemført. Dette skyldes, at du får umiddelbar adgang til indholdet.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">When Refunds May Apply</h2>
-            <p className="mb-4">Refunds may be considered in the following circumstances:</p>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Når Refusioner Kan Gælde</h2>
+            <p className="mb-4">Refusioner kan overvejes under følgende omstændigheder:</p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li><strong>Technical Issues:</strong> If you are unable to access purchased content due to technical problems</li>
-              <li><strong>Duplicate Purchases:</strong> Accidental duplicate purchases of the same story</li>
-              <li><strong>Unauthorized Charges:</strong> If you notice unauthorized charges on your account</li>
-              <li><strong>Content Not as Described:</strong> If the content materially differs from what was advertised</li>
+              <li><strong>Tekniske Problemer:</strong> Hvis du ikke kan få adgang til købt indhold på grund af tekniske problemer</li>
+              <li><strong>Dubletkøb:</strong> Ved uheld køb af samme historie to gange</li>
+              <li><strong>Uautoriserede Gebyrer:</strong> Hvis du bemærker uautoriserede gebyrer på din konto</li>
+              <li><strong>Indhold Ikke Som Beskrevet:</strong> Hvis indholdet væsentligt afviger fra det annoncerede</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">Subscription Refunds</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Abonnementsrefusioner</h2>
             <p>
-              For subscription plans, you can cancel at any time and you will retain access until the 
-              end of your current billing period. No partial refunds are provided for unused subscription time.
+              For abonnementsplaner kan du annullere når som helst, og du beholder adgang indtil 
+              slutningen af din nuværende faktureringsperiode. Ingen delvise refusioner gives for ubrugt abonnementstid.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">How to Request a Refund</h2>
-            <p className="mb-4">To request a refund:</p>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Sådan Anmoder Du Om Refusion</h2>
+            <p className="mb-4">For at anmode om refusion:</p>
             <ol className="list-decimal list-inside space-y-2 ml-4">
-              <li>Contact our support team through our designated channels</li>
-              <li>Provide your email address and the story ID you purchased</li>
-              <li>Explain the reason for your refund request</li>
-              <li>Wait for our response (typically within 5 business days)</li>
+              <li>Kontakt vores supportteam gennem vores angivne kanaler</li>
+              <li>Angiv din e-mailadresse og historie-ID'et du købte</li>
+              <li>Forklar årsagen til din refusionsanmodning</li>
+              <li>Vent på vores svar (typisk inden for 5 arbejdsdage)</li>
             </ol>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">Processing Time</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Behandlingstid</h2>
             <p>
-              If your refund request is approved, refunds will be processed within 7-10 business days 
-              to the original payment method used for the purchase.
+              Hvis din refusionsanmodning godkendes, behandles refusioner inden for 7-10 arbejdsdage 
+              til den oprindelige betalingsmetode, der blev brugt til købet.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">Currency</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Valuta</h2>
             <p>
-              All prices are displayed in USD. Refunds will be issued in the same currency and amount 
-              as the original transaction.
+              Alle priser vises i USD. Refusioner udstedes i samme valuta og beløb 
+              som den oprindelige transaktion.
             </p>
           </section>
 
           <section className="bg-yellow-900/30 rounded-lg p-6 border border-yellow-600">
-            <h2 className="text-2xl font-semibold mb-4 text-white">Questions?</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">Spørgsmål?</h2>
             <p>
-              If you have questions about our refund policy or believe you have a case for a refund, 
-              please don&apos;t hesitate to contact our support team. We&apos;re here to help!
+              Hvis du har spørgsmål til vores refusionspolitik eller mener, du har et grundlag for refusion, 
+              så tøv ikke med at kontakte vores supportteam. Vi er her for at hjælpe!
             </p>
           </section>
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-700">
           <p className="text-sm text-gray-400">
-            Last updated: {new Date().toLocaleDateString()}
+            Sidst opdateret: {new Date().toLocaleDateString('da-DK')}
           </p>
         </div>
       </div>

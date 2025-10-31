@@ -92,8 +92,11 @@ export async function POST(request: NextRequest) {
         };
       }) || [];
 
+      // Check if this is the first node (cover image)
+      const isFirstNode = nodeId === '1' || nodeId === 1 || parseInt(nodeId?.toString() || '0') === 1;
+
       // Create AI prompt
-      const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+      const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters, isFirstNode);
       
       // Generate image
       const generatedImage = await generateImage(prompt, {

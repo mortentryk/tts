@@ -1,0 +1,75 @@
+id	text	valg1_label	valg1_goto	valg2_label	valg2_goto	check_stat	check_dc	check_success	check_fail	image	front_screen_image	story_title	story_description	length	age	author
+1	Emilie går rundt i sin børnehave. Hun ser sandkassen, legepladsen og klatrestativet. Pludselig ser hun en dreng klædt ud som en nisse! Han har et zippetov i hånden. Emilie går hen til ham. "Hej!" siger nissen. "Vil du zippe med mig? Hvis du kan zippe hurtigt, får du en stor slikkepind!" Hvad gør Emilie?	Ja, jeg vil gerne!	2	Nej, jeg vil tegne	3		Emilie og den store slikkepind	Emilie møder en nisse i sin børnehave og får en magisk slikkepind.	Mellem	2-5	AI & Morten
+2	Emilie tager zippetovet. Hun hopper hurtigt! 1, 2, 3, 4, 5! Hun hopper så hurtigt at hendes fletninger svinger. Nissen siger: "Du er så hurtig! Her er din slikkepind!" Han giver hende en stor slikkepind. Hvad gør Emilie?	Spiser den med det samme	4	Vil dele med venner	5
+3	Emilie går hen til sandkassen. Hun tegner et stort hjerte med sine fingre. Hun tegner og tegner. Pludselig kommer nissen hen. "Din tegning er flot!" siger han. "Her er en lille slikkepind til dig." Hvad gør Emilie?	Siger tak	6	Gemmer den	7
+4	Emilie bider i slikkepinden. Den smager så godt! Den smager af jordbær og karamel. Og se! Den bliver større! Den vokser!	Griner og spiser videre	8	Kalder på vennerne	5
+5	Emilie råber: "Kom og se!" Alle børnene kommer løbende. De kommer fra sandkassen og legepladsen. Emilie deler slikkepinden. Alle slikker og griner.	Bliver ved med at dele	9	Giver til pædagogen	10
+6	Emilie siger: "Tak for slikkepinden!" Hun slikker lidt på den. Den smager så godt. Hun ser nissen smile til hende.	Vinker til nissen	11	Fortæller vennerne	12
+7	Emilie putter slikkepinden i sin taske. Senere åbner hun tasken. Slikkepinden er blevet dobbelt så stor!	Spiser den nu	4	Deler med vennerne	5
+8	Slikkepinden bliver større og større! Emilie må holde den med begge hænder. "Wow!" siger børnene. De kigger alle på slikkepinden.	Kalder på pædagogen	5	Spiser videre	9
+9	Alle børnene danser rundt! De slikker på slikkepinden. De griner og har det sjovt. Hele børnehaven er glad.	Fortæller om nissen	11	Mor henter snart	13
+10	Pædagogen kommer hen. Hun smager på slikkepinden. "Den smager godt!" siger hun. "Hvor fik du den?" Emilie peger på nissen ved legepladsen.	Går hen til nissen	14	Fortæller pædagogen mere	15
+11	Emilie går hen til nissen. "Hej!" siger hun. Nissen smiler. "Hej, Emilie!" siger han. "Er du glad for slikkepinden?"	Ja, så glad!	16	Takker ham	17
+12	Emilie løber hen til sine venner Sofie og Emma. "I skulle se!" siger hun. "Jeg mødte en nisse!" Hun fortæller dem om nissen og slikkepinden.	Vennerne vil se nissen	18	Viser slikkepinden	19
+13	Tiden går. Snart kommer mor og henter Emilie. Emilie er glad og har haft en god dag.	Mor kommer	20	Leger lidt mere	9
+14	Emilie går hen til legepladsen hvor nissen står. Nissen siger: "Vil du lege med mig?"	Ja, gerne!	21	Spørger ham om noget	22
+15	Emilie fortæller pædagogen alt om nissen. "Han gav mig en magisk slikkepind!" siger hun. Pædagogen lyder interesseret. "Det lyder spændende!"	Pædagogen vil se nissen	23	Emilie leger videre	24
+16	"Er du glad for slikkepinden?" spørger nissen. Emilie nikker ivrigt. "Ja, så glad!" siger hun. "Den er så stor og god!"	Spørger om han kommer igen	25	Takker ham	17
+17	"Tak for slikkepinden!" siger Emilie høfligt. Nissen smiler. "Det var så lidt! Husk at dele er godt!"	Vinker farvel	26	Spørger om mere	27
+18	Sofie, Emma og Emilie løber hen til legepladsen. De ser nissen stå der. "Hej!" siger de alle sammen. Nissen smiler. "Hej, venner! Vil I også have slikkepinde?"	Ja!	28	Deler Emiles slikkepind	29
+19	Emilie henter sin taske. Hun viser den store slikkepind til Sofie og Emma. Deres øjne bliver store! "Må vi smage?" spørger de.	Ja, lad os dele	30	Går tilbage til nissen	11
+20	Mor kommer til børnehaven. Emilie løber hen og krammer mor. "Mor, mor!" siger hun. "Du skulle se hvad der skete!"	Fortæller på vejen hjem	31	Viser slikkepinden	32
+21	Emilie leger med nissen på legepladsen. De leger gemmeleg og hopper på én fod. De griner meget.	Bliver ved med at lege	33	Takker nissen	17
+22	"Kan du noget magisk?" spørger Emilie nysgerrigt. Nissen griner. "Ja! Jeg kan lave slikkepinde der vokser!"	Synes det er fedt	34	Spørger om mere	27
+23	Pædagogen følger med Emilie hen til legepladsen. De ser nissen stå der. Pædagogen hilser. "Hej, lille nisse!" siger hun.	Pædagogen snakker med nissen	35	Emilie leger videre	36
+24	Emilie leger videre i børnehaven. Hun leger i sandkassen og på legepladsen. Men hun tænker hele tiden på nissen og slikkepinden.	Fortæller andre børn	37	Mor henter hende snart	13
+25	"Kommer du igen?" spørger Emilie håbefuldt. Nissen nikker. "Måske! Hvis du er sød og deler, kommer jeg nok igen!"	Lover at være sød	38	Takker ham	17
+26	Emilie vinker farvel til nissen. Nissen vinker tilbage. "Husk at dele!" kalder han. Så forsvinder han lidt.	Bliver glad	39	Fortæller vennerne	12
+27	Emilie spørger nissen: "Har du flere slikkepinde?" Nissen griner. "Ja, masser! Men den største magi er at dele med andre!"	Forstår det	40	Takker ham	17
+28	Nissen tager tre små slikkepinde frem. Han giver én til Sofie, én til Emma og én til Emilie. "Her!" siger han.	Takker og slikker	41	Deler Emiles store slikkepind	29
+29	"Vil I dele min store slikkepind?" spørger Emilie venligt. Sofie og Emma nikker. De går hen til en bænk og deler den sammen.	Bliver bedste venner	42	Fortæller om nissen	43
+30	Emilie deler sin store slikkepind med Sofie og Emma. De slikker alle tre sammen. "Det er så godt!" siger Sofie.	Fortæller om nissen	43	Bliver ved med at dele	44
+31	På vejen hjem fortæller Emilie mor om nissen. "Der var en nisse i børnehaven!" siger hun. "Han gav mig en magisk slikkepind!"	Mor lytter	45	Viser slikkepinden	32
+32	Emilie åbner sin taske. Hun viser mor den store slikkepind. Mors øjne bliver store. "Den er jo kæmpestor!" siger mor.	Mor lytter til historien	45	Går hjem og deler	46
+33	Emilie leger med nissen hele eftermiddagen. De leger gemmeleg, hopper og synger sange. Nissen er så sjov!	Takker nissen	17	Bliver ved med at lege	21
+34	Emilie synes det er fedt at nissen kan lave magi! Hun griner. "Du er så sej!" siger hun til nissen.	Spørger om mere magi	27	Går tilbage til vennerne	12
+35	Pædagogen og nissen snakker sammen. Emilie kan høre at de snakker om at dele med andre. Det er vigtigt, siger de.	Lytter til dem	47	Leger med vennerne	36
+36	Emilie leger med Sofie og Emma. De leger i sandkassen og bygger slotte af sand. De har det så sjovt sammen.	Fortæller om nissen	43	Mor henter snart	13
+37	Emilie fortæller alle børnene i børnehaven om nissen. Snart samles alle børn omkring hende. Alle vil høre om nissen.	Alle vil se nissen	48	Deler slikkepinden	30
+38	"Jeg lover at være god og dele!" siger Emilie. Nissen smiler. "Det er godt! Du er allerede god til at dele!"	Spørger hvornår han kommer igen	49	Takker ham	17
+39	Emilie bliver så glad. Hun har mødt en nisse! Hun har fået en magisk slikkepind! Det har været den bedste dag nogensinde!	Fortæller vennerne alt	12	Mor henter snart	13
+40	Emilie forstår det. Den største magi er når man deler med andre. Hun nikker. "Jeg skal dele altid!"	Lover at dele mere	38	Takker nissen	17
+41	Sofie, Emma og Emilie takker alle nissen. De slikker på deres slikkepinde. "De smager så godt!" siger Sofie.	Leger sammen	42	Går tilbage til nissen	11
+42	Sofie, Emma og Emilie leger sammen resten af dagen. De deler deres slikkepinde og fortæller historier. De er bedste venner.	Fortæller om nissen til andre	43	Tiden går	13
+43	Emilie fortæller sine venner hele historien om nissen. Hun fortæller om zippetovet og den magiske slikkepind. De lytter med store øjne.	Vennerne vil også møde nissen	18	Deler mere	30
+44	De tre venner bliver ved med at dele slikkepinden hele dagen. De griner og har det sjovt sammen.	Fortæller historien	43	Leger videre	42
+45	Mor lytter til hele historien. "Så nissen gav dig en magisk slikkepind?" spørger hun. Emilie nikker ivrigt. "Ja!" siger hun.	Viser slikkepinden	32	Fortæller mere	31
+46	Mor og Emilie går hjem sammen. Når de kommer hjem, deler de slikkepinden. Mor smager. "Den smager godt!" siger hun.	Spiser sammen	50	Emilie fortæller mere	51
+47	Emilie lytter til hvad pædagogen og nissen snakker om. De siger at det er vigtigt at dele og være venlig. Det er godt, tænker Emilie.	Leger med vennerne	36	Takker dem	52
+48	Alle børnene i børnehaven samles omkring nissen. Nissen hilser på dem alle. "Hej, venner!" siger han.	Børnene leger med nissen	53	Emilie deler sin slikkepind	30
+49	"Hvornår kommer du igen?" spørger Emilie. Nissen tænker. "Måske næste uge! Eller når du mindst venter det!"	Glæder sig	54	Takker ham	17
+50	Mor og Emilie sidder ved bordet og spiser slikkepinden. De griner og snakker om Emilies dag. "Du har haft en god dag!" siger mor.	Emilie fortæller mere	51	Spiser videre	55
+51	Emilie fortæller mor endnu mere. Hun fortæller om vennerne, om at dele slikkepinden, og om alt det sjove de havde.	Spørger om mor tror på nisser	56	Går i seng senere	57
+52	Emilie takker både pædagogen og nissen. "Tak!" siger hun. De smiler begge til hende.	Leger videre	36	Fortæller vennerne	12
+53	Alle børnene leger med nissen. Han lærer dem nye lege og synger sange. Hele børnehaven griner.	Emilie deler sin slikkepind	30	Lytter til historier	54
+54	Emilie glæder sig til at nissen kommer igen. Hun kan næsten ikke vente!	Fortæller mor om det	58	Løber hen og takker nissen igen	17
+55	Mor og Emilie bliver ved med at spise slikkepinden. Den er så stor at de ikke kan spise den op. "Vi gemmer resten!" siger mor.	Emilie er enig	59	Vil spise mere	60
+56	"Tror du på nisser, mor?" spørger Emilie. Mor smiler. "Jeg tror på at dele er godt. Det er den bedste magi!"	Forstår det	61	Spørger mere	62
+57	Emilie går i seng. Hun drømmer om nissen og den magiske slikkepind. Hun drømmer at hun leger med nissen igen.	Drømmer sødt	63	Vågner næste morgen	64
+58	Emilie fortæller mor at nissen kommer igen. "Han sagde han kommer når jeg mindst venter det!" siger hun.	Mor er glad	65	Emilie vil fortælle mere	31
+59	"Vi gemmer den til i morgen!" siger Emilie. De pakker slikkepinden ind og lægger den i køleskabet.	Næste morgen	64	Får godnatkys	66
+60	"Kan vi ikke spise lidt mere?" spørger Emilie. Mor griner. "Okay, lidt mere!" De spiser lidt mere sammen.	Gemmer resten	59	Fortæller mere	51
+61	Emilie forstår det. Den største magi er når man deler med andre. Det er det vigtigste.	Lover at dele mere	38	Vil kysse mor godnat	66
+62	"Hvad mere er magisk?" spørger Emilie. Mor tænker. "Venlighed er magisk. Og at være glad sammen!"	Forstår det bedre	61	Vil kysse mor godnat	66
+63	Emilie drømmer den smukkeste drøm. Hun drømmer at hun leger med nissen i børnehaven. De leger gemmeleg og deler slikkepinde.	Vågner glad	64	Drømmer videre	67
+64	Næste morgen åbner Emilie køleskabet. Slikkepinden er blevet endnu større! "Mor, se!" råber hun.	Mor kommer løbende	68	Tager den med til børnehave	69
+65	Mor er glad for at Emilie har haft en god dag. Hun krammer Emilie. "Jeg er stolt af dig!" siger mor.	Går hjem sammen	46	Emilie er glad	39
+66	Emilie kysser mor godnat. "Tak for den bedste dag!" siger hun. Mor kysser hende tilbage. "Godnat, søde Emilie!"	Emilie går i seng	57	Vil fortælle mere først	51
+67	Emilie drømmer videre. I drømmen deler hun med alle sine venner. Alle er glade sammen.	Vågner næste morgen	64	Drømmer om nissen igen	63
+68	Mor kommer løbende til køleskabet. Hun ser på den større slikkepind. "Den er virkelig magisk!" siger hun.	Deler den igen	50	Emilie tager den med	69
+69	Emilie tager slikkepinden med til børnehaven. Hun vil dele den med Sofie og Emma igen.	Når de kommer til børnehaven	70	Tager den med	71
+70	Når Emilie kommer til børnehaven, løber hun hen til Sofie og Emma. "I skulle se!" siger hun.	Viser den større slikkepind	72	Fortæller om natten	73
+71	Emilie tager slikkepinden med til børnehaven i sin taske. Hun kan ikke vente med at vise den til sine venner.	De deler den igen	30	Emilie fortæller om natten	73
+72	Emilie viser den endnu større slikkepind. Sofie og Emma ser forbløffede ud. "Wow!" siger de.	De vil smage den	30	Emilie fortæller om natten	73
+73	Emilie fortæller om hvordan slikkepinden voksede om natten. "Den er nu så stor!" siger hun.	Vennerne vil se den	19	De deler den	30
+74	Emilie fortæller sine venner om drømmen. "Jeg drømte at jeg legede med nissen igen!" siger hun.	Tiden går	13	De deler slikkepinden	30
