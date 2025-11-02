@@ -21,9 +21,14 @@ export default function Home() {
   const [plans, setPlans] = useState<any[]>([]);
 
   useEffect(() => {
+    // Load stories first (critical for initial render)
     loadStories();
-    loadUserData();
-    loadPlans();
+    
+    // Load user data and plans in parallel (non-blocking)
+    Promise.all([
+      loadUserData(),
+      loadPlans()
+    ]).catch(err => console.error('Error loading user data/plans:', err));
   }, []);
 
   const loadUserData = async () => {

@@ -9,18 +9,14 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function GET() {
   try {
-    // Get published stories with their first image as fallback
+    // First, get stories without the expensive join - much faster
     const { data: stories, error } = await supabase
       .from('stories')
       .select(`
         *,
         journey_order,
         landmark_type,
-        in_journey,
-        story_nodes!inner(
-          image_url,
-          sort_index
-        )
+        in_journey
       `)
       .eq('is_published', true)
       .order('created_at', { ascending: false });
@@ -30,26 +26,41 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to load stories' }, { status: 500 });
     }
 
-    // Process stories to add fallback images
-    const processedStories = stories.map(story => {
-      // If no cover image, use the first story node image
-      if (!story.cover_image_url && story.story_nodes && story.story_nodes.length > 0) {
-        const firstNodeWithImage = story.story_nodes
-          .sort((a: any, b: any) => a.sort_index - b.sort_index)
-          .find((node: any) => node.image_url);
-        
-        if (firstNodeWithImage) {
-          story.cover_image_url = firstNodeWithImage.image_url;
-        }
-      }
+    // Only fetch first image for stories that don't have cover_image_url
+    const storiesNeedingImage = stories.filter(s => !s.cover_image_url);
+    
+    if (storiesNeedingImage.length > 0) {
+      // Fetch only the first image for each story that needs it
+      const storyIds = storiesNeedingImage.map(s => s.id);
       
-      // Remove the story_nodes from the response
-      delete story.story_nodes;
-      return story;
-    });
+      // Use a more efficient query to get just the first image per story
+      const { data: firstImages } = await supabase
+        .from('story_nodes')
+        .select('story_id, image_url, sort_index')
+        .in('story_id', storyIds)
+        .not('image_url', 'is', null)
+        .order('sort_index', { ascending: true });
 
-    console.log('✅ Stories loaded:', processedStories.length);
-    return NextResponse.json(processedStories);
+      // Group by story_id and take first image for each
+      const imageMap = new Map<string, string>();
+      if (firstImages) {
+        firstImages.forEach(node => {
+          if (!imageMap.has(node.story_id) && node.image_url) {
+            imageMap.set(node.story_id, node.image_url);
+          }
+        });
+      }
+
+      // Add cover images to stories that need them
+      stories.forEach(story => {
+        if (!story.cover_image_url && imageMap.has(story.id)) {
+          story.cover_image_url = imageMap.get(story.id);
+        }
+      });
+    }
+
+    console.log('✅ Stories loaded:', stories.length);
+    return NextResponse.json(stories);
 
   } catch (error) {
     console.error('❌ API error:', error);
