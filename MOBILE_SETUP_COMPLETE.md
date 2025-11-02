@@ -83,10 +83,12 @@ The mobile app uses **server URL mode**, which means:
 
 ### Production Workflow
 
-1. Deploy your Next.js app (Vercel, AWS, etc.)
-2. Set `NEXT_PUBLIC_SITE_URL` to your production URL
+1. Deploy your Next.js app to Vercel (see `VERCEL_DEPLOYMENT.md` for detailed guide)
+2. Set `NEXT_PUBLIC_SITE_URL` to your Vercel deployment URL in Vercel dashboard
 3. Rebuild and sync: `npm run build && npx cap sync`
 4. Build native apps in Xcode/Android Studio
+
+**📖 For detailed Vercel deployment instructions, see `VERCEL_DEPLOYMENT.md`**
 
 ## 🔧 Available Scripts
 

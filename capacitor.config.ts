@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Interaktive Eventyr',
   // Next.js uses server-side rendering, so we point to the server URL
   // For development: uses localhost:3000 (run npm run dev first)
-  // For production: set NEXT_PUBLIC_SITE_URL to your deployed URL
+  // For production: set NEXT_PUBLIC_SITE_URL to https://storific.app
   server: {
     url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
     androidScheme: 'https',

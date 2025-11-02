@@ -39,11 +39,13 @@ Edit `capacitor.config.ts` and uncomment the server URL:
 
 ```typescript
 server: {
-  url: process.env.NEXT_PUBLIC_SITE_URL || 'https://yourapp.com',
+  url: process.env.NEXT_PUBLIC_SITE_URL || 'https://storific.app',
   androidScheme: 'https',
   iosScheme: 'https',
 },
 ```
+
+⚠️ Make sure `NEXT_PUBLIC_SITE_URL` is set to `https://storific.app` in your Vercel environment variables.
 
 This points the mobile app to your deployed Next.js server.
 
