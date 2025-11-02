@@ -3,16 +3,11 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.eventyr.app',
   appName: 'Interaktive Eventyr',
-  webDir: '.next',
-  // For development: set server.url to your local dev server (e.g., 'http://localhost:3000')
-  // For production: set server.url to your deployed URL (e.g., 'https://yourapp.com')
-  // Comment out server.url to use local webDir
-  // server: {
-  //   url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-  //   androidScheme: 'https',
-  //   iosScheme: 'https',
-  // },
+  // Next.js uses server-side rendering, so we point to the server URL
+  // For development: uses localhost:3000 (run npm run dev first)
+  // For production: set NEXT_PUBLIC_SITE_URL to your deployed URL
   server: {
+    url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
     androidScheme: 'https',
     iosScheme: 'https',
   },
