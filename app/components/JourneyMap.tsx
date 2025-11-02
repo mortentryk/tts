@@ -154,16 +154,16 @@ export default function JourneyMap({ stories, onExit, showIntro = true }: Journe
       {/* Header */}
       <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center">
         <div className="text-white">
-          <h1 className="text-2xl font-bold">Your Adventure Journey</h1>
+          <h1 className="text-2xl font-bold">Dit Eventyr Rejse</h1>
           <p className="text-dungeon-text">
-            Stop {journeyState.currentStopIndex + 1} of {journeyStories.length}
+            Stop {journeyState.currentStopIndex + 1} af {journeyStories.length}
           </p>
         </div>
         <button
           onClick={handleExitJourney}
           className="bg-dungeon-surface hover:bg-dungeon-accent text-white px-4 py-2 rounded-lg border border-dungeon-border transition-colors"
         >
-          Exit Journey
+          Afslut Rejse
         </button>
       </div>
 

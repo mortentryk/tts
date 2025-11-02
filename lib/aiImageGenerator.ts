@@ -151,7 +151,8 @@ export function createStoryImagePrompt(
     role?: string;
     emotion?: string;
     action?: string;
-  }>
+  }>,
+  isCoverImage: boolean = false
 ): string {
   // Build character descriptions
   let characterDescriptions = '';
@@ -179,7 +180,15 @@ export function createStoryImagePrompt(
   // Use up to 500 characters of the story text for better context
   const sceneDescription = cleanStoryText.substring(0, 500).trim();
   
-  // Create a comprehensive prompt with the actual story text
+  // For cover/first images, create a showcase prompt without book references
+  if (isCoverImage) {
+    // Remove "book illustration" from style for cover images
+    const showcaseStyle = style.replace(/book illustration/gi, 'showcase').replace(/illustration/gi, 'artwork');
+    const prompt = `${showcaseStyle}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, cinematic showcase artwork, epic composition, vibrant colors, cinematic lighting, no book, no text, no words, no writing, no letters, no books`;
+    return prompt;
+  }
+  
+  // Create a comprehensive prompt with the actual story text for regular story images
   const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, book illustration style, cinematic lighting, no text, no words, no writing, no letters`;
   
   return prompt;

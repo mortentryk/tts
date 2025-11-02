@@ -116,11 +116,15 @@ export async function POST(request: NextRequest) {
     // Use story's visual style or fallback to generic style
     const visualStyle = storyVisualStyle || style || 'fantasy adventure book illustration, detailed, cinematic lighting, consistent art style';
     
+    // Check if this is the first node (cover image)
+    const isFirstNode = nodeId === '1' || nodeId === 1 || parseInt(nodeId?.toString() || '0') === 1;
+    
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;
-    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters);
+    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters, isFirstNode);
     console.log('📝 Generated prompt:', prompt);
     console.log('🎨 Using visual style:', visualStyle);
+    console.log('📸 Is cover image:', isFirstNode);
 
     // Generate image with AI
     const generatedImage = await generateImage(prompt, {

@@ -23,6 +23,11 @@ export interface CreateSubscriptionSessionParams {
   stripePriceId: string;
 }
 
+export interface CreateLifetimeAccessSessionParams {
+  userEmail: string;
+  stripePriceId: string;
+}
+
 /**
  * Create a Stripe checkout session for one-time story purchase
  */
@@ -180,6 +185,40 @@ export async function createStoryProduct(
   });
 
   return { productId: product.id, priceId: priceObj.id };
+}
+
+/**
+ * Create a Stripe checkout session for lifetime access (one-time payment)
+ */
+export async function createLifetimeAccessSession({
+  userEmail,
+  stripePriceId,
+}: CreateLifetimeAccessSessionParams) {
+  if (!stripe) {
+    throw new Error('Stripe is not configured');
+  }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+  const session = await stripe.checkout.sessions.create({
+    customer_email: userEmail,
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price: stripePriceId,
+        quantity: 1,
+      },
+    ],
+    mode: 'payment', // One-time payment for lifetime access
+    success_url: `${siteUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${siteUrl}/cancel`,
+    metadata: {
+      type: 'lifetime-access',
+      userEmail,
+    },
+  });
+
+  return session;
 }
 
 /**

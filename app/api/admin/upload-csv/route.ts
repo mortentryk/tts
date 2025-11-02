@@ -127,18 +127,20 @@ export async function POST(request: NextRequest) {
       };
 
       // Handle image field - check if it's an asset reference or full URL
-      if (row.image) {
-        if (isAssetReference(row.image)) {
+      // Only process if image field exists and is not empty/whitespace
+      const imageValue = row.image?.trim();
+      if (imageValue) {
+        if (isAssetReference(imageValue)) {
           // It's an asset reference like "image-1" - store as-is for later processing
-          node.image_url = row.image;
-        } else if (row.image.startsWith('http')) {
+          node.image_url = imageValue;
+        } else if (imageValue.startsWith('http')) {
           // It's a full URL - use directly
-          node.image_url = row.image;
-        } else {
-          // Empty or invalid - set to null
-          node.image_url = null;
+          node.image_url = imageValue;
         }
+        // If it's not valid, don't set node.image_url (leave it null to preserve existing)
       }
+      // If row.image is empty/whitespace/undefined, node.image_url stays null
+      // and will be preserved from existing nodes if they exist (see preservation logic below)
 
       // Add dice check if present
       if (row.check_stat && row.check_dc) {

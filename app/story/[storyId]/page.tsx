@@ -219,7 +219,7 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     
     // Handle autoplay policy errors
     if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
-      const e = new Error("Autoplay blocked – click the button and try again.");
+      const e = new Error("Autoplay blokeret – klik på knappen og prøv igen.");
       (e as any).code = "AUTOPLAY";
       throw e;
     }
@@ -370,11 +370,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       console.log('🎙️ TTS error, isTTSRunningRef set to false');
       // Show a more user-friendly error message
       if (e?.message?.includes("API key not configured")) {
-        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
+        alert("TTS er ikke konfigureret. Sæt venligst din OpenAI API-nøgle op for at aktivere stemme-fortælling.");
       } else if (e?.message?.includes("Incorrect API key")) {
-        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
+        alert("TTS API-nøgle er ugyldig eller udløbet. Opdater venligst din OpenAI API-nøgle for at aktivere stemme-fortælling.");
       } else {
-        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+        alert(`TTS Fejl: ${e?.message || "Kunne ikke afspille stemme-fortælling."}`);
       }
     }
   }, [passage?.choices, passage?.audio, startVoiceListening, speaking]);
@@ -457,7 +457,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         setLoading(false);
       } catch (error) {
         console.error('Failed to load story:', error);
-        setStoryError(`Failed to load story: ${error}`);
+        setStoryError(`Kunne ikke indlæse historie: ${error}`);
         setLoading(false);
       }
     };
@@ -665,7 +665,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     if (now - ttsCooldownRef.current < COOL_DOWN_MS) {
       console.log('🚫 TTS cooldown active, skipping');
       const remainingTime = Math.ceil((COOL_DOWN_MS - (now - ttsCooldownRef.current)) / 1000);
-      showVoiceNotification(`⏳ Please wait ${remainingTime} second${remainingTime > 1 ? 's' : ''} before playing again`, 'info');
+      showVoiceNotification(`⏳ Vent venligst ${remainingTime} sekund${remainingTime > 1 ? 'er' : ''} før du afspiller igen`, 'info');
       return;
     }
     ttsCooldownRef.current = now;
@@ -704,7 +704,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     // Check if speech recognition is supported
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setSpeechError("Speech recognition not supported in this browser");
+      setSpeechError("Stemmeigenkendelse understøttes ikke i denne browser");
       return;
     }
 
@@ -909,7 +909,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       recognition.start();
     } catch (e) {
       console.error('Failed to start speech recognition:', e);
-      setSpeechError('Failed to start speech recognition');
+      setSpeechError('Kunne ikke starte stemmeigenkendelse');
       setListening(false);
     }
 
@@ -1008,7 +1008,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-dungeon-text">Loading story...</p>
+          <p className="text-dungeon-text">Indlæser historie...</p>
         </div>
       </div>
     );
@@ -1019,13 +1019,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-400 text-6xl mb-4">❌</div>
-          <h2 className="text-2xl font-bold text-white mb-4">Story Not Found</h2>
+          <h2 className="text-2xl font-bold text-white mb-4">Historie Ikke Fundet</h2>
           <p className="text-dungeon-text mb-6">{storyError}</p>
           <button 
             onClick={goBackToStories}
             className="bg-dungeon-accent hover:bg-dungeon-accent-active text-white font-semibold py-3 px-6 rounded-lg transition-colors"
           >
-            Back to Stories
+            Tilbage til Historier
           </button>
         </div>
       </div>
@@ -1066,7 +1066,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             onClick={goBackToStories}
             className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm sm:text-base w-full sm:w-auto"
           >
-            ← Back to Stories
+            ← Tilbage til Historier
           </button>
         </div>
       </div>
@@ -1094,7 +1094,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                   e.currentTarget.style.display = 'none';
                 }}
               >
-                Your browser does not support the video tag.
+                Din browser understøtter ikke video-taggen.
               </video>
             </div>
           ) : passage?.image && passage.image.includes('cloudinary.com') ? (
@@ -1126,7 +1126,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           )}
           
           <p className="text-base sm:text-lg leading-relaxed text-white">
-            {passage?.text || "Story not found. Please check your story data."}
+            {passage?.text || "Historie ikke fundet. Tjek venligst dine historiedata."}
           </p>
         </div>
 
@@ -1224,7 +1224,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             onClick={speakCloudThrottled}
             disabled={speaking}
           >
-            {speaking ? "🎙️ Playing..." : "🎙️ Read Story"}
+            {speaking ? "🎙️ Afspiller..." : "🎙️ Læs Historie"}
           </button>
 
           <button 
@@ -1244,10 +1244,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             }`}
             onClick={handleAutoReadToggle}
             aria-pressed={autoRead}
-            aria-label={autoRead ? 'Disable auto read' : 'Enable auto read'}
-            title={autoRead ? 'Disable auto read' : 'Enable auto read'}
+            aria-label={autoRead ? 'Deaktiver auto-læs' : 'Aktivér auto-læs'}
+            title={autoRead ? 'Deaktiver auto-læs' : 'Aktivér auto-læs'}
           >
-            {autoRead ? '🔁 Auto-Read: On' : '🔁 Auto-Read: Off'}
+            {autoRead ? '🔁 Auto-læs: Tændt' : '🔁 Auto-læs: Slukket'}
           </button>
         </div>
 
@@ -1262,7 +1262,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               }`}
               onClick={() => listening ? stopVoiceListening() : startVoiceListening(10000)}
             >
-              {listening ? "🎤 Listening..." : "🎤 Voice Commands"}
+              {listening ? "🎤 Lytter..." : "🎤 Stemmekommandoer"}
             </button>
             
             {speechError && (
@@ -1311,7 +1311,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             className="flex-1 bg-dungeon-accent p-3 rounded-lg text-center font-semibold text-white hover:bg-dungeon-accent-active transition-colors"
             onClick={resetGame}
           >
-            Start Over
+            Start Forfra
           </button>
         </div>
       </div>

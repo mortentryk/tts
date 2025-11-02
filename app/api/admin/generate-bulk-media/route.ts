@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
       .eq('story_id', story.id);
 
     // Process each node
-    for (const node of nodes) {
+    for (let index = 0; index < nodes.length; index++) {
+      const node = nodes[index];
       try {
         const nodeMediaType = node.media_type || mediaType;
         
@@ -111,9 +112,12 @@ export async function POST(request: NextRequest) {
             };
           }) || [];
 
+        // Check if this is the first node (cover image)
+        const isFirstNode = index === 0 || node.node_key === '1' || node.node_key === 1;
+
         // Generate image if needed
         if (nodeMediaType === 'image' || nodeMediaType === 'both') {
-          const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+          const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters, isFirstNode);
           const generatedImage = await generateImage(prompt, {
             model: model as any,
             size: size as any,

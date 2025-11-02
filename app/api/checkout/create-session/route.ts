@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createCheckoutSession, createSubscriptionSession } from '@/lib/stripe';
+import { createSubscriptionSession, createLifetimeAccessSession } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
@@ -34,80 +34,57 @@ export async function POST(request: NextRequest) {
       user = newUser;
     }
 
+    if (!planId) {
+      return NextResponse.json(
+        { error: 'planId is required' },
+        { status: 400 }
+      );
+    }
+
+    // Get plan details
+    const { data: plan } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('stripe_price_id, interval, name')
+      .eq('id', planId)
+      .single();
+
+    if (!plan || !plan.stripe_price_id) {
+      return NextResponse.json(
+        { error: 'Plan not found' },
+        { status: 404 }
+      );
+    }
+
     let session;
 
-    if (type === 'subscription') {
+    // Check if this is a subscription (interval is 'month' or 'year') or lifetime (interval is NULL)
+    if (plan.interval === 'month' || plan.interval === 'year') {
       // Create subscription checkout session
-      if (!planId) {
-        return NextResponse.json(
-          { error: 'planId is required for subscriptions' },
-          { status: 400 }
-        );
-      }
-
-      // Get subscription plan details
-      const { data: plan } = await supabaseAdmin
-        .from('subscription_plans')
-        .select('stripe_price_id')
-        .eq('id', planId)
-        .single();
-
-      if (!plan || !plan.stripe_price_id) {
-        return NextResponse.json(
-          { error: 'Subscription plan not found' },
-          { status: 404 }
-        );
-      }
-
       session = await createSubscriptionSession({
         userEmail,
         stripePriceId: plan.stripe_price_id,
       });
+    } else if (plan.interval === null || plan.name.toLowerCase().includes('lifetime')) {
+      // Create lifetime access checkout session (one-time payment)
+      session = await createLifetimeAccessSession({
+        userEmail,
+        stripePriceId: plan.stripe_price_id,
+      });
     } else {
-      // Create one-time purchase checkout session
-      if (!storyId) {
-        return NextResponse.json(
-          { error: 'storyId is required for one-time purchases' },
-          { status: 400 }
-        );
-      }
-
-      // Get story details
-      const { data: story } = await supabaseAdmin
-        .from('stories')
-        .select('id, title, price, stripe_price_id')
-        .eq('id', storyId)
-        .single();
-
-      if (!story) {
-        return NextResponse.json({ error: 'Story not found' }, { status: 404 });
-      }
-
-      if (story.stripe_price_id) {
-        // Use existing Stripe price
-        session = await createCheckoutSession({
-          userEmail,
-          storyId: story.id,
-          storyTitle: story.title,
-          price: Number(story.price),
-          stripePriceId: story.stripe_price_id,
-        });
-      } else {
-        // Create Stripe product and price on-the-fly
-        // Note: In production, you should create products in Stripe dashboard or via admin
-        return NextResponse.json(
-          { error: 'Story not configured for sale. Please contact support.' },
-          { status: 400 }
-        );
-      }
+      return NextResponse.json(
+        { error: 'Invalid plan type' },
+        { status: 400 }
+      );
     }
 
     // Store session in database
     await supabaseAdmin.from('stripe_sessions').insert({
       stripe_session_id: session.id,
       user_email: userEmail,
-      story_id: type === 'subscription' ? null : storyId,
-      session_type: type,
+      story_id: null,
+      session_type: plan.interval === null || plan.name.toLowerCase().includes('lifetime') 
+        ? 'lifetime-access' 
+        : 'subscription',
       status: 'pending',
     });
 

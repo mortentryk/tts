@@ -53,12 +53,13 @@ export async function POST(request: NextRequest) {
     // Use story's visual style or fallback to journey style
     const visualStyle = storyData?.visual_style || style;
     
-    // Create AI prompt for journey image
+    // Create AI prompt for journey image (not a cover image)
     const prompt = createStoryImagePrompt(
       journeyText,
       journeyTitle || 'Journey',
       visualStyle,
-      [] // No character data for journeys
+      [], // No character data for journeys
+      false // Journey images are not cover images
     );
     
     console.log('📝 Generated prompt:', prompt);
