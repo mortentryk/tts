@@ -270,6 +270,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const voiceMatchedRef = useRef<boolean>(false);
   const noMatchCountRef = useRef<number>(0);
   const lastNoMatchTimeRef = useRef<number>(0);
+  const speakCloudThrottledRef = useRef<(() => Promise<void>) | null>(null);
   
   const router = useRouter();
   const passage = story[currentId];
@@ -335,11 +336,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       if (passage?.choices && passage.choices.length > 0) {
         showVoiceNotification('⏱️ Tiden er gået. Lytter igen til valgene...', 'info');
         setTimeout(() => {
-          speakCloudThrottled();
+          if (speakCloudThrottledRef.current) {
+            speakCloudThrottledRef.current();
+          }
         }, 1000);
       }
     }, timeoutMs);
-  }, [passage?.choices, speakCloudThrottled, showVoiceNotification]);
+  }, [passage?.choices, showVoiceNotification]);
 
   // Enhanced TTS with voice listening
   const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
@@ -686,7 +689,12 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     // Use enhanced TTS with voice listening - it will handle starting voice listening automatically
     await speakWithVoiceListening(narration);
-  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening]);
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, showVoiceNotification]);
+
+  // Update ref when speakCloudThrottled changes
+  useEffect(() => {
+    speakCloudThrottledRef.current = speakCloudThrottled;
+  }, [speakCloudThrottled]);
 
   // Auto-read new scenes when enabled
   useEffect(() => {
@@ -923,7 +931,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         setTimeout(() => {
           if (listening && passage?.choices && passage.choices.length > 0) {
             showVoiceNotification('🔄 Lytter igen til valgene...', 'info');
-            speakCloudThrottled();
+            if (speakCloudThrottledRef.current) {
+              speakCloudThrottledRef.current();
+            }
           }
         }, 1500);
       }
@@ -970,7 +980,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         speechRecognitionRef.current = null;
       }
     };
-  }, [listening, passage?.choices, goTo, speakCloudThrottled, showVoiceNotification]);
+  }, [listening, passage?.choices, goTo, showVoiceNotification]);
 
   const resetGame = useCallback(() => {
     localStorage.removeItem(SAVE_KEY);
