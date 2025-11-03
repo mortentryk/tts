@@ -119,7 +119,22 @@ export async function POST(request: NextRequest) {
     if (!audioResponse.ok) {
       const txt = await audioResponse.text().catch(() => "");
       console.error("ElevenLabs TTS error:", audioResponse.status, txt);
-      return NextResponse.json({ error: `ElevenLabs TTS error: ${txt}` }, { status: audioResponse.status });
+      
+      // Parse error and return user-friendly message
+      let errorMessage = "Voice generation failed";
+      try {
+        const errorData = JSON.parse(txt);
+        if (errorData.detail?.status === "quota_exceeded") {
+          errorMessage = "Voice quota exceeded";
+        } else if (errorData.detail?.message) {
+          errorMessage = errorData.detail.message;
+        }
+      } catch {
+        // If parsing fails, use raw text but limit length
+        errorMessage = txt.substring(0, 100);
+      }
+      
+      return NextResponse.json({ error: errorMessage }, { status: audioResponse.status });
     }
 
     const audioBuffer = await audioResponse.arrayBuffer();
