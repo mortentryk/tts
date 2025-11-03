@@ -265,7 +265,7 @@ export default function Home() {
                       <div className="text-sm font-bold mb-2 text-yellow-400">BEDSTE VÆRDI</div>
                     )}
                     <h3 className="text-2xl font-bold mb-4">{plan.name}</h3>
-                    <div className="text-4xl font-bold mb-2">${Number(plan.price).toFixed(2)}</div>
+                    <div className="text-4xl font-bold mb-2">{Number(plan.price).toFixed(0)} kr.</div>
                     <div className={`${isSubscription ? 'text-gray-100' : 'text-gray-300'} mb-6`}>
                       {isSubscription ? 'per måned' : 'engangsbetaling'}
                     </div>

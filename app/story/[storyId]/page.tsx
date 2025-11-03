@@ -268,6 +268,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listeningSessionRef = useRef<number>(0);
   const voiceMatchedRef = useRef<boolean>(false);
+  const noMatchCountRef = useRef<number>(0);
+  const lastNoMatchTimeRef = useRef<number>(0);
   
   const router = useRouter();
   const passage = story[currentId];
@@ -311,7 +313,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     }, 3000);
   }, []);
 
-  const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 10000) => {
+  const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 20000) => {
     // Clear any existing timeout
     if (voiceTimeoutRef.current) {
       clearTimeout(voiceTimeoutRef.current);
@@ -321,16 +323,23 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     setListening(true);
     setSpeechError(null);
     voiceMatchedRef.current = false;
+    noMatchCountRef.current = 0;
     const mySession = ++listeningSessionRef.current;
 
-    // Set timeout to stop listening
+    // Set timeout to stop listening (increased to 20 seconds)
     voiceTimeoutRef.current = setTimeout(async () => {
       if (listeningSessionRef.current !== mySession) return;
       setListening(false);
       console.log('Voice listening timeout - stopping recognition');
-      // Don't automatically re-read choices - let user manually trigger TTS if needed
+      // Re-read choices when timeout occurs
+      if (passage?.choices && passage.choices.length > 0) {
+        showVoiceNotification('⏱️ Tiden er gået. Lytter igen til valgene...', 'info');
+        setTimeout(() => {
+          speakCloudThrottled();
+        }, 1000);
+      }
     }, timeoutMs);
-  }, []);
+  }, [passage?.choices, speakCloudThrottled, showVoiceNotification]);
 
   // Enhanced TTS with voice listening
   const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
@@ -353,8 +362,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       await speakViaCloud(text, audioRef, () => {
         // Auto-start voice listening after TTS completes
         if (passage?.choices && passage.choices.length > 0) {
-          console.log('TTS finished - starting voice listening for 10 seconds');
-          startVoiceListening(10000);
+          console.log('TTS finished - starting voice listening for 20 seconds');
+          startVoiceListening(20000);
         }
         // Set speaking to false only after TTS actually completes
         setSpeaking(false);
@@ -751,9 +760,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       console.log('✅ Choices available:', passage.choices.map(c => c.label));
 
       // Check for directional commands (Danish + English)
-      if ((transcript.includes('left') || transcript.includes('lift') || transcript.includes('first') || 
+        if ((transcript.includes('left') || transcript.includes('lift') || transcript.includes('first') || 
            transcript.includes('venstre') || transcript.includes('ven') || transcript.includes('første')) && passage.choices[0]) {
         console.log('🎯 Matched "left/venstre" - going to:', passage.choices[0].goto);
+        noMatchCountRef.current = 0; // Reset no-match counter on success
+        voiceMatchedRef.current = true;
         showVoiceNotification(`🎤 "${transcript}" → ${passage.choices[0].label}`, 'success');
         stopVoiceListening(); // Stop voice listening immediately
         goTo(passage.choices[0].goto);
@@ -762,6 +773,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       if ((transcript.includes('right') || transcript.includes('write') || transcript.includes('second') || 
            transcript.includes('højre') || transcript.includes('hø') || transcript.includes('anden')) && passage.choices[1]) {
         console.log('🎯 Matched "right/højre" - going to:', passage.choices[1].goto);
+        noMatchCountRef.current = 0; // Reset no-match counter on success
+        voiceMatchedRef.current = true;
         showVoiceNotification(`🎤 "${transcript}" → ${passage.choices[1].label}`, 'success');
         stopVoiceListening(); // Stop voice listening immediately
         goTo(passage.choices[1].goto);
@@ -770,6 +783,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       if ((transcript.includes('forward') || transcript.includes('ahead') || transcript.includes('go') || 
            transcript.includes('frem') || transcript.includes('fremad') || transcript.includes('gå')) && passage.choices[0]) {
         console.log('🎯 Matched "forward/frem" - going to:', passage.choices[0].goto);
+        noMatchCountRef.current = 0; // Reset no-match counter on success
+        voiceMatchedRef.current = true;
         showVoiceNotification(`🎤 "${transcript}" → ${passage.choices[0].label}`, 'success');
         stopVoiceListening(); // Stop voice listening immediately
         goTo(passage.choices[0].goto);
@@ -783,6 +798,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         console.log('🎯 Matched number:', choiceMatch[1], '-> index:', choiceIndex);
         if (choiceIndex >= 0 && choiceIndex < passage.choices.length) {
           console.log('🎯 Going to choice:', choiceIndex, '->', passage.choices[choiceIndex].goto);
+          noMatchCountRef.current = 0; // Reset no-match counter on success
+          voiceMatchedRef.current = true;
           showVoiceNotification(`🎤 "${choiceMatch[1]}" → Choice ${choiceIndex + 1}`, 'success');
           stopVoiceListening(); // Stop voice listening immediately
           goTo(passage.choices[choiceIndex].goto);
@@ -813,6 +830,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           console.log('🎯 Matched Danish number word:', word, '->', number, '-> index:', choiceIndex);
           if (choiceIndex >= 0 && choiceIndex < passage.choices.length) {
             console.log('🎯 Going to choice:', choiceIndex, '->', passage.choices[choiceIndex].goto);
+            noMatchCountRef.current = 0; // Reset no-match counter on success
+            voiceMatchedRef.current = true;
             showVoiceNotification(`🎤 "${word}" → Choice ${number}`, 'success');
             stopVoiceListening(); // Stop voice listening immediately
             goTo(passage.choices[choiceIndex].goto);
@@ -827,6 +846,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       // Check for dice roll commands
       if (showDiceRollButton && (transcript.includes('roll') || transcript.includes('kast') || transcript.includes('terning') || transcript.includes('dice'))) {
         console.log('🎯 Matched dice roll command - rolling dice');
+        noMatchCountRef.current = 0; // Reset no-match counter on success
+        voiceMatchedRef.current = true;
         showVoiceNotification(`🎤 "${transcript}" → Rolling dice`, 'success');
         stopVoiceListening();
         handleDiceRoll();
@@ -840,6 +861,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         // 1. Check if transcript contains the full button text (fuzzy match)
         if (transcript.includes(choiceText) || choiceText.includes(transcript)) {
           console.log('🎯 Matched full button text - going to:', choice.goto);
+          noMatchCountRef.current = 0; // Reset no-match counter on success
+          voiceMatchedRef.current = true;
           showVoiceNotification(`🎤 "${transcript}" → ${choice.label}`, 'success');
           stopVoiceListening(); // Stop voice listening immediately
           goTo(choice.goto);
@@ -859,6 +882,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         if (hasKeywordMatch) {
           console.log('🎯 Matched keyword from button text - going to:', choice.goto);
           console.log('🎯 Keywords found:', keyWords);
+          noMatchCountRef.current = 0; // Reset no-match counter on success
+          voiceMatchedRef.current = true;
           showVoiceNotification(`🎤 "${transcript}" → ${choice.label}`, 'success');
           stopVoiceListening(); // Stop voice listening immediately
           goTo(choice.goto);
@@ -870,6 +895,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           transcript.includes(keyword.toLowerCase())
         )) {
           console.log('🎯 Matched predefined keyword - going to:', choice.goto);
+          noMatchCountRef.current = 0; // Reset no-match counter on success
+          voiceMatchedRef.current = true;
           showVoiceNotification(`🎤 "${transcript}" → ${choice.label}`, 'success');
           stopVoiceListening(); // Stop voice listening immediately
           goTo(choice.goto);
@@ -877,10 +904,29 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         }
       });
 
-      // No match found - show feedback
+      // No match found - show feedback and re-read choices after a few attempts
       console.log('❌ No matching voice command found for:', transcript);
       console.log('❌ Available button text:', passage.choices.map(c => c.label));
       console.log('❌ Try saying part of any button text or use: left, right, 1, 2, etc.');
+      
+      noMatchCountRef.current += 1;
+      lastNoMatchTimeRef.current = Date.now();
+      
+      // Show feedback to user
+      showVoiceNotification(`❌ Jeg hørte "${transcript}" men genkendte det ikke. Prøv at sige en del af en knap.`, 'error');
+      
+      // After 2-3 failed attempts, re-read the choices
+      if (noMatchCountRef.current >= 2 && passage?.choices && passage.choices.length > 0) {
+        console.log('🔄 Multiple failures detected, re-reading choices...');
+        noMatchCountRef.current = 0; // Reset counter
+        // Wait a bit, then re-read choices
+        setTimeout(() => {
+          if (listening && passage?.choices && passage.choices.length > 0) {
+            showVoiceNotification('🔄 Lytter igen til valgene...', 'info');
+            speakCloudThrottled();
+          }
+        }, 1500);
+      }
     };
 
     recognition.onerror = (event) => {
@@ -891,16 +937,20 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
     recognition.onend = () => {
       if (listening) {
+        // If we recently had a no-match, wait longer before restarting to avoid rapid restarts
+        const timeSinceLastNoMatch = Date.now() - lastNoMatchTimeRef.current;
+        const waitTime = timeSinceLastNoMatch < 2000 ? 2000 : 500; // Wait 2 seconds if recent no-match, otherwise 500ms
+        
         // Restart recognition if we're still supposed to be listening
         setTimeout(() => {
-          if (listening && speechRecognitionRef.current) {
+          if (listening && speechRecognitionRef.current && !voiceMatchedRef.current) {
             try {
               speechRecognitionRef.current.start();
             } catch (e) {
               console.error('Failed to restart speech recognition:', e);
             }
           }
-        }, 100);
+        }, waitTime);
       }
     };
 
@@ -920,7 +970,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         speechRecognitionRef.current = null;
       }
     };
-  }, [listening, passage?.choices, goTo]);
+  }, [listening, passage?.choices, goTo, speakCloudThrottled, showVoiceNotification]);
 
   const resetGame = useCallback(() => {
     localStorage.removeItem(SAVE_KEY);

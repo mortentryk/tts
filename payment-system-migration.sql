@@ -125,7 +125,7 @@ INSERT INTO public.subscription_plans (name, description, price, interval, is_ac
 VALUES (
   'All Access Subscription',
   'Access to all interactive stories with voice narration',
-  9.99,
+  39.00,  -- Price: 39 kr./month
   'month',
   true
 )

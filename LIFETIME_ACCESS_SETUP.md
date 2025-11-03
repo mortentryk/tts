@@ -3,8 +3,8 @@
 ## ✅ What's Been Implemented
 
 Your platform now supports **two payment options**:
-1. **Monthly Subscription** - $9.99/month (recurring)
-2. **Lifetime Access** - One-time payment (suggested $49.99)
+1. **Monthly Subscription** - 39 kr./month (recurring)
+2. **Lifetime Access** - One-time payment (349 kr.)
 
 This is simpler than individual story purchases and gives users flexibility!
 
@@ -26,7 +26,7 @@ Or run it directly:
 
 This will:
 - Add `lifetime_access` and `lifetime_access_purchased_at` columns to `users` table
-- Insert a "Lifetime Access" plan in `subscription_plans` table (price: $49.99)
+- Insert a "Lifetime Access" plan in `subscription_plans` table (price: 349 kr.)
 
 ### 2. Create Stripe Products
 
@@ -38,7 +38,8 @@ You need to create **2 products** in Stripe:
    - **Name**: "All Access Subscription"
    - **Description**: "Access to all interactive stories with voice narration"
    - **Pricing model**: Recurring
-   - **Price**: $9.99
+   - **Price**: 39 kr. (39.00 DKK)
+   - **Currency**: DKK (Danish Krone)
    - **Billing period**: Monthly
 3. Copy the **Price ID** (starts with `price_...`)
 4. Update your database:
@@ -56,8 +57,8 @@ You need to create **2 products** in Stripe:
    - **Name**: "Lifetime Access"
    - **Description**: "One-time payment for lifetime access to all stories"
    - **Pricing model**: One-time
-   - **Price**: $49.99 (or your chosen price)
-   - **Currency**: USD
+   - **Price**: 349 kr. (349.00 DKK)
+   - **Currency**: DKK (Danish Krone)
 3. Copy the **Price ID** (starts with `price_...`)
 4. Update your database:
    ```sql
@@ -123,17 +124,14 @@ The system checks in this order:
 ## 💡 Pricing Recommendations
 
 ### Suggested Prices:
-- **Monthly Subscription**: $9.99/month
-- **Lifetime Access**: $49.99 (5 months of subscription)
+- **Monthly Subscription**: 39 kr./month
+- **Lifetime Access**: 349 kr. (~9 months of subscription)
 
-### Why $49.99?
-- Equivalent to 5 months of subscription
+### Why 349 kr.?
+- Equivalent to ~9 months of subscription (39 kr./month)
 - Good value for users who plan to use long-term
-- Still profitable (many users don't stay subscribed for 5+ months)
-
-### Alternative Pricing:
-- **Lifetime Access**: $39.99 (4 months) - More attractive
-- **Lifetime Access**: $59.99 (6 months) - Better margins
+- Still profitable (many users don't stay subscribed for 9+ months)
+- Attractive pricing point for one-time payment
 
 ## 🔧 Troubleshooting
 

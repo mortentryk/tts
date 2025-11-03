@@ -19,7 +19,7 @@ INSERT INTO public.subscription_plans (name, description, price, interval, is_ac
 VALUES (
   'Lifetime Access',
   'One-time payment for lifetime access to all stories',
-  49.99,  -- Suggested price: $49.99 (5 months of subscription)
+  349.00,  -- Price: 349 kr. (~9 months of subscription at 39 kr./month)
   NULL,   -- NULL indicates it's not recurring
   true
 )

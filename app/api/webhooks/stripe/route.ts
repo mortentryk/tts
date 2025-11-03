@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyWebhookSignature } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// Required for Next.js App Router to parse raw body for webhook signature verification
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {

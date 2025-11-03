@@ -19,7 +19,7 @@ Each story you want to sell needs:
 
 You already have a subscription plan in your database:
 - Name: "All Access Subscription"
-- Price: $9.99/month
+- Price: 39 kr./month
 - **Action needed**: Create this product/price in Stripe and link it to your database
 
 ## Pricing Recommendations
@@ -41,7 +41,7 @@ This is competitive with:
 - Digital gamebooks ($4.99-$7.99)
 - Premium audiobook chapters ($4.99-$6.99)
 
-The subscription at $9.99/month gives access to multiple stories, making individual purchases attractive for users who want specific stories.
+The subscription at 39 kr./month gives access to multiple stories, making individual purchases attractive for users who want specific stories.
 
 ## Setting Up Products
 
@@ -93,7 +93,8 @@ If not already done:
    - **Name**: "All Access Subscription"
    - **Description**: "Access to all interactive stories with voice narration"
    - **Pricing model**: Recurring
-   - **Price**: $9.99
+   - **Price**: 39 kr. (39.00 DKK)
+   - **Currency**: DKK (Danish Krone)
    - **Billing period**: Monthly
 4. Copy the **Product ID** and **Price ID**
 5. Update your database:
