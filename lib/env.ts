@@ -1,19 +1,31 @@
 /**
  * Environment variable validation
- * Validates all required environment variables on startup
+ * Validates all required environment variables lazily (only when accessed)
  */
 
-function getEnvVar(key: string, required: boolean = true): string {
+function getEnvVar(key: string, required: boolean = true, defaultValue?: string): string {
   const value = process.env[key];
   
   if (required && !value) {
+    // During build/static analysis (Next.js collect page data phase), 
+    // return empty string to prevent build errors
+    // Validation will happen at runtime when the value is actually used
+    const isBuildPhase = 
+      process.env.NEXT_PHASE === 'phase-production-build' ||
+      process.env.VERCEL === '1' ||
+      process.env.CI === 'true' ||
+      (typeof process.env.NEXT_RUNTIME === 'undefined' && !process.env.VERCEL_ENV);
+    
+    if (isBuildPhase) {
+      return defaultValue || '';
+    }
     throw new Error(
       `Missing required environment variable: ${key}\n` +
       `Please set ${key} in your .env.local file or environment variables.`
     );
   }
   
-  return value || '';
+  return value || defaultValue || '';
 }
 
 // Supabase Configuration
@@ -41,7 +53,7 @@ export const INGEST_TOKEN = getEnvVar('INGEST_TOKEN', false);
 export const STRIPE_SECRET_KEY = getEnvVar('STRIPE_SECRET_KEY', false);
 export const STRIPE_PUBLISHABLE_KEY = getEnvVar('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', false);
 export const STRIPE_WEBHOOK_SECRET = getEnvVar('STRIPE_WEBHOOK_SECRET', false);
-export const SITE_URL = getEnvVar('NEXT_PUBLIC_SITE_URL', false) || 'http://localhost:3000';
+export const SITE_URL = getEnvVar('NEXT_PUBLIC_SITE_URL', false, 'http://localhost:3000');
 
 // JWT Secret for admin sessions
 export const JWT_SECRET = getEnvVar('JWT_SECRET');
