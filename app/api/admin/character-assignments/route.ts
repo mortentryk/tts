@@ -22,12 +22,14 @@ export async function GET(request: NextRequest) {
       .eq('slug', storySlug)
       .single();
 
-    if (storyError || !story) {
+    if (storyError || !story || !story.id) {
       return NextResponse.json(
         { error: 'Story not found' },
         { status: 404 }
       );
     }
+
+    const storyId = story.id;
 
     // Build query
     let query = supabaseAdmin
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
           appearance_prompt
         )
       `)
-      .eq('story_id', story.id);
+      .eq('story_id', storyId);
 
     if (nodeKey) {
       query = query.eq('node_key', nodeKey);
@@ -92,23 +94,25 @@ export async function POST(request: NextRequest) {
       .eq('slug', storySlug)
       .single();
 
-    if (storyError || !story) {
+    if (storyError || !story || !story.id) {
       return NextResponse.json(
         { error: 'Story not found' },
         { status: 404 }
       );
     }
 
+    const storyId = story.id;
+
     // Delete existing assignments for this node
     await supabaseAdmin
       .from('character_assignments')
       .delete()
-      .eq('story_id', story.id)
+      .eq('story_id', storyId)
       .eq('node_key', nodeKey);
 
     // Create new assignments
     const assignmentData = assignments.map((assignment: any) => ({
-      story_id: story.id,
+      story_id: storyId,
       node_key: nodeKey,
       character_id: assignment.characterId,
       role: assignment.role || null,
