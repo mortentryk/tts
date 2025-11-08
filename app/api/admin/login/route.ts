@@ -21,7 +21,7 @@ async function getHashedPassword(): Promise<string> {
 
   if (data?.hashed_password) {
     hashedPassword = data.hashed_password;
-    return hashedPassword;
+    return data.hashed_password;
   }
 
   // If no hash in DB, create one from env var and store it
