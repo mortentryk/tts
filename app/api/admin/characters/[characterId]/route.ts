@@ -32,12 +32,14 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
     
-    const { data: character, error: characterError } = await (supabaseAdmin
+    const query = supabaseAdmin
       .from('characters')
       .update(updateData as any)
       .eq('id', characterId)
       .select()
-      .single());
+      .single();
+    
+    const { data: character, error: characterError } = await (query as any);
 
     if (characterError) {
       return NextResponse.json(
