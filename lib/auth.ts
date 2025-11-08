@@ -1,4 +1,4 @@
-import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
 import { JWT_SECRET } from './env';
 import bcrypt from 'bcryptjs';
@@ -8,6 +8,15 @@ const secretKey = new TextEncoder().encode(JWT_SECRET || 'fallback-secret-change
 export interface AdminSession {
   isAdmin: boolean;
   loggedInAt: number;
+}
+
+/**
+ * Type guard to check if a JWT payload is a valid AdminSession
+ */
+function isAdminSessionPayload(payload: JWTPayload | unknown): payload is AdminSession {
+  if (!payload || typeof payload !== 'object') return false;
+  const record = payload as Record<string, unknown>;
+  return typeof record.isAdmin === 'boolean' && typeof record.loggedInAt === 'number';
 }
 
 /**
@@ -30,19 +39,10 @@ export async function verifyAdminSession(token: string): Promise<AdminSession | 
   try {
     const { payload } = await jwtVerify(token, secretKey);
     
-    // Validate payload has required properties
-    const payloadObj = payload as Record<string, unknown>;
-    if (
-      typeof payload === 'object' &&
-      payload !== null &&
-      'isAdmin' in payload &&
-      'loggedInAt' in payload &&
-      typeof payloadObj.isAdmin === 'boolean' &&
-      typeof payloadObj.loggedInAt === 'number'
-    ) {
+    if (isAdminSessionPayload(payload)) {
       return {
-        isAdmin: payloadObj.isAdmin,
-        loggedInAt: payloadObj.loggedInAt,
+        isAdmin: payload.isAdmin,
+        loggedInAt: payload.loggedInAt,
       };
     }
     
