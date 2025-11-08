@@ -31,15 +31,19 @@ export async function verifyAdminSession(token: string): Promise<AdminSession | 
     const { payload } = await jwtVerify(token, secretKey);
     
     // Validate payload has required properties
+    const payloadObj = payload as Record<string, unknown>;
     if (
       typeof payload === 'object' &&
       payload !== null &&
       'isAdmin' in payload &&
       'loggedInAt' in payload &&
-      typeof payload.isAdmin === 'boolean' &&
-      typeof payload.loggedInAt === 'number'
+      typeof payloadObj.isAdmin === 'boolean' &&
+      typeof payloadObj.loggedInAt === 'number'
     ) {
-      return payload as AdminSession;
+      return {
+        isAdmin: payloadObj.isAdmin,
+        loggedInAt: payloadObj.loggedInAt,
+      };
     }
     
     return null;
