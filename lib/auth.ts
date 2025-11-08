@@ -29,7 +29,20 @@ export async function createAdminSession(): Promise<string> {
 export async function verifyAdminSession(token: string): Promise<AdminSession | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey);
-    return payload as AdminSession;
+    
+    // Validate payload has required properties
+    if (
+      typeof payload === 'object' &&
+      payload !== null &&
+      'isAdmin' in payload &&
+      'loggedInAt' in payload &&
+      typeof payload.isAdmin === 'boolean' &&
+      typeof payload.loggedInAt === 'number'
+    ) {
+      return payload as AdminSession;
+    }
+    
+    return null;
   } catch (error) {
     return null;
   }
