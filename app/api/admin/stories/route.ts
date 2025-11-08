@@ -1,16 +1,12 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ooyzdksmeglhocjlaouo.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MzMzODksImV4cCI6MjA3NjIwOTM4OX0.DbgORlJkyBae_VIg0b6Pk-bSuzZ8vmb2hNHVnhE7wI8';
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export async function GET() {
-  try {
+export async function GET(request: NextRequest) {
+  return withAdminAuth(request, async () => {
+    try {
     // Get all stories with click counts
-    const { data: stories, error } = await supabase
+    const { data: stories, error } = await supabaseAdmin
       .from('stories')
       .select('*')
       .order('created_at', { ascending: false });
@@ -23,12 +19,12 @@ export async function GET() {
     // Get node counts for each story
     const storiesWithCounts = await Promise.all(
       stories.map(async (story) => {
-        const { count: nodeCount } = await supabase
+        const { count: nodeCount } = await supabaseAdmin
           .from('story_nodes')
           .select('*', { count: 'exact', head: true })
           .eq('story_id', story.id);
 
-        const { count: choiceCount } = await supabase
+        const { count: choiceCount } = await supabaseAdmin
           .from('story_choices')
           .select('*', { count: 'exact', head: true })
           .eq('story_id', story.id);
@@ -41,11 +37,11 @@ export async function GET() {
       })
     );
 
-    console.log('✅ Admin stories loaded:', storiesWithCounts.length);
-    return NextResponse.json(storiesWithCounts);
-
-  } catch (error) {
-    console.error('❌ API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+      console.log('✅ Admin stories loaded:', storiesWithCounts.length);
+      return NextResponse.json(storiesWithCounts);
+    } catch (error) {
+      console.error('❌ API error:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+  });
 }

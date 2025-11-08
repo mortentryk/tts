@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase admin client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ooyzdksmeglhocjlaouo.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDYzMzM4OSwiZXhwIjoyMDc2MjA5Mzg5fQ.97T-OTcCNBk0qrs-kdqoGQbhsFDyWCQ5Z_x4bbPPbTI';
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+import { supabaseAdmin } from '@/lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
 
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { storySlug } = await request.json();
 
     if (!storySlug) {
@@ -42,14 +38,14 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Story ${storySlug} ${updatedStory.is_published ? 'published' : 'unpublished'}`);
 
-    return NextResponse.json({
-      success: true,
-      is_published: updatedStory.is_published,
-      message: `Story ${updatedStory.is_published ? 'published' : 'unpublished'} successfully`
-    });
-
-  } catch (error) {
-    console.error('❌ Toggle publish error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+      return NextResponse.json({
+        success: true,
+        is_published: updatedStory.is_published,
+        message: `Story ${updatedStory.is_published ? 'published' : 'unpublished'} successfully`
+      });
+    } catch (error) {
+      console.error('❌ Toggle publish error:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+  });
 }

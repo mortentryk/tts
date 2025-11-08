@@ -26,9 +26,10 @@ export default function AdminLogin() {
       const data = await response.json();
 
       if (response.ok) {
-        // Store login state in localStorage
-        localStorage.setItem('admin_logged_in', 'true');
+        // Session is stored in httpOnly cookie by server
+        // Redirect to admin dashboard
         router.push('/admin');
+        router.refresh(); // Refresh to update server-side session check
       } else {
         setError(data.error || 'Invalid password');
       }
