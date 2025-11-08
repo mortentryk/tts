@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../../lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // GET - Get character assignments for a story node
 export async function GET(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get story ID
-    const { data: story, error: storyError } = await supabase
+    const { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
       .select('id')
       .eq('slug', storySlug)
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build query
-    let query = supabase
+    let query = supabaseAdmin
       .from('character_assignments')
       .select(`
         *,
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get story ID
-    const { data: story, error: storyError } = await supabase
+    const { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
       .select('id')
       .eq('slug', storySlug)
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Delete existing assignments for this node
-    await supabase
+    await supabaseAdmin
       .from('character_assignments')
       .delete()
       .eq('story_id', story.id)
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       action: assignment.action || null,
     }));
 
-    const { data: newAssignments, error: assignmentsError } = await supabase
+    const { data: newAssignments, error: assignmentsError } = await supabaseAdmin
       .from('character_assignments')
       .insert(assignmentData)
       .select(`
