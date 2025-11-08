@@ -1,17 +1,20 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY } from './env'
+import { SUPABASE_SERVICE_ROLE_KEY } from './env'
+
+// Read NEXT_PUBLIC_* variables directly from process.env to avoid client-side import issues
+// These must be available at build time and are embedded in the client bundle
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 let supabaseClient: SupabaseClient | null = null;
 let supabaseAdminClient: SupabaseClient | null = null;
 
 function getSupabaseClient(): SupabaseClient {
   if (!supabaseClient) {
-    const url = SUPABASE_URL;
-    const key = SUPABASE_ANON_KEY;
-    if (!url || !key) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error('Missing Supabase environment variables. Please check your .env.local file.')
     }
-    supabaseClient = createClient(url, key);
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
   return supabaseClient;
 }
