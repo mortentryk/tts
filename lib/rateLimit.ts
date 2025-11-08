@@ -85,7 +85,7 @@ export function getClientIP(request: NextRequest): string {
 /**
  * Rate limit middleware for API routes
  */
-export function withRateLimit(
+export async function withRateLimit(
   request: NextRequest,
   limit: number,
   windowMs: number,
@@ -116,10 +116,13 @@ export function withRateLimit(
 
   // Add rate limit headers to response
   const response = await handler();
-  response.headers.set('X-RateLimit-Limit', limit.toString());
-  response.headers.set('X-RateLimit-Remaining', result.remaining.toString());
-  response.headers.set('X-RateLimit-Reset', result.resetAt.toString());
+  
+  // Clone response to ensure headers are mutable
+  const newResponse = response.clone();
+  newResponse.headers.set('X-RateLimit-Limit', limit.toString());
+  newResponse.headers.set('X-RateLimit-Remaining', result.remaining.toString());
+  newResponse.headers.set('X-RateLimit-Reset', result.resetAt.toString());
 
-  return response;
+  return newResponse;
 }
 
