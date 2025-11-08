@@ -22,14 +22,14 @@ export async function GET(request: NextRequest) {
       .eq('slug', storySlug)
       .single();
 
-    if (storyError || !story || !story.id) {
+    if (storyError || !story) {
       return NextResponse.json(
         { error: 'Story not found' },
         { status: 404 }
       );
     }
 
-    const storyId = story.id;
+    const storyId = (story as { id: string }).id;
 
     // Build query
     let query = supabaseAdmin
@@ -94,14 +94,14 @@ export async function POST(request: NextRequest) {
       .eq('slug', storySlug)
       .single();
 
-    if (storyError || !story || !story.id) {
+    if (storyError || !story) {
       return NextResponse.json(
         { error: 'Story not found' },
         { status: 404 }
       );
     }
 
-    const storyId = story.id;
+    const storyId = (story as { id: string }).id;
 
     // Delete existing assignments for this node
     await supabaseAdmin
