@@ -22,10 +22,10 @@ export async function requireAdminAuth(request: NextRequest) {
  * Wrapper function for admin API routes
  * Usage: export async function GET(request: NextRequest) { return withAdminAuth(request, async () => { ... }); }
  */
-export async function withAdminAuth<T>(
+export async function withAdminAuth(
   request: NextRequest,
-  handler: () => Promise<NextResponse<T>>
-): Promise<NextResponse<T>> {
+  handler: () => Promise<NextResponse<any>>
+): Promise<NextResponse<any>> {
   const authError = await requireAdminAuth(request);
   if (authError) {
     return authError;
