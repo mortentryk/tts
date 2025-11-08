@@ -24,18 +24,20 @@ export async function PUT(
     }
 
     // Update character
-    const { data: character, error: characterError } = await supabaseAdmin
+    const updateData = {
+      name,
+      description: description || null,
+      reference_image_url: referenceImageUrl || null,
+      appearance_prompt: appearancePrompt || null,
+      updated_at: new Date().toISOString(),
+    };
+    
+    const { data: character, error: characterError } = await (supabaseAdmin
       .from('characters')
-      .update({
-        name,
-        description: description || null,
-        reference_image_url: referenceImageUrl || null,
-        appearance_prompt: appearancePrompt || null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData as any)
       .eq('id', characterId)
       .select()
-      .single();
+      .single());
 
     if (characterError) {
       return NextResponse.json(
