@@ -3,6 +3,8 @@
  * For production, consider using Redis or Upstash
  */
 
+import { NextRequest } from 'next/server';
+
 interface RateLimitStore {
   [key: string]: {
     count: number;
@@ -79,8 +81,6 @@ export function getClientIP(request: NextRequest): string {
   const ip = forwarded?.split(',')[0] || realIP || 'unknown';
   return ip;
 }
-
-import { NextRequest } from 'next/server';
 
 /**
  * Rate limit middleware for API routes
