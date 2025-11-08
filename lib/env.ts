@@ -7,22 +7,17 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string)
   const value = process.env[key];
   
   if (required && !value) {
-    // During build/static analysis (Next.js collect page data phase), 
-    // return empty string to prevent build errors
-    // Check if we're in the build phase by looking for Next.js build indicators
-    const isBuildPhase = 
-      process.env.NEXT_PHASE === 'phase-production-build' ||
-      (typeof process.env.NEXT_RUNTIME === 'undefined' && 
-       typeof window === 'undefined' && 
-       process.env.NODE_ENV !== 'production');
+    // Only skip validation during the specific Next.js build phase
+    // when collecting page data (static analysis)
+    // This prevents build errors while still validating at runtime
+    const isCollectingPageData = process.env.NEXT_PHASE === 'phase-production-build';
     
-    // Only skip validation during actual build phase when collecting page data
-    // At runtime (when NEXT_RUNTIME is set or we're in production), always validate
-    if (isBuildPhase && !process.env.NEXT_RUNTIME) {
+    if (isCollectingPageData) {
+      // During build phase, return empty string to allow build to complete
       return defaultValue || '';
     }
     
-    // At runtime, always validate required env vars
+    // At runtime (all other cases), always validate required env vars
     throw new Error(
       `Missing required environment variable: ${key}\n` +
       `Please set ${key} in your .env.local file or environment variables.`
