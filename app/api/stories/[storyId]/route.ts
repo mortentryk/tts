@@ -29,28 +29,38 @@ export async function GET(
       .from('stories')
       .select('*')
       .eq('slug', storyId)
-      .single();
+      .limit(1);
+    
+    // Handle single result (or no result)
+    if (slugError) {
+      storyBySlug = null;
+    } else if (storyBySlug && storyBySlug.length > 0) {
+      storyBySlug = storyBySlug[0];
+    } else {
+      storyBySlug = null;
+      slugError = { code: 'PGRST116', message: 'No rows returned' } as any;
+    }
     
     // If not found, try normalized slug
-    if (slugError || !storyBySlug) {
+    if ((slugError && slugError.code !== 'PGRST116') || !storyBySlug) {
       if (normalizedSlug !== storyId.toLowerCase()) {
         console.log('📝 Trying normalized slug...');
         const normalizedResult = await supabaseAdmin
           .from('stories')
           .select('*')
           .eq('slug', normalizedSlug)
-          .single();
+          .limit(1);
         
-        if (normalizedResult.data) {
-          storyBySlug = normalizedResult.data;
+        if (normalizedResult.data && normalizedResult.data.length > 0) {
+          storyBySlug = normalizedResult.data[0];
           slugError = null;
-        } else if (normalizedResult.error) {
+        } else if (normalizedResult.error && normalizedResult.error.code !== 'PGRST116') {
           console.log('⚠️ Normalized slug query error:', normalizedResult.error.message);
         }
       }
     }
     
-    // Log slug error details for debugging
+    // Log slug error details for debugging (PGRST116 means "no rows", which is expected)
     if (slugError && slugError.code !== 'PGRST116') {
       console.error('❌ Slug query error:', slugError);
       console.error('   Code:', slugError.code);
@@ -62,27 +72,34 @@ export async function GET(
     let story = storyBySlug;
     let storyError = slugError;
     
-    if (slugError || !storyBySlug) {
+    if ((slugError && slugError.code !== 'PGRST116') || !storyBySlug) {
       console.log('📝 Story not found by slug, trying by ID...');
       const result = await supabaseAdmin
         .from('stories')
         .select('*')
         .eq('id', storyId)
-        .single();
+        .limit(1);
       
-      story = result.data;
-      storyError = result.error;
+      if (result.data && result.data.length > 0) {
+        story = result.data[0];
+        storyError = null;
+      } else {
+        story = null;
+        storyError = result.error || { code: 'PGRST116', message: 'No rows returned' } as any;
+      }
     }
 
-    if (storyError || !story) {
-      console.error('❌ Story fetch error:', storyError);
-      console.error('❌ StoryId searched:', storyId);
-      console.error('❌ Normalized slug:', normalizedSlug);
-      if (storyError) {
+    // Check if story was found (PGRST116 means "no rows", which is expected for not found)
+    if (!story || (storyError && storyError.code !== 'PGRST116')) {
+      // Only log if it's a real error (not just "not found")
+      if (storyError && storyError.code !== 'PGRST116') {
+        console.error('❌ Story fetch error:', storyError);
         console.error('   Error code:', storyError.code);
         console.error('   Error message:', storyError.message);
         console.error('   Error details:', storyError.details);
       }
+      console.error('❌ StoryId searched:', storyId);
+      console.error('❌ Normalized slug:', normalizedSlug);
       return NextResponse.json({ 
         error: 'Story not found',
         message: 'The story does not exist. Please check the story ID or slug.',

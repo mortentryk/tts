@@ -40,18 +40,19 @@ export async function GET() {
         }
 
         // Otherwise, try to get the first node image
+        // Don't use .single() - it throws if no results found
         try {
-          const { data: firstNode } = await supabase
+          const { data: nodes, error: nodeError } = await supabase
             .from('story_nodes')
             .select('image_url, sort_index')
             .eq('story_id', story.id)
             .not('image_url', 'is', null)
             .order('sort_index', { ascending: true })
-            .limit(1)
-            .single();
+            .limit(1);
 
-          if (firstNode?.image_url) {
-            story.cover_image_url = firstNode.image_url;
+          // Check if we got any results (don't assume .single() worked)
+          if (!nodeError && nodes && nodes.length > 0 && nodes[0]?.image_url) {
+            story.cover_image_url = nodes[0].image_url;
           }
         } catch (nodeError) {
           // If no node found or error, just continue without cover image
