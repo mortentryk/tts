@@ -3,6 +3,18 @@ import { ADMIN_PASSWORD } from '@/lib/env';
 import { createAdminSession, setAdminSession, verifyPassword, hashPassword } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
+
 // Store hashed password in database (one-time setup)
 // For now, we'll use a simple comparison but log a warning
 let hashedPassword: string | null = null;
@@ -44,7 +56,18 @@ async function getHashedPassword(): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      console.error('Failed to parse request body:', e);
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+    
+    const { password } = body;
 
     if (!password) {
       return NextResponse.json({ error: 'Password required' }, { status: 400 });

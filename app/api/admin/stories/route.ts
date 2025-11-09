@@ -13,7 +13,16 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('❌ Supabase error:', error);
-      return NextResponse.json({ error: 'Failed to load stories' }, { status: 500 });
+      console.error('❌ Error details:', JSON.stringify(error, null, 2));
+      return NextResponse.json({ 
+        error: 'Failed to load stories',
+        details: error.message 
+      }, { status: 500 });
+    }
+
+    if (!stories) {
+      console.error('❌ No stories data returned');
+      return NextResponse.json({ error: 'No stories found' }, { status: 404 });
     }
 
     // Get node counts for each story
