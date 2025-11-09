@@ -159,13 +159,26 @@ export async function POST(request: NextRequest) {
 
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
+      
+      // Skip rows without ID or text
       if (!row.id || !row.text) continue;
+      
+      // Validate node ID - should be a simple identifier (not long text)
+      // Node IDs should be short (max 50 chars) and not look like paragraph text
+      const nodeId = String(row.id).trim();
+      const nodeText = String(row.text).trim();
+      
+      // Skip if ID looks like it's actually text content (longer than 50 chars or contains sentence punctuation)
+      if (nodeId.length > 50 || /[.!?]\s/.test(nodeId) || nodeId === nodeText.substring(0, nodeId.length)) {
+        console.warn(`⚠️ Skipping row ${rowIndex + 1}: ID "${nodeId.substring(0, 30)}..." looks like text, not a node ID`);
+        continue;
+      }
 
       // Create node
       const node: any = {
         story_id: '', // Will be set after story creation
-        node_key: row.id,
-        text_md: row.text,
+        node_key: nodeId,
+        text_md: nodeText,
         image_url: null, // Will be set based on image field
         tts_ssml: null,
         dice_check: null,
@@ -173,18 +186,18 @@ export async function POST(request: NextRequest) {
       };
 
       // Handle image field - check if it's an asset reference or full URL
-      if (row.image) {
+      // Only update image if CSV explicitly provides a valid image value
+      if (row.image && row.image.trim()) {
         if (isAssetReference(row.image)) {
           // It's an asset reference like "image-1" - store as-is for later processing
           node.image_url = row.image;
         } else if (row.image.startsWith('http')) {
           // It's a full URL - use directly
           node.image_url = row.image;
-        } else {
-          // Empty or invalid - set to null
-          node.image_url = null;
         }
+        // If image field exists but is invalid, leave undefined so existing image is preserved
       }
+      // If no image field or empty, leave undefined so existing image is preserved
 
       // Add dice check if present
       if (row.check_stat && row.check_dc) {
@@ -351,13 +364,26 @@ export async function POST(request: NextRequest) {
     const csvNodeKeys = deduplicatedNodes.map(n => n.node_key);
 
     // Delete nodes that are NOT in the new CSV (like old END3)
+    // Also delete any nodes with invalid node_keys (text fragments instead of IDs)
     if (existingNodes && existingNodes.length > 0) {
       const nodesToDelete = existingNodes
-        .filter(n => !csvNodeKeys.includes(n.node_key))
+        .filter(n => {
+          // Delete if not in CSV
+          if (!csvNodeKeys.includes(n.node_key)) return true;
+          
+          // Delete if node_key looks like text content (invalid ID)
+          const key = String(n.node_key);
+          if (key.length > 50 || /[.!?]\s/.test(key)) {
+            console.warn(`🗑️ Deleting invalid node with text-like key: "${key.substring(0, 30)}..."`);
+            return true;
+          }
+          
+          return false;
+        })
         .map(n => n.node_key);
       
       if (nodesToDelete.length > 0) {
-        console.log('🗑️ Deleting removed nodes:', nodesToDelete.join(', '));
+        console.log('🗑️ Deleting removed/invalid nodes:', nodesToDelete.join(', '));
         await supabaseAdmin
           .from('story_nodes')
           .delete()
