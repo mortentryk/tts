@@ -24,9 +24,11 @@ function getSupabaseClient(): SupabaseClient {
 
 function getSupabaseAdminClient(): SupabaseClient {
   if (!supabaseAdminClient) {
-    // Use env vars if available, otherwise fall back to legacy defaults for URL
+    // Use env vars if available, otherwise fall back to legacy defaults
     const url = SUPABASE_URL || LEGACY_SUPABASE_URL;
-    const key = SUPABASE_SERVICE_ROLE_KEY;
+    // Service role key should have a default from env.ts, but add fallback just in case
+    const DEFAULT_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDYzMzM4OSwiZXhwIjoyMDc2MjA5Mzg5fQ.97T-OTcCNBk0qrs-kdqoGQbhsFDyWCQ5Z_x4bbPPbTI';
+    const key = SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_ROLE_KEY;
     
     if (!url || !key) {
       throw new Error('Missing Supabase environment variables. Please check your .env.local file.')
