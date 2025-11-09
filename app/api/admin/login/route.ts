@@ -50,6 +50,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password required' }, { status: 400 });
     }
 
+    // Debug: Log if ADMIN_PASSWORD is available (without exposing the value)
+    console.log('ADMIN_PASSWORD available:', !!ADMIN_PASSWORD, 'Length:', ADMIN_PASSWORD?.length || 0);
+    
     if (!ADMIN_PASSWORD) {
       console.error('ADMIN_PASSWORD environment variable is not set');
       return NextResponse.json(
@@ -59,8 +62,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Get hashed password from database or create from env
-    const hash = await getHashedPassword();
-    const isValid = await verifyPassword(password, hash);
+    let hash = await getHashedPassword();
+    console.log('Hash retrieved, length:', hash?.length || 0);
+    let isValid = await verifyPassword(password, hash);
+    console.log('Password validation result:', isValid);
+
+    // If password doesn't match but ADMIN_PASSWORD matches the provided password,
+    // update the hash in the database (handles case where ADMIN_PASSWORD changed)
+    if (!isValid && ADMIN_PASSWORD === password) {
+      console.log('Password matches ADMIN_PASSWORD directly, updating hash in database...');
+      const newHash = await hashPassword(ADMIN_PASSWORD);
+      await supabaseAdmin.from('admin_settings').upsert({
+        key: 'admin_password_hash',
+        hashed_password: newHash,
+        updated_at: new Date().toISOString(),
+      });
+      hashedPassword = newHash;
+      hash = newHash;
+      isValid = true;
+    }
 
     if (isValid) {
       // Create session token
