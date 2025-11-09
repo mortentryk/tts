@@ -15,6 +15,14 @@ export async function OPTIONS() {
   });
 }
 
+// Debug: GET handler to test if route is accessible
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'Login route is accessible',
+    methods: ['POST', 'OPTIONS', 'GET']
+  });
+}
+
 // Store hashed password in database (one-time setup)
 // For now, we'll use a simple comparison but log a warning
 let hashedPassword: string | null = null;
@@ -56,6 +64,9 @@ async function getHashedPassword(): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
+    // Log that the route handler was called
+    console.log('POST /api/admin/login called');
+    
     let body;
     try {
       body = await request.json();
