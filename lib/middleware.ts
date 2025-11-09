@@ -6,16 +6,24 @@ import { getAdminSession } from './auth';
  * Use this in admin API route handlers
  */
 export async function requireAdminAuth(request: NextRequest) {
-  const session = await getAdminSession();
+  try {
+    const session = await getAdminSession();
 
-  if (!session || !session.isAdmin) {
+    if (!session || !session.isAdmin) {
+      return NextResponse.json(
+        { error: 'Unauthorized: Admin authentication required' },
+        { status: 401 }
+      );
+    }
+
+    return null; // No error, proceed
+  } catch (error: any) {
+    console.error('❌ Error in requireAdminAuth:', error);
     return NextResponse.json(
-      { error: 'Unauthorized: Admin authentication required' },
-      { status: 401 }
+      { error: 'Authentication check failed' },
+      { status: 500 }
     );
   }
-
-  return null; // No error, proceed
 }
 
 /**

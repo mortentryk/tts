@@ -61,12 +61,18 @@ export async function getAdminSession(): Promise<AdminSession | null> {
     const token = cookieStore.get('admin_session')?.value;
 
     if (!token) {
+      console.log('No admin_session cookie found');
       return null;
     }
 
-    return verifyAdminSession(token);
-  } catch (error) {
+    const session = await verifyAdminSession(token);
+    if (!session) {
+      console.log('Invalid or expired admin session token');
+    }
+    return session;
+  } catch (error: any) {
     // Cookies might not be available in all contexts
+    console.error('Error getting admin session:', error?.message || error);
     return null;
   }
 }
