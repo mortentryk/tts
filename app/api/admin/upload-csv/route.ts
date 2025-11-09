@@ -281,8 +281,21 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Get list of node_keys from CSV
-    const csvNodeKeys = nodes.map(n => n.node_key);
+    // Deduplicate nodes by story_id,node_key (keep last occurrence)
+    // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+    const nodeMap = new Map<string, any>();
+    nodes.forEach(node => {
+      const key = `${node.story_id}:${node.node_key}`;
+      nodeMap.set(key, node);
+    });
+    const deduplicatedNodes = Array.from(nodeMap.values());
+    
+    if (deduplicatedNodes.length !== nodes.length) {
+      console.log(`⚠️ Removed ${nodes.length - deduplicatedNodes.length} duplicate nodes`);
+    }
+
+    // Get list of node_keys from CSV (using deduplicated nodes)
+    const csvNodeKeys = deduplicatedNodes.map(n => n.node_key);
 
     // Delete nodes that are NOT in the new CSV (like old END3)
     if (existingNodes && existingNodes.length > 0) {
@@ -301,10 +314,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert nodes (update existing, insert new)
-    console.log('📝 Upserting', nodes.length, 'nodes from CSV');
+    console.log('📝 Upserting', deduplicatedNodes.length, 'nodes from CSV');
     const { error: nodesError } = await supabaseAdmin
       .from('story_nodes')
-      .upsert(nodes, { 
+      .upsert(deduplicatedNodes, { 
         onConflict: 'story_id,node_key',
         ignoreDuplicates: false 
       });
@@ -340,7 +353,7 @@ export async function POST(request: NextRequest) {
         id: story.id,
         slug: storySlug,
         title: metadata.title || storySlug,
-        nodes: nodes.length,
+        nodes: deduplicatedNodes.length,
         choices: choices.length,
         published: publishStory
       }
