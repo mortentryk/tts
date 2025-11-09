@@ -6,20 +6,15 @@
 function getEnvVar(key: string, required: boolean = true, defaultValue?: string): string {
   const value = process.env[key];
   
-  // NEXT_PUBLIC_* variables must be available at build time to be embedded in client bundle
-  // Always read them directly - they should be set in Vercel during build
+  // NEXT_PUBLIC_* variables are embedded by Next.js at build time
+  // For client-side safety, never throw errors for these - just return the value or empty string
   const isPublicVar = key.startsWith('NEXT_PUBLIC_');
   
   if (required && !value) {
-    // For public variables, they must be available at build time
-    // For server-only variables, we can skip validation during build phase
+    // For public variables, return empty string if missing (Next.js will embed the actual value at build time)
+    // This prevents client-side errors when the module is bundled
     if (isPublicVar) {
-      // Public vars must be available - throw error if missing
-      throw new Error(
-        `Missing required environment variable: ${key}\n` +
-        `Please set ${key} in your .env.local file or environment variables.\n` +
-        `Note: NEXT_PUBLIC_* variables must be available at build time.`
-      );
+      return defaultValue || '';
     }
     
     // For server-only variables, skip validation during build phase
@@ -30,7 +25,7 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string)
       return defaultValue || '';
     }
     
-    // At runtime, always validate required env vars
+    // At runtime, validate server-only env vars
     throw new Error(
       `Missing required environment variable: ${key}\n` +
       `Please set ${key} in your .env.local file or environment variables.`
