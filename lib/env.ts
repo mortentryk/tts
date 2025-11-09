@@ -11,14 +11,18 @@ const LEGACY_DEFAULTS = {
 };
 
 function getEnvVar(key: string, required: boolean = true, defaultValue?: string, fallbackKey?: string): string {
+  // Detect if we're in client-side code (browser environment)
+  const isClientSide = typeof window !== 'undefined';
+  
   let value = process.env[key];
   
   // NEXT_PUBLIC_* variables are embedded by Next.js at build time
   // For client-side safety, never throw errors for these - use fallbacks instead
   const isPublicVar = key.startsWith('NEXT_PUBLIC_');
+  const isServerOnlyVar = !isPublicVar;
   
-  // If value is missing and we have a fallback key, try the fallback
-  if (!value && fallbackKey) {
+  // If value is missing and we have a fallback key, try the fallback (only on server)
+  if (!value && fallbackKey && !isClientSide) {
     value = process.env[fallbackKey];
   }
   
@@ -34,6 +38,12 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string,
       return defaultValue || '';
     }
     
+    // For server-only variables in client-side code, return empty string (never throw)
+    // Server-only vars should never be accessed in client code, but we need to prevent crashes
+    if (isClientSide) {
+      return defaultValue || '';
+    }
+    
     // For server-only variables, skip validation during build phase
     const isCollectingPageData = process.env.NEXT_PHASE === 'phase-production-build';
     
@@ -42,7 +52,7 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string,
       return defaultValue || '';
     }
     
-    // At runtime, validate server-only env vars
+    // At runtime on server, validate server-only env vars
     throw new Error(
       `Missing required environment variable: ${key}\n` +
       `Please set ${key} in your .env.local file or environment variables.`
