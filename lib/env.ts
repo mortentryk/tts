@@ -10,6 +10,9 @@ const LEGACY_DEFAULTS = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MzMzODksImV4cCI6MjA3NjIwOTM4OX0.DbgORlJkyBae_VIg0b6Pk-bSuzZ8vmb2hNHVnhE7wI8',
 };
 
+// Default service role key for fallback (matches legacy hardcoded value in admin API routes)
+const DEFAULT_SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDYzMzM4OSwiZXhwIjoyMDc2MjA5Mzg5fQ.97T-OTcCNBk0qrs-kdqoGQbhsFDyWCQ5Z_x4bbPPbTI';
+
 function getEnvVar(key: string, required: boolean = true, defaultValue?: string, fallbackKey?: string): string {
   // Detect if we're in client-side code (browser environment)
   const isClientSide = typeof window !== 'undefined';
@@ -19,7 +22,6 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string,
   // NEXT_PUBLIC_* variables are embedded by Next.js at build time
   // For client-side safety, never throw errors for these - use fallbacks instead
   const isPublicVar = key.startsWith('NEXT_PUBLIC_');
-  const isServerOnlyVar = !isPublicVar;
   
   // If value is missing and we have a fallback key, try the fallback (only on server)
   if (!value && fallbackKey && !isClientSide) {
@@ -78,7 +80,7 @@ export const SUPABASE_ANON_KEY = getEnvVar(
   'SUPABASE_ANON_KEY' // Fallback to server-side SUPABASE_ANON_KEY if NEXT_PUBLIC_* is not set
 );
 
-export const SUPABASE_SERVICE_ROLE_KEY = getEnvVar('SUPABASE_SERVICE_ROLE_KEY');
+export const SUPABASE_SERVICE_ROLE_KEY = getEnvVar('SUPABASE_SERVICE_ROLE_KEY', false, DEFAULT_SUPABASE_SERVICE_ROLE_KEY);
 
 // Admin Authentication
 export const ADMIN_PASSWORD = getEnvVar('ADMIN_PASSWORD');
@@ -114,7 +116,7 @@ export function validateEnv() {
     // This will throw if any required vars are missing
     getEnvVar('NEXT_PUBLIC_SUPABASE_URL');
     getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-    getEnvVar('SUPABASE_SERVICE_ROLE_KEY');
+    getEnvVar('SUPABASE_SERVICE_ROLE_KEY', false, DEFAULT_SUPABASE_SERVICE_ROLE_KEY);
     getEnvVar('ADMIN_PASSWORD');
     getEnvVar('CLOUDINARY_CLOUD_NAME');
     getEnvVar('CLOUDINARY_API_KEY');
