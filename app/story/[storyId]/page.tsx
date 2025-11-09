@@ -1170,7 +1170,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             />
           )}
           
-          <p className="text-base sm:text-lg leading-relaxed text-white">
+          <p className="text-base sm:text-lg leading-relaxed text-white whitespace-pre-wrap">
             {passage?.text || "Story not found. Please check your story data."}
           </p>
         </div>

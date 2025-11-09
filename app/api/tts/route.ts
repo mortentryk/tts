@@ -44,6 +44,118 @@ function generateTextHash(text: string): string {
   return crypto.createHash('md5').update(text).digest('hex');
 }
 
+// Split text into chunks at sentence boundaries, respecting ElevenLabs 5000 char limit
+function chunkText(text: string, maxChunkSize: number = 5000): string[] {
+  if (text.length <= maxChunkSize) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let currentChunk = '';
+  
+  // Split by sentences (period, exclamation, question mark, colon followed by space or newline)
+  // Use a regex that captures the sentence including its punctuation
+  const sentenceRegex = /([^.!?:]+[.!?:]+(?:\s+|\n+|$))/g;
+  const sentences: string[] = [];
+  let match;
+  
+  while ((match = sentenceRegex.exec(text)) !== null) {
+    sentences.push(match[0]);
+  }
+  
+  // If no sentences found (unusual), split by paragraphs
+  if (sentences.length === 0) {
+    const paragraphs = text.split(/\n\n+/);
+    for (const para of paragraphs) {
+      if (para.length <= maxChunkSize) {
+        chunks.push(para.trim());
+      } else {
+        // Paragraph too long, split by sentences or words
+        const paraSentences = para.match(/[^.!?:]+[.!?:]+(?:\s+|\n+|$)/g) || [];
+        for (const sent of paraSentences) {
+          if ((currentChunk + sent).length <= maxChunkSize) {
+            currentChunk += sent;
+          } else {
+            if (currentChunk.trim()) chunks.push(currentChunk.trim());
+            currentChunk = sent;
+          }
+        }
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+          currentChunk = '';
+        }
+      }
+    }
+    return chunks.filter(c => c.length > 0);
+  }
+  
+  // Process sentences
+  for (const sentence of sentences) {
+    const testChunk = currentChunk + sentence;
+    
+    if (testChunk.length <= maxChunkSize) {
+      currentChunk = testChunk;
+    } else {
+      // Current chunk is full, save it and start new one
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+      }
+      
+      // If single sentence is too long, split it by words
+      if (sentence.length > maxChunkSize) {
+        const words = sentence.split(/(\s+)/);
+        let wordChunk = '';
+        for (const word of words) {
+          if ((wordChunk + word).length <= maxChunkSize) {
+            wordChunk += word;
+          } else {
+            if (wordChunk.trim()) {
+              chunks.push(wordChunk.trim());
+            }
+            wordChunk = word;
+          }
+        }
+        currentChunk = wordChunk;
+      } else {
+        currentChunk = sentence;
+      }
+    }
+  }
+  
+  // Add the last chunk
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks.filter(c => c.length > 0);
+}
+
+// Concatenate multiple audio buffers (MP3 format)
+async function concatenateAudioBuffers(buffers: ArrayBuffer[]): Promise<ArrayBuffer> {
+  // For MP3, we can't easily concatenate without decoding/re-encoding
+  // Instead, we'll use a simple approach: combine the buffers
+  // Note: This works for raw audio but MP3 needs proper concatenation
+  // For now, we'll return the first buffer and log a warning
+  // In production, you'd want to use an audio library like ffmpeg
+  
+  if (buffers.length === 1) {
+    return buffers[0];
+  }
+  
+  // Simple concatenation (may cause audio glitches with MP3)
+  // Better solution would be to decode, concatenate, and re-encode
+  const totalLength = buffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  
+  for (const buffer of buffers) {
+    combined.set(new Uint8Array(buffer), offset);
+    offset += buffer.byteLength;
+  }
+  
+  return combined.buffer;
+}
+
 export async function OPTIONS(request: NextRequest) {
   const response = new NextResponse(null, { status: 204 });
   return setCors(response, request);
@@ -120,10 +232,75 @@ export async function POST(request: NextRequest) {
       }
 
       console.log("🎙️ Generating audio with ElevenLabs...");
+      console.log(`📏 Text length: ${clean.length} characters`);
 
       // Use Danish multilingual voice (Adam is good for Danish)
       const voiceId = "pNInz6obpgDQGcFmaJgB"; // Adam - multilingual
 
+      // ElevenLabs has a 5000 character limit per request
+      const ELEVENLABS_MAX_CHARS = 5000;
+      
+      // If text is too long, split it into chunks
+      if (clean.length > ELEVENLABS_MAX_CHARS) {
+        console.log(`⚠️ Text exceeds ${ELEVENLABS_MAX_CHARS} characters, splitting into chunks...`);
+        const chunks = chunkText(clean, ELEVENLABS_MAX_CHARS);
+        console.log(`📦 Split into ${chunks.length} chunks`);
+        
+        const audioBuffers: ArrayBuffer[] = [];
+        
+        // Generate audio for each chunk
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          console.log(`🎙️ Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)...`);
+          
+          const body = {
+            text: chunk,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+              style: 0.0,
+              use_speaker_boost: true
+            }
+          };
+
+          const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "xi-api-key": apiKey
+            },
+            body: JSON.stringify(body)
+          });
+
+          if (!audioResponse.ok) {
+            const txt = await audioResponse.text().catch(() => "");
+            console.error(`ElevenLabs TTS error for chunk ${i + 1}:`, audioResponse.status, txt);
+            const errorResponse = NextResponse.json({ 
+              error: `ElevenLabs TTS error (chunk ${i + 1}/${chunks.length}): ${txt}` 
+            }, { status: audioResponse.status });
+            return setCors(errorResponse, request);
+          }
+
+          const chunkBuffer = await audioResponse.arrayBuffer();
+          audioBuffers.push(chunkBuffer);
+        }
+        
+        // Concatenate all audio chunks
+        console.log(`🔗 Concatenating ${audioBuffers.length} audio chunks...`);
+        const combinedAudio = await concatenateAudioBuffers(audioBuffers);
+        
+        const response = new NextResponse(combinedAudio, {
+          status: 200,
+          headers: {
+            "Content-Type": "audio/mpeg",
+          },
+        });
+        
+        return setCors(response, request);
+      }
+
+      // Text is within limit, process normally
       const body = {
         text: clean,
         model_id: "eleven_multilingual_v2",
