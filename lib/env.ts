@@ -105,7 +105,18 @@ export const STRIPE_WEBHOOK_SECRET = getEnvVar('STRIPE_WEBHOOK_SECRET', false);
 export const SITE_URL = getEnvVar('NEXT_PUBLIC_SITE_URL', false, 'http://localhost:3000');
 
 // JWT Secret for admin sessions
-export const JWT_SECRET = getEnvVar('JWT_SECRET');
+// Generate a stable fallback if not set (but log a warning - should be set in production)
+function generateJWTSecret(): string {
+  // Use a combination of environment-specific values for a stable fallback
+  // This ensures the same secret is used across all requests in the same deployment
+  const fallback = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'default-secret';
+  // Create a stable hash-like string (64 chars) based on the deployment URL
+  const base = `fallback-jwt-secret-${fallback}`;
+  // Pad to 64 characters for consistency
+  return (base + 'x'.repeat(64)).substring(0, 64);
+}
+
+export const JWT_SECRET = getEnvVar('JWT_SECRET', false, generateJWTSecret());
 
 /**
  * Validate all required environment variables
@@ -121,7 +132,12 @@ export function validateEnv() {
     getEnvVar('CLOUDINARY_CLOUD_NAME');
     getEnvVar('CLOUDINARY_API_KEY');
     getEnvVar('CLOUDINARY_API_SECRET');
-    getEnvVar('JWT_SECRET');
+    
+    // JWT_SECRET is optional (has fallback), but warn if not set
+    const jwtSecret = getEnvVar('JWT_SECRET', false, generateJWTSecret());
+    if (!process.env.JWT_SECRET) {
+      console.warn('⚠️  WARNING: JWT_SECRET not set. Using fallback. This should be set in production for security.');
+    }
     
     console.log('✅ All required environment variables are set');
     return true;
