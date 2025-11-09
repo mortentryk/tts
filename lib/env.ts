@@ -1,14 +1,31 @@
 /**
- * Environment variable validation
+ * Environment variable validation with fallback support
  * Validates all required environment variables lazily (only when accessed)
+ * Supports hydrating NEXT_PUBLIC_* variables from server-side counterparts
  */
 
-function getEnvVar(key: string, required: boolean = true, defaultValue?: string): string {
-  const value = process.env[key];
+// Legacy defaults for backward compatibility
+const LEGACY_DEFAULTS = {
+  NEXT_PUBLIC_SUPABASE_URL: 'https://ooyzdksmeglhocjlaouo.supabase.co',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MzMzODksImV4cCI6MjA3NjIwOTM4OX0.DbgORlJkyBae_VIg0b6Pk-bSuzZ8vmb2hNHVnhE7wI8',
+};
+
+function getEnvVar(key: string, required: boolean = true, defaultValue?: string, fallbackKey?: string): string {
+  let value = process.env[key];
   
   // NEXT_PUBLIC_* variables are embedded by Next.js at build time
-  // For client-side safety, never throw errors for these - just return the value or empty string
+  // For client-side safety, never throw errors for these - use fallbacks instead
   const isPublicVar = key.startsWith('NEXT_PUBLIC_');
+  
+  // If value is missing and we have a fallback key, try the fallback
+  if (!value && fallbackKey) {
+    value = process.env[fallbackKey];
+  }
+  
+  // If still missing, try legacy defaults for known keys
+  if (!value && LEGACY_DEFAULTS[key as keyof typeof LEGACY_DEFAULTS]) {
+    value = LEGACY_DEFAULTS[key as keyof typeof LEGACY_DEFAULTS];
+  }
   
   if (required && !value) {
     // For public variables, return empty string if missing (Next.js will embed the actual value at build time)
@@ -35,9 +52,22 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string)
   return value || defaultValue || '';
 }
 
-// Supabase Configuration
-export const SUPABASE_URL = getEnvVar('NEXT_PUBLIC_SUPABASE_URL');
-export const SUPABASE_ANON_KEY = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+// Supabase Configuration with fallback support
+// NEXT_PUBLIC_* vars can fallback to server-side vars if only server secrets are configured
+export const SUPABASE_URL = getEnvVar(
+  'NEXT_PUBLIC_SUPABASE_URL',
+  true,
+  undefined,
+  'SUPABASE_URL' // Fallback to server-side SUPABASE_URL if NEXT_PUBLIC_* is not set
+);
+
+export const SUPABASE_ANON_KEY = getEnvVar(
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  true,
+  undefined,
+  'SUPABASE_ANON_KEY' // Fallback to server-side SUPABASE_ANON_KEY if NEXT_PUBLIC_* is not set
+);
+
 export const SUPABASE_SERVICE_ROLE_KEY = getEnvVar('SUPABASE_SERVICE_ROLE_KEY');
 
 // Admin Authentication
