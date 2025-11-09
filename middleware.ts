@@ -27,6 +27,7 @@ export function middleware(request: NextRequest) {
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Adjust for your needs
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
+    "media-src 'self' https://res.cloudinary.com https://*.cloudinary.com", // Allow audio/video from Cloudinary
     "font-src 'self' data:",
     "connect-src 'self' https://api.elevenlabs.io https://*.supabase.co https://api.stripe.com",
     "frame-src https://js.stripe.com",
