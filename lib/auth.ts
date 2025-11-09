@@ -78,22 +78,32 @@ export async function getAdminSession(): Promise<AdminSession | null> {
  * Set admin session cookie
  */
 export async function setAdminSession(token: string): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.set('admin_session', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24, // 24 hours
-    path: '/',
-  });
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set('admin_session', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24, // 24 hours
+      path: '/',
+    });
+  } catch (error: any) {
+    console.error('Error setting admin session cookie:', error?.message || error);
+    throw new Error('Failed to set admin session cookie');
+  }
 }
 
 /**
  * Clear admin session
  */
 export async function clearAdminSession(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete('admin_session');
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete('admin_session');
+  } catch (error: any) {
+    console.error('Error clearing admin session cookie:', error?.message || error);
+    // Don't throw - clearing is best effort
+  }
 }
 
 /**
@@ -112,6 +122,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 /**
  * Check if user is authenticated as admin
+ * @deprecated Use requireAdminAuth from lib/middleware instead
  */
 export async function requireAdminAuth(): Promise<AdminSession> {
   const session = await getAdminSession();
