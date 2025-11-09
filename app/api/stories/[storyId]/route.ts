@@ -25,17 +25,18 @@ export async function GET(
 
     // Try to get story by slug first (without published check to see if it exists)
     // Try multiple variations: original, normalized, and exact match
-    let { data: storyBySlug, error: slugError } = await supabaseAdmin
+    let { data: storyBySlugData, error: slugError } = await supabaseAdmin
       .from('stories')
       .select('*')
       .eq('slug', storyId)
       .limit(1);
     
-    // Handle single result (or no result)
+    // Handle single result (or no result) - extract first item from array
+    let storyBySlug: any = null;
     if (slugError) {
       storyBySlug = null;
-    } else if (storyBySlug && storyBySlug.length > 0) {
-      storyBySlug = storyBySlug[0];
+    } else if (storyBySlugData && Array.isArray(storyBySlugData) && storyBySlugData.length > 0) {
+      storyBySlug = storyBySlugData[0];
     } else {
       storyBySlug = null;
       slugError = { code: 'PGRST116', message: 'No rows returned' } as any;
@@ -51,7 +52,7 @@ export async function GET(
           .eq('slug', normalizedSlug)
           .limit(1);
         
-        if (normalizedResult.data && normalizedResult.data.length > 0) {
+        if (normalizedResult.data && Array.isArray(normalizedResult.data) && normalizedResult.data.length > 0) {
           storyBySlug = normalizedResult.data[0];
           slugError = null;
         } else if (normalizedResult.error && normalizedResult.error.code !== 'PGRST116') {
@@ -80,7 +81,7 @@ export async function GET(
         .eq('id', storyId)
         .limit(1);
       
-      if (result.data && result.data.length > 0) {
+      if (result.data && Array.isArray(result.data) && result.data.length > 0) {
         story = result.data[0];
         storyError = null;
       } else {
