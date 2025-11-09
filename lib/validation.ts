@@ -20,7 +20,7 @@ export const adminLoginSchema = z.object({
 });
 
 export const createCheckoutSessionSchema = z.object({
-  type: z.enum(['one-time', 'subscription']),
+  type: z.enum(['one-time', 'subscription', 'lifetime']),
   userEmail: emailSchema,
   storyId: z.string().uuid().optional(),
   planId: z.string().uuid().optional(),

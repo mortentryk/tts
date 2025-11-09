@@ -283,15 +283,20 @@ export async function POST(request: NextRequest) {
 
     // Deduplicate nodes by story_id,node_key (keep last occurrence)
     // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
-    const nodeMap = new Map<string, any>();
-    nodes.forEach(node => {
+    // Filter out any nodes with invalid keys first
+    const validNodes = nodes.filter(node => node.story_id && node.node_key);
+    const nodeMap = new Map<string, typeof nodes[0]>();
+    validNodes.forEach(node => {
       const key = `${node.story_id}:${node.node_key}`;
       nodeMap.set(key, node);
     });
-    const deduplicatedNodes = Array.from(nodeMap.values());
+    const deduplicatedNodes: typeof nodes = Array.from(nodeMap.values());
     
-    if (deduplicatedNodes.length !== nodes.length) {
-      console.log(`⚠️ Removed ${nodes.length - deduplicatedNodes.length} duplicate nodes`);
+    if (deduplicatedNodes.length !== validNodes.length) {
+      console.log(`⚠️ Removed ${validNodes.length - deduplicatedNodes.length} duplicate nodes`);
+    }
+    if (nodes.length !== validNodes.length) {
+      console.log(`⚠️ Filtered out ${nodes.length - validNodes.length} nodes with invalid story_id or node_key`);
     }
 
     // Get list of node_keys from CSV (using deduplicated nodes)
