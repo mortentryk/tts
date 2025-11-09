@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../../../lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // PUT - Update a character
 export async function PUT(
@@ -24,7 +24,7 @@ export async function PUT(
     }
 
     // Update character
-    const { data: character, error: characterError } = await supabase
+    const { data: character, error: characterError } = await supabaseAdmin
       .from('characters')
       .update({
         name,
@@ -32,10 +32,10 @@ export async function PUT(
         reference_image_url: referenceImageUrl || null,
         appearance_prompt: appearancePrompt || null,
         updated_at: new Date().toISOString(),
-      })
+      } as any)
       .eq('id', characterId)
       .select()
-      .single();
+      .single() as any;
 
     if (characterError) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function DELETE(
     const { characterId } = await params;
 
     // Delete character (cascades to assignments)
-    const { error: characterError } = await supabase
+    const { error: characterError } = await supabaseAdmin
       .from('characters')
       .delete()
       .eq('id', characterId);

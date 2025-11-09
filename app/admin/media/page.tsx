@@ -99,12 +99,23 @@ export default function MediaManager() {
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
 
-  // Check if user is logged in
+  // Check if user is logged in via server session
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem('admin_logged_in');
-    if (!isLoggedIn) {
-      router.push('/admin/login');
-    }
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/admin/session', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          router.push('/admin/login');
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        router.push('/admin/login');
+      }
+    };
+    checkSession();
   }, [router]);
 
   // Load stories on component mount
@@ -128,7 +139,9 @@ export default function MediaManager() {
 
   const loadStories = async () => {
     try {
-      const response = await fetch('/api/admin/stories');
+      const response = await fetch('/api/admin/stories', {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setStories(data);
@@ -142,7 +155,9 @@ export default function MediaManager() {
 
   const loadStoryNodes = async () => {
     try {
-      const response = await fetch(`/api/stories/${selectedStory}`);
+      const response = await fetch(`/api/stories/${selectedStory}`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setNodes(data.nodes || []);
@@ -177,7 +192,9 @@ export default function MediaManager() {
     if (!selectedStory) return;
     
     try {
-      const response = await fetch(`/api/admin/characters?storySlug=${selectedStory}`);
+      const response = await fetch(`/api/admin/characters?storySlug=${selectedStory}`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setCharacters(data.characters || []);
@@ -191,7 +208,9 @@ export default function MediaManager() {
     if (!selectedStory) return;
     
     try {
-      const response = await fetch(`/api/admin/character-assignments?storySlug=${selectedStory}`);
+      const response = await fetch(`/api/admin/character-assignments?storySlug=${selectedStory}`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         const assignments: CharacterAssignment[] = data.map((a: any) => ({
@@ -227,6 +246,7 @@ export default function MediaManager() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeId: nodeKey,
@@ -300,6 +320,7 @@ export default function MediaManager() {
       const response = await fetch('/api/admin/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeId: nodeKey,
@@ -331,6 +352,7 @@ export default function MediaManager() {
       const response = await fetch('/api/admin/generate-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeId: nodeKey,
@@ -376,6 +398,7 @@ export default function MediaManager() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           image_url: null
         }),
@@ -407,6 +430,7 @@ export default function MediaManager() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           video_url: null
         }),
@@ -421,9 +445,19 @@ export default function MediaManager() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_logged_in');
-    router.push('/admin/login');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      // Clear localStorage for safety (legacy cleanup)
+      localStorage.removeItem('admin_logged_in');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      router.push('/admin/login');
+    }
   };
 
   const assignCharacterToNode = async (nodeKey: string) => {
@@ -436,6 +470,7 @@ export default function MediaManager() {
       const response = await fetch('/api/admin/character-assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeKey: nodeKey,

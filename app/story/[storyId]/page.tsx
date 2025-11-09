@@ -420,18 +420,62 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         // Load story metadata
         console.log('📡 Fetching story metadata from:', `/api/stories/${storyId}`);
         const storyResponse = await fetch(`/api/stories/${storyId}`);
+        
         if (!storyResponse.ok) {
-          throw new Error('Story not found');
+          let errorMessage = 'Story not found';
+          try {
+            const errorData = await storyResponse.json();
+            // Use the message if available, otherwise use error
+            if (errorData.message) {
+              errorMessage = errorData.message;
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
+            }
+            // Handle purchase required case
+            if (errorData.requiresPurchase) {
+              console.log('💰 Story requires purchase, redirecting...');
+              router.push(`/purchase/${errorData.storyId || storyId}`);
+              return;
+            }
+          } catch (e) {
+            // If we can't parse the error, use status-based message
+            if (storyResponse.status === 404) {
+              errorMessage = 'Story not found. It may not exist or may not be published yet.';
+            } else if (storyResponse.status === 403) {
+              errorMessage = 'Access denied. This story may require a purchase.';
+            } else if (storyResponse.status === 500) {
+              errorMessage = 'Server error. Please try again later.';
+            } else {
+              errorMessage = `Failed to load story (${storyResponse.status})`;
+            }
+          }
+          throw new Error(errorMessage);
         }
+        
         const storyData = await storyResponse.json();
         console.log('✅ Story metadata loaded:', storyData);
         
         // Load first node
         console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
         const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`);
+        
         if (!nodeResponse.ok) {
-          throw new Error('Story content not found');
+          let errorMessage = 'Story content not found';
+          try {
+            const errorData = await nodeResponse.json();
+            if (errorData.error) {
+              errorMessage = errorData.error;
+            }
+          } catch (e) {
+            if (nodeResponse.status === 404) {
+              errorMessage = 'Story node not found. The story may be missing content.';
+            } else {
+              errorMessage = `Failed to load story content (${nodeResponse.status})`;
+            }
+          }
+          throw new Error(errorMessage);
         }
+        
         const nodeData = await nodeResponse.json();
         console.log('✅ Story node loaded:', nodeData);
         
@@ -455,14 +499,15 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         setStory(story as Record<string, StoryNode>);
         setLoading(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load story:', error);
-        setStoryError(`Failed to load story: ${error}`);
+        const errorMessage = error?.message || String(error) || 'Unknown error occurred';
+        setStoryError(`Failed to load story: ${errorMessage}`);
         setLoading(false);
       }
     };
     loadStory();
-  }, [storyId, stopSpeak, stopVoiceListening]);
+  }, [storyId, stopSpeak, stopVoiceListening, router]);
 
   // --- Save/Load ---
   const saveGame = useCallback(async (storyId: string, id: string, s: GameStats) => {

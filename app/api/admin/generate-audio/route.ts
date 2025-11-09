@@ -2,14 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { uploadAudioToCloudinary } from '@/lib/cloudinary';
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/env';
 import crypto from 'crypto';
 
 const ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase client using validated env config
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 function generateTextHash(text: string): string {
   return crypto.createHash('md5').update(text).digest('hex');

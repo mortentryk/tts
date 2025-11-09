@@ -1,58 +1,77 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ooyzdksmeglhocjlaouo.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MzMzODksImV4cCI6MjA3NjIwOTM4OX0.DbgORlJkyBae_VIg0b6Pk-bSuzZ8vmb2hNHVnhE7wI8';
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from '@/lib/supabase';
 
 export async function GET() {
   try {
-    // Get published stories with their first image as fallback
+    console.log('🔍 Fetching published stories...');
+    
+    // Get published stories first (without requiring nodes)
     const { data: stories, error } = await supabase
       .from('stories')
-      .select(`
-        *,
-        journey_order,
-        landmark_type,
-        in_journey,
-        story_nodes!inner(
-          image_url,
-          sort_index
-        )
-      `)
+      .select('*')
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('❌ Supabase error:', error);
-      return NextResponse.json({ error: 'Failed to load stories' }, { status: 500 });
+      console.error('   Code:', error.code);
+      console.error('   Message:', error.message);
+      console.error('   Details:', error.details);
+      console.error('   Hint:', error.hint);
+      return NextResponse.json({ 
+        error: 'Failed to load stories',
+        details: error.message 
+      }, { status: 500 });
     }
 
-    // Process stories to add fallback images
-    const processedStories = stories.map(story => {
-      // If no cover image, use the first story node image
-      if (!story.cover_image_url && story.story_nodes && story.story_nodes.length > 0) {
-        const firstNodeWithImage = story.story_nodes
-          .sort((a: any, b: any) => a.sort_index - b.sort_index)
-          .find((node: any) => node.image_url);
-        
-        if (firstNodeWithImage) {
-          story.cover_image_url = firstNodeWithImage.image_url;
-        }
-      }
-      
-      // Remove the story_nodes from the response
-      delete story.story_nodes;
-      return story;
-    });
+    if (!stories || stories.length === 0) {
+      console.log('⚠️ No published stories found');
+      return NextResponse.json([]);
+    }
 
-    console.log('✅ Stories loaded:', processedStories.length);
+    console.log(`✅ Found ${stories.length} published stories`);
+
+    // For each story, try to get the first node image if no cover image exists
+    const processedStories = await Promise.all(
+      stories.map(async (story) => {
+        // If story already has a cover image, return it as is
+        if (story.cover_image_url) {
+          return story;
+        }
+
+        // Otherwise, try to get the first node image
+        // Don't use .single() - it throws if no results found
+        try {
+          const { data: nodes, error: nodeError } = await supabase
+            .from('story_nodes')
+            .select('image_url, sort_index')
+            .eq('story_id', story.id)
+            .not('image_url', 'is', null)
+            .order('sort_index', { ascending: true })
+            .limit(1);
+
+          // Check if we got any results (don't assume .single() worked)
+          if (!nodeError && nodes && nodes.length > 0 && nodes[0]?.image_url) {
+            story.cover_image_url = nodes[0].image_url;
+          }
+        } catch (nodeError) {
+          // If no node found or error, just continue without cover image
+          console.log(`⚠️ No cover image found for story ${story.slug}`);
+        }
+
+        return story;
+      })
+    );
+
+    console.log('✅ Stories processed:', processedStories.length);
     return NextResponse.json(processedStories);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('   Stack:', error?.stack);
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      message: error?.message || 'An unexpected error occurred'
+    }, { status: 500 });
   }
 }

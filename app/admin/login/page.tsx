@@ -20,15 +20,24 @@ export default function AdminLogin() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ password }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Store login state in localStorage
-        localStorage.setItem('admin_logged_in', 'true');
-        router.push('/admin');
+        // Session is stored in httpOnly cookie by server
+        // Verify session before redirecting
+        const sessionCheck = await fetch('/api/admin/session', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (sessionCheck.ok) {
+          router.replace('/admin');
+        } else {
+          setError('Session verification failed. Please try again.');
+        }
       } else {
         setError(data.error || 'Invalid password');
       }

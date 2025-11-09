@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '../../../../lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // GET - List characters for a story
 export async function GET(request: NextRequest) {
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get story ID
-    const { data: story, error: storyError } = await supabase
+    const { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
       .select('id')
       .eq('slug', storySlug)
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get characters for this story
-    const { data: characters, error: charactersError } = await supabase
+    const { data: characters, error: charactersError } = await supabaseAdmin
       .from('characters')
       .select('*')
       .eq('story_id', story.id)
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get story ID
-    const { data: story, error: storyError } = await supabase
+    const { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
       .select('id')
       .eq('slug', storySlug)
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create character
-    const { data: character, error: characterError } = await supabase
+    const { data: character, error: characterError } = await supabaseAdmin
       .from('characters')
       .insert({
         story_id: story.id,
