@@ -26,11 +26,22 @@ export async function withAdminAuth(
   request: NextRequest,
   handler: () => Promise<NextResponse<any>>
 ): Promise<NextResponse<any>> {
-  const authError = await requireAdminAuth(request);
-  if (authError) {
-    return authError;
-  }
+  try {
+    const authError = await requireAdminAuth(request);
+    if (authError) {
+      return authError;
+    }
 
-  return handler();
+    return await handler();
+  } catch (error: any) {
+    console.error('❌ Error in withAdminAuth:', error);
+    return NextResponse.json(
+      { 
+        error: 'Internal server error',
+        message: error?.message || 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
 }
 
