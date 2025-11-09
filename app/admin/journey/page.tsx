@@ -52,12 +52,23 @@ export default function JourneyTimelineManager() {
     duration: 5,
   });
 
-  // Check if user is logged in
+  // Check if user is logged in via server session
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem('admin_logged_in');
-    if (!isLoggedIn) {
-      router.push('/admin/login');
-    }
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/admin/session', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          router.push('/admin/login');
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        router.push('/admin/login');
+      }
+    };
+    checkSession();
   }, [router]);
 
   useEffect(() => {
@@ -74,7 +85,9 @@ export default function JourneyTimelineManager() {
 
   const loadStories = async () => {
     try {
-      const response = await fetch('/api/admin/stories');
+      const response = await fetch('/api/admin/stories', {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setStories(data);
@@ -90,7 +103,9 @@ export default function JourneyTimelineManager() {
     if (!selectedStory) return;
 
     try {
-      const response = await fetch(`/api/admin/journey?storySlug=${selectedStory}`);
+      const response = await fetch(`/api/admin/journey?storySlug=${selectedStory}`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setSegments(data);
@@ -110,6 +125,7 @@ export default function JourneyTimelineManager() {
       const response = await fetch('/api/admin/journey', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeKey: formData.nodeKey,
@@ -144,6 +160,7 @@ export default function JourneyTimelineManager() {
       const response = await fetch('/api/admin/journey', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           journeyId: id,
           journey_title: editData.title,
@@ -181,6 +198,7 @@ export default function JourneyTimelineManager() {
     try {
       const response = await fetch(`/api/admin/journey?journeyId=${id}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -208,6 +226,7 @@ export default function JourneyTimelineManager() {
       await fetch('/api/admin/journey', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           journeyId: segment.id,
           sequence_number: targetSegment.sequence_number,
@@ -217,6 +236,7 @@ export default function JourneyTimelineManager() {
       await fetch('/api/admin/journey', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           journeyId: targetSegment.id,
           sequence_number: segment.sequence_number,
@@ -236,6 +256,7 @@ export default function JourneyTimelineManager() {
       const response = await fetch('/api/admin/journey/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           journeyId: id,
           journeyText: text,
@@ -266,6 +287,7 @@ export default function JourneyTimelineManager() {
       const response = await fetch('/api/admin/journey/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ journeyId: id }),
       });
 
@@ -290,6 +312,7 @@ export default function JourneyTimelineManager() {
       const response = await fetch('/api/admin/journey/generate-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ journeyId: id }),
       });
 
@@ -328,9 +351,19 @@ export default function JourneyTimelineManager() {
                 ← Back
             </button>
             <button
-                onClick={() => {
-                  localStorage.removeItem('admin_logged_in');
-                  router.push('/admin/login');
+                onClick={async () => {
+                  try {
+                    await fetch('/api/admin/logout', {
+                      method: 'POST',
+                      credentials: 'include',
+                    });
+                    // Clear localStorage for safety (legacy cleanup)
+                    localStorage.removeItem('admin_logged_in');
+                  } catch (error) {
+                    console.error('Logout failed:', error);
+                  } finally {
+                    router.push('/admin/login');
+                  }
                 }}
                 className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
               >

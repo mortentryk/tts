@@ -13,12 +13,23 @@ export default function AdminDashboard() {
   const [stories, setStories] = useState<any[]>([]);
   const [loadingStories, setLoadingStories] = useState(true);
 
-  // Check if user is logged in
+  // Check if user is logged in via server session
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem('admin_logged_in');
-    if (!isLoggedIn) {
-      router.push('/admin/login');
-    }
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/admin/session', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          router.push('/admin/login');
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        router.push('/admin/login');
+      }
+    };
+    checkSession();
   }, [router]);
 
   // Load stories on component mount
@@ -28,7 +39,9 @@ export default function AdminDashboard() {
 
   const loadStories = async () => {
     try {
-      const response = await fetch('/api/admin/stories');
+      const response = await fetch('/api/admin/stories', {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setStories(data);
@@ -40,9 +53,19 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_logged_in');
-    router.push('/admin/login');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      // Clear localStorage for safety (legacy cleanup)
+      localStorage.removeItem('admin_logged_in');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      router.push('/admin/login');
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,6 +91,7 @@ export default function AdminDashboard() {
 
       const response = await fetch('/api/admin/upload-csv', {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
 
@@ -98,6 +122,7 @@ export default function AdminDashboard() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ storySlug }),
       });
 
@@ -130,6 +155,7 @@ export default function AdminDashboard() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ storySlug }),
       });
 

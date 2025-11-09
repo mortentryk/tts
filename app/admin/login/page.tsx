@@ -20,6 +20,7 @@ export default function AdminLogin() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ password }),
       });
 
@@ -27,9 +28,16 @@ export default function AdminLogin() {
 
       if (response.ok) {
         // Session is stored in httpOnly cookie by server
-        // Redirect to admin dashboard
-        router.push('/admin');
-        router.refresh(); // Refresh to update server-side session check
+        // Verify session before redirecting
+        const sessionCheck = await fetch('/api/admin/session', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (sessionCheck.ok) {
+          router.replace('/admin');
+        } else {
+          setError('Session verification failed. Please try again.');
+        }
       } else {
         setError(data.error || 'Invalid password');
       }

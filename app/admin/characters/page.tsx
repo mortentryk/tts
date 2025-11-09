@@ -36,12 +36,23 @@ export default function CharacterManager() {
     appearancePrompt: '',
   });
 
-  // Check if user is logged in
+  // Check if user is logged in via server session
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem('admin_logged_in');
-    if (!isLoggedIn) {
-      router.push('/admin/login');
-    }
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/admin/session', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          router.push('/admin/login');
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        router.push('/admin/login');
+      }
+    };
+    checkSession();
   }, [router]);
 
   // Load stories on component mount
@@ -60,7 +71,9 @@ export default function CharacterManager() {
 
   const loadStories = async () => {
     try {
-      const response = await fetch('/api/admin/stories');
+      const response = await fetch('/api/admin/stories', {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setStories(data);
@@ -74,7 +87,9 @@ export default function CharacterManager() {
 
   const loadCharacters = async () => {
     try {
-      const response = await fetch(`/api/admin/characters?storySlug=${selectedStory}`);
+      const response = await fetch(`/api/admin/characters?storySlug=${selectedStory}`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setCharacters(data.characters || []);
@@ -96,6 +111,7 @@ export default function CharacterManager() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           storySlug: selectedStory,
           ...formData,
@@ -127,6 +143,7 @@ export default function CharacterManager() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(formData),
       });
 
@@ -156,6 +173,7 @@ export default function CharacterManager() {
     try {
       const response = await fetch(`/api/admin/characters/${characterId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -183,9 +201,19 @@ export default function CharacterManager() {
     setShowCreateForm(true);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_logged_in');
-    router.push('/admin/login');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      // Clear localStorage for safety (legacy cleanup)
+      localStorage.removeItem('admin_logged_in');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      router.push('/admin/login');
+    }
   };
 
   const selectedStoryData = stories.find(s => s.slug === selectedStory);

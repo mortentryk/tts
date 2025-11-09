@@ -8,22 +8,25 @@ export async function GET(
 ) {
   try {
     const { storyId } = await params;
+    console.log('🔍 Looking for story:', storyId);
 
-    // Try to get story by slug first
-    let { data: story, error: storyError } = await supabaseAdmin
+    // Try to get story by slug first (without published check to see if it exists)
+    let { data: storyBySlug, error: slugError } = await supabaseAdmin
       .from('stories')
       .select('*')
       .eq('slug', storyId)
-      .eq('is_published', true)
       .single();
 
     // If not found by slug, try by id (UUID)
-    if (storyError || !story) {
+    let story = storyBySlug;
+    let storyError = slugError;
+    
+    if (slugError || !storyBySlug) {
+      console.log('📝 Story not found by slug, trying by ID...');
       const result = await supabaseAdmin
         .from('stories')
         .select('*')
         .eq('id', storyId)
-        .eq('is_published', true)
         .single();
       
       story = result.data;
@@ -32,7 +35,20 @@ export async function GET(
 
     if (storyError || !story) {
       console.error('❌ Story fetch error:', storyError);
-      return NextResponse.json({ error: 'Story not found' }, { status: 404 });
+      console.error('❌ StoryId searched:', storyId);
+      return NextResponse.json({ 
+        error: 'Story not found',
+        message: 'The story does not exist. Please check the story ID or slug.'
+      }, { status: 404 });
+    }
+
+    // Check if story exists but isn't published
+    if (!story.is_published) {
+      console.log('⚠️ Story exists but is not published:', storyId);
+      return NextResponse.json({ 
+        error: 'Story not found',
+        message: 'This story exists but is not published yet.'
+      }, { status: 404 });
     }
 
     // Check if user has access to this story (only for paid stories)
