@@ -48,6 +48,20 @@ interface CharacterAssignment {
   action?: string;
 }
 
+// Helper function to truncate text at word boundaries
+const truncateText = (text: string, maxLength: number = 150): string => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  const truncated = text.substring(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  const lastNewline = truncated.lastIndexOf('\n');
+  const lastBreak = Math.max(lastSpace, lastNewline);
+  if (lastBreak > maxLength * 0.7) { // Only use break if it's not too early
+    return truncated.substring(0, lastBreak) + '...';
+  }
+  return truncated + '...';
+};
+
 export default function SimpleImageManager() {
   const router = useRouter();
   const [stories, setStories] = useState<Story[]>([]);
@@ -627,15 +641,17 @@ export default function SimpleImageManager() {
                               {row.node_key}
                             </td>
                             <td className="border border-gray-300 px-4 py-2 max-w-md">
-                              <div className="text-sm text-gray-900 font-medium">
-                                {row.text.substring(0, 100)}...
+                              <div className="text-sm text-gray-900 font-medium whitespace-pre-wrap line-clamp-3">
+                                {truncateText(row.text, 200)}
                               </div>
-                              <button
-                                onClick={() => setExpandedText(row.node_key)}
-                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                              >
-                                📖 Read full text
-                              </button>
+                              {row.text.length > 200 && (
+                                <button
+                                  onClick={() => setExpandedText(row.node_key)}
+                                  className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  📖 Read full text
+                                </button>
+                              )}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {(() => {
