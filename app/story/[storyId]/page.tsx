@@ -89,8 +89,6 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
 
   // If we have pre-generated audio URL, use it directly
   if (preGeneratedAudioUrl && preGeneratedAudioUrl.includes('cloudinary.com')) {
-    console.log('🎵 Using pre-generated audio from Cloudinary:', preGeneratedAudioUrl);
-    console.log('🎵 Playing via button click (user interaction - should not be blocked)');
     const audio = new Audio(preGeneratedAudioUrl);
     audioRef.current = audio;
     
@@ -112,11 +110,8 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
       audioRef.current = null;
       // Handle autoplay policy errors - but button clicks should not trigger this
       if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
-        console.log('⚠️ Autoplay blocked - this should not happen on button click:', playError);
         // For button clicks, we should still try to play - user interaction should allow it
         // Fall through to generate TTS as fallback
-      } else {
-        console.log('⚠️ Failed to play pre-generated audio, falling back to TTS:', playError);
       }
       // Fall through to generate TTS if pre-generated audio fails
     }
@@ -341,36 +336,27 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
     // Prevent multiple simultaneous TTS calls
     if (isTTSRunningRef.current) {
-      console.log('🎙️ TTS already running, skipping duplicate call');
       return;
     }
-
-    // Caller supplies final text; do not modify here to avoid duplicate reading
-    console.log('🎙️ speakWithVoiceListening called with text:', text.substring(0, 50) + '...');
-    console.log('🎙️ Current speaking state:', speaking);
 
     try {
       isTTSRunningRef.current = true;
       setSpeaking(true);
-      console.log('🎙️ Starting TTS, isTTSRunningRef set to true');
       await speakViaCloud(text, audioRef, () => {
         // Auto-start voice listening after TTS completes
         if (passage?.choices && passage.choices.length > 0) {
-          console.log('TTS finished - starting voice listening for 10 seconds');
           startVoiceListening(10000);
         }
         // Set speaking to false only after TTS actually completes
         setSpeaking(false);
         isTTSRunningRef.current = false;
         lastTTSFinishTimeRef.current = Date.now();
-        console.log('🎙️ TTS completed, isTTSRunningRef set to false');
       }, passage?.audio); // Pass pre-generated audio URL
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
       setSpeaking(false);
       isTTSRunningRef.current = false;
-      console.log('🎙️ TTS error, isTTSRunningRef set to false');
       // Show a more user-friendly error message
       if (e?.message?.includes("API key not configured")) {
         alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
@@ -710,22 +696,17 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     // Prevent multiple simultaneous calls
     if (isTTSRunningRef.current) {
-      console.log('🚫 TTS already running, skipping speakCloudThrottled');
       return;
     }
     
     const now = Date.now();
     if (now - ttsCooldownRef.current < COOL_DOWN_MS) {
-      console.log('🚫 TTS cooldown active, skipping');
       const remainingTime = Math.ceil((COOL_DOWN_MS - (now - ttsCooldownRef.current)) / 1000);
       showVoiceNotification(`⏳ Please wait ${remainingTime} second${remainingTime > 1 ? 's' : ''} before playing again`, 'info');
       return;
     }
     ttsCooldownRef.current = now;
 
-    console.log('🎙️ speakCloudThrottled called (button click)');
-    console.log('🎵 Pre-generated audio available:', passage?.audio ? 'Yes' : 'No', passage?.audio);
-    
     // Stop any existing voice listening immediately
     stopVoiceListening();
     
@@ -746,11 +727,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     // Add a delay after TTS finishes to allow voice commands to work
     const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
     if (timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
-      console.log('🎯 Auto-read delayed, TTS finished recently:', timeSinceLastTTS + 'ms ago');
       return;
     }
     
-    console.log('🎯 Auto-read triggered for passage:', passage.id);
     speakCloudThrottled();
   }, [autoRead, currentId, passage, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
 
