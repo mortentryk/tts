@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ADMIN_PASSWORD } from '@/lib/env';
 import { createAdminSession, setAdminSession, verifyPassword, hashPassword } from '@/lib/auth';
-import { supabaseAdmin } from '@/lib/supabase';
+
+// Lazy import to avoid initialization errors at module load time
+async function getSupabaseAdmin() {
+  const { supabaseAdmin } = await import('@/lib/supabase');
+  return supabaseAdmin;
+}
 
 // Handle CORS preflight requests
 export async function OPTIONS() {
@@ -32,8 +37,11 @@ async function getHashedPassword(): Promise<string> {
     return hashedPassword;
   }
 
+  // Get supabase admin client (lazy load)
+  const admin = await getSupabaseAdmin();
+
   // Try to get from database (admin_settings table)
-  const { data } = await supabaseAdmin
+  const { data } = await admin
     .from('admin_settings')
     .select('hashed_password')
     .eq('key', 'admin_password_hash')
@@ -48,8 +56,11 @@ async function getHashedPassword(): Promise<string> {
   if (ADMIN_PASSWORD) {
     const hash = await hashPassword(ADMIN_PASSWORD);
     
+    // Get supabase admin client (lazy load)
+    const admin = await getSupabaseAdmin();
+    
     // Store in database for future use
-    await supabaseAdmin.from('admin_settings').upsert({
+    await admin.from('admin_settings').upsert({
       key: 'admin_password_hash',
       hashed_password: hash,
       updated_at: new Date().toISOString(),
@@ -106,7 +117,8 @@ export async function POST(request: NextRequest) {
     if (!isValid && ADMIN_PASSWORD === password) {
       console.log('Password matches ADMIN_PASSWORD directly, updating hash in database...');
       const newHash = await hashPassword(ADMIN_PASSWORD);
-      await supabaseAdmin.from('admin_settings').upsert({
+      const admin = await getSupabaseAdmin();
+      await admin.from('admin_settings').upsert({
         key: 'admin_password_hash',
         hashed_password: newHash,
         updated_at: new Date().toISOString(),
