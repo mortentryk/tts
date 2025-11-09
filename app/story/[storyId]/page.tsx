@@ -89,7 +89,8 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
 
   // If we have pre-generated audio URL, use it directly
   if (preGeneratedAudioUrl && preGeneratedAudioUrl.includes('cloudinary.com')) {
-    console.log('🎵 Using pre-generated audio from:', preGeneratedAudioUrl);
+    console.log('🎵 Using pre-generated audio from Cloudinary:', preGeneratedAudioUrl);
+    console.log('🎵 Playing via button click (user interaction - should not be blocked)');
     const audio = new Audio(preGeneratedAudioUrl);
     audioRef.current = audio;
     
@@ -109,13 +110,15 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
       });
     } catch (playError: any) {
       audioRef.current = null;
-      // Handle autoplay policy errors
+      // Handle autoplay policy errors - but button clicks should not trigger this
       if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
-        console.log('⚠️ Autoplay blocked (non-critical):', playError);
-        return;
+        console.log('⚠️ Autoplay blocked - this should not happen on button click:', playError);
+        // For button clicks, we should still try to play - user interaction should allow it
+        // Fall through to generate TTS as fallback
+      } else {
+        console.log('⚠️ Failed to play pre-generated audio, falling back to TTS:', playError);
       }
-      console.log('⚠️ Failed to play pre-generated audio, falling back to TTS:', playError);
-      // Fall through to generate TTS
+      // Fall through to generate TTS if pre-generated audio fails
     }
   }
 
@@ -520,7 +523,12 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       const auto = localStorage.getItem("svt_autoread_v1");
-      if (auto !== null) setAutoRead(auto === "1");
+      // Default to false - TTS should only play when user clicks button
+      if (auto !== null) {
+        setAutoRead(auto === "1");
+      } else {
+        setAutoRead(false); // Explicitly set to false if not in localStorage
+      }
       if (raw) {
         const { storyId: loadedStoryId, id, s }: SaveData = JSON.parse(raw);
         if (loadedStoryId === storyId && id && s) { 
@@ -715,14 +723,16 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     }
     ttsCooldownRef.current = now;
 
-    console.log('🎙️ speakCloudThrottled called, TTS running:', isTTSRunningRef.current);
+    console.log('🎙️ speakCloudThrottled called (button click)');
+    console.log('🎵 Pre-generated audio available:', passage?.audio ? 'Yes' : 'No', passage?.audio);
     
     // Stop any existing voice listening immediately
     stopVoiceListening();
     
     // Use enhanced TTS with voice listening - it will handle starting voice listening automatically
+    // Pass pre-generated audio URL if available
     await speakWithVoiceListening(narration);
-  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening]);
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, passage?.audio]);
 
   // Auto-read new scenes when enabled
   useEffect(() => {
@@ -1157,18 +1167,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             </div>
           ) : null}
           
-          {/* Background Audio */}
-          {passage?.audio && (
-            <audio 
-              src={passage.audio}
-              autoPlay
-              loop
-              className="hidden"
-              onError={(e) => {
-                console.error('Failed to load audio:', passage.audio);
-              }}
-            />
-          )}
+          {/* Background Audio removed - TTS handles audio playback via speakViaCloud function */}
           
           <p className="text-base sm:text-lg leading-relaxed text-white whitespace-pre-wrap">
             {passage?.text || "Story not found. Please check your story data."}
