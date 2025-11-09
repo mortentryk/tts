@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createCheckoutSession, createSubscriptionSession } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase';
+import { createCheckoutSessionSchema, safeValidateBody } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { type, userEmail, storyId, planId } = body;
-
-    if (!userEmail) {
+    
+    // Validate request body including email format
+    const validation = safeValidateBody(createCheckoutSessionSchema, body);
+    if (!validation.success) {
+      const errorMessage = validation.error.errors
+        .map((e) => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
       return NextResponse.json(
-        { error: 'Email is required' },
+        { error: `Validation failed: ${errorMessage}` },
         { status: 400 }
       );
     }
+
+    const { type, userEmail, storyId, planId } = validation.data;
 
     // Get or create user
     let { data: user } = await supabaseAdmin
@@ -36,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     let session;
 
-    if (type === 'subscription') {
+    if (type === 'subscription' || type === 'lifetime') {
       // Create subscription checkout session
       if (!planId) {
         return NextResponse.json(
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
       // Get subscription plan details
       const { data: plan } = await supabaseAdmin
         .from('subscription_plans')
-        .select('stripe_price_id')
+        .select('stripe_price_id, is_lifetime, price')
         .eq('id', planId)
         .single();
 
@@ -59,10 +66,40 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      session = await createSubscriptionSession({
-        userEmail,
-        stripePriceId: plan.stripe_price_id,
-      });
+      // For lifetime subscriptions, use one-time payment mode
+      if (plan.is_lifetime || type === 'lifetime') {
+        // Create one-time checkout session for lifetime access with proper metadata
+        const stripe = (await import('@/lib/stripe')).stripe;
+        if (!stripe) {
+          throw new Error('Stripe is not configured');
+        }
+        
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+        session = await stripe.checkout.sessions.create({
+          customer_email: userEmail,
+          payment_method_types: ['card'],
+          line_items: [
+            {
+              price: plan.stripe_price_id,
+              quantity: 1,
+            },
+          ],
+          mode: 'payment',
+          success_url: `${siteUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${siteUrl}/cancel`,
+          metadata: {
+            type: 'lifetime',
+            planId: planId,
+            isLifetime: 'true',
+          },
+        });
+      } else {
+        // Regular recurring subscription
+        session = await createSubscriptionSession({
+          userEmail,
+          stripePriceId: plan.stripe_price_id,
+        });
+      }
     } else {
       // Create one-time purchase checkout session
       if (!storyId) {

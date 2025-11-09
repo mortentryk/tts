@@ -17,11 +17,25 @@ export default function Home() {
     hasActiveSubscription: false,
     subscriptionPeriodEnd: null as string | null,
   });
+  const [subscriptionPlans, setSubscriptionPlans] = useState<any[]>([]);
 
   useEffect(() => {
     loadStories();
     loadUserData();
+    loadSubscriptionPlans();
   }, []);
+
+  const loadSubscriptionPlans = async () => {
+    try {
+      const response = await fetch('/api/subscription-plans');
+      if (response.ok) {
+        const plans = await response.json();
+        setSubscriptionPlans(plans);
+      }
+    } catch (error) {
+      console.error('Failed to load subscription plans:', error);
+    }
+  };
 
   const loadUserData = async () => {
     const email = getUserEmail();
@@ -198,29 +212,107 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Subscription */}
-            <div className="bg-gradient-to-br from-yellow-600 to-orange-600 p-8 rounded-lg border-2 border-yellow-400">
-              <div className="text-center">
-                <div className="text-sm font-bold mb-2 text-yellow-200">POPULAR</div>
-                <h3 className="text-2xl font-bold mb-4">All Access</h3>
-                <div className="text-4xl font-bold mb-2">$9.99</div>
-                <div className="text-gray-100 mb-6">per month</div>
-                <ul className="text-left space-y-3 mb-8">
-                  <li>✅ All stories unlocked</li>
-                  <li>✅ New stories added automatically</li>
-                  <li>✅ Cancel anytime</li>
-                  <li>✅ Best value</li>
-                </ul>
-                <button
-                  onClick={() => {
-                    alert('Subscription coming soon!');
-                  }}
-                  className="bg-white text-orange-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100"
-                >
-                  Subscribe Now
-                </button>
-              </div>
-            </div>
+            {/* Monthly Subscription */}
+            {subscriptionPlans.find((p: any) => p.interval === 'month' && !p.is_lifetime) && (() => {
+              const monthlyPlan = subscriptionPlans.find((p: any) => p.interval === 'month' && !p.is_lifetime);
+              return (
+                <div className="bg-gradient-to-br from-yellow-600 to-orange-600 p-8 rounded-lg border-2 border-yellow-400">
+                  <div className="text-center">
+                    <div className="text-sm font-bold mb-2 text-yellow-200">POPULAR</div>
+                    <h3 className="text-2xl font-bold mb-4">All Access</h3>
+                    <div className="text-4xl font-bold mb-2">${Number(monthlyPlan.price).toFixed(2)}</div>
+                    <div className="text-gray-100 mb-6">per month</div>
+                    <ul className="text-left space-y-3 mb-8">
+                      <li>✅ All stories unlocked</li>
+                      <li>✅ New stories added automatically</li>
+                      <li>✅ Cancel anytime</li>
+                      <li>✅ Best value</li>
+                    </ul>
+                    <button
+                      onClick={async () => {
+                        const email = prompt('Enter your email to subscribe:');
+                        if (!email) return;
+                        
+                        try {
+                          const response = await fetch('/api/checkout/create-session', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              type: 'subscription',
+                              userEmail: email,
+                              planId: monthlyPlan.id,
+                            }),
+                          });
+                          
+                          const data = await response.json();
+                          if (data.url) {
+                            window.location.href = data.url;
+                          } else {
+                            alert(data.error || 'Failed to start subscription. Please try again.');
+                          }
+                        } catch (error) {
+                          alert('Error starting subscription');
+                        }
+                      }}
+                      className="bg-white text-orange-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100"
+                    >
+                      Subscribe Now
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Lifetime Subscription */}
+            {subscriptionPlans.find((p: any) => p.is_lifetime) && (() => {
+              const lifetimePlan = subscriptionPlans.find((p: any) => p.is_lifetime);
+              return (
+                <div className="bg-gradient-to-br from-purple-600 to-indigo-600 p-8 rounded-lg border-2 border-purple-400">
+                  <div className="text-center">
+                    <div className="text-sm font-bold mb-2 text-purple-200">BEST VALUE</div>
+                    <h3 className="text-2xl font-bold mb-4">Lifetime Access</h3>
+                    <div className="text-4xl font-bold mb-2">${Number(lifetimePlan.price).toFixed(2)}</div>
+                    <div className="text-gray-100 mb-6">one-time payment</div>
+                    <ul className="text-left space-y-3 mb-8">
+                      <li>✅ All stories unlocked forever</li>
+                      <li>✅ Future stories included</li>
+                      <li>✅ No recurring charges</li>
+                      <li>✅ Lifetime updates</li>
+                    </ul>
+                    <button
+                      onClick={async () => {
+                        const email = prompt('Enter your email for lifetime access:');
+                        if (!email) return;
+                        
+                        try {
+                          const response = await fetch('/api/checkout/create-session', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              type: 'lifetime',
+                              userEmail: email,
+                              planId: lifetimePlan.id,
+                            }),
+                          });
+                          
+                          const data = await response.json();
+                          if (data.url) {
+                            window.location.href = data.url;
+                          } else {
+                            alert(data.error || 'Failed to start checkout. Please try again.');
+                          }
+                        } catch (error) {
+                          alert('Error starting checkout');
+                        }
+                      }}
+                      className="bg-white text-purple-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100"
+                    >
+                      Get Lifetime Access
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </section>

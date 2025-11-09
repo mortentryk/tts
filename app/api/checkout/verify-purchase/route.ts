@@ -65,6 +65,16 @@ export async function POST(request: NextRequest) {
           // subscription_period_end will be set by webhook
         })
         .eq('id', user.id);
+    } else if (type === 'lifetime') {
+      // Handle lifetime subscription (one-time payment for permanent access)
+      await supabaseAdmin
+        .from('users')
+        .update({
+          subscription_status: 'active',
+          subscription_id: sessionId,
+          subscription_period_end: new Date('2099-12-31').toISOString(),
+        })
+        .eq('id', user.id);
     } else if (type === 'one-time' && storyId) {
       // Record the purchase
       await supabaseAdmin.from('purchases').upsert({

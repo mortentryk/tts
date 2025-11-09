@@ -130,7 +130,7 @@ async function handleCheckoutCompleted(session: any) {
   }
 
   // Handle based on session mode
-  const { type, storyId } = session.metadata || {};
+  const { type, storyId, planId, isLifetime } = session.metadata || {};
 
   if (session.mode === 'subscription') {
     // Get subscription ID from line items
@@ -157,6 +157,17 @@ async function handleCheckoutCompleted(session: any) {
         })
         .eq('id', user.id);
     }
+  } else if (type === 'lifetime' || isLifetime === 'true') {
+    // Handle lifetime subscription (one-time payment that grants permanent access)
+    // Set subscription_period_end to far future (2099-12-31) to indicate lifetime
+    await supabaseAdmin
+      .from('users')
+      .update({
+        subscription_status: 'active',
+        subscription_id: session.id, // Use session ID as identifier
+        subscription_period_end: new Date('2099-12-31').toISOString(),
+      })
+      .eq('id', user.id);
   } else if (type === 'one-time' && storyId) {
     // Record purchase
     await supabaseAdmin.from('purchases').upsert({

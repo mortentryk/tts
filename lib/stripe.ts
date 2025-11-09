@@ -52,9 +52,9 @@ export async function createCheckoutSession({
     success_url: `${siteUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/cancel`,
     metadata: {
-      storyId,
-      storyTitle,
-      type: 'one-time',
+      storyId: storyId || '',
+      storyTitle: storyTitle || '',
+      type: storyId ? 'one-time' : 'lifetime',
     },
   });
 

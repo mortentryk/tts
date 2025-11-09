@@ -54,13 +54,17 @@ CREATE TABLE IF NOT EXISTS public.subscription_plans (
   name TEXT NOT NULL,
   description TEXT,
   price DECIMAL(10, 2) NOT NULL,
-  interval TEXT NOT NULL DEFAULT 'month', -- 'month', 'year'
+  interval TEXT NOT NULL DEFAULT 'month', -- 'month', 'year', 'lifetime'
   stripe_price_id TEXT UNIQUE,
   stripe_product_id TEXT,
   is_active BOOLEAN DEFAULT true,
+  is_lifetime BOOLEAN DEFAULT false, -- true for lifetime subscriptions
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add is_lifetime column if it doesn't exist (for existing databases)
+ALTER TABLE public.subscription_plans ADD COLUMN IF NOT EXISTS is_lifetime BOOLEAN DEFAULT false;
 
 -- Add pricing fields to stories table
 ALTER TABLE public.stories ADD COLUMN IF NOT EXISTS price DECIMAL(10, 2) DEFAULT 0;
@@ -85,6 +89,10 @@ ALTER TABLE public.stripe_webhooks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Users can read their own data" ON public.users;
+DROP POLICY IF EXISTS "Service role can manage users" ON public.users;
+
 CREATE POLICY "Users can read their own data" ON public.users
   FOR SELECT USING (true); -- Public read for guest checkout
 
@@ -92,6 +100,10 @@ CREATE POLICY "Service role can manage users" ON public.users
   FOR ALL USING (true) WITH CHECK (true);
 
 -- RLS Policies for purchases
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Public can read purchases for verification" ON public.purchases;
+DROP POLICY IF EXISTS "Service role can manage purchases" ON public.purchases;
+
 CREATE POLICY "Public can read purchases for verification" ON public.purchases
   FOR SELECT USING (true);
 
@@ -99,14 +111,24 @@ CREATE POLICY "Service role can manage purchases" ON public.purchases
   FOR ALL USING (true) WITH CHECK (true);
 
 -- RLS Policies for stripe_sessions
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Service role can manage sessions" ON public.stripe_sessions;
+
 CREATE POLICY "Service role can manage sessions" ON public.stripe_sessions
   FOR ALL USING (true) WITH CHECK (true);
 
 -- RLS Policies for stripe_webhooks
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Service role can manage webhooks" ON public.stripe_webhooks;
+
 CREATE POLICY "Service role can manage webhooks" ON public.stripe_webhooks
   FOR ALL USING (true) WITH CHECK (true);
 
 -- RLS Policies for subscription_plans
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Public can read active plans" ON public.subscription_plans;
+DROP POLICY IF EXISTS "Service role can manage plans" ON public.subscription_plans;
+
 CREATE POLICY "Public can read active plans" ON public.subscription_plans
   FOR SELECT USING (is_active = true);
 
@@ -120,14 +142,24 @@ COMMENT ON TABLE public.stripe_sessions IS 'Tracks Stripe checkout sessions for 
 COMMENT ON TABLE public.stripe_webhooks IS 'Logs all Stripe webhook events for debugging';
 COMMENT ON TABLE public.subscription_plans IS 'Available subscription plans';
 
--- Insert default subscription plan
-INSERT INTO public.subscription_plans (name, description, price, interval, is_active)
-VALUES (
-  'All Access Subscription',
-  'Access to all interactive stories with voice narration',
-  9.99,
-  'month',
-  true
-)
+-- Insert default subscription plans
+INSERT INTO public.subscription_plans (name, description, price, interval, is_active, is_lifetime)
+VALUES 
+  (
+    'All Access Subscription',
+    'Access to all interactive stories with voice narration',
+    9.99,
+    'month',
+    true,
+    false
+  ),
+  (
+    'Lifetime Access',
+    'One-time payment for lifetime access to all stories, including future releases',
+    99.99,
+    'lifetime',
+    true,
+    true
+  )
 ON CONFLICT DO NOTHING;
 

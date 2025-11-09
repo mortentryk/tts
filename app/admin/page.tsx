@@ -12,6 +12,18 @@ export default function AdminDashboard() {
   const [result, setResult] = useState<any>(null);
   const [stories, setStories] = useState<any[]>([]);
   const [loadingStories, setLoadingStories] = useState(true);
+  const [showPricing, setShowPricing] = useState(false);
+  const [editingStory, setEditingStory] = useState<string | null>(null);
+  const [pricingData, setPricingData] = useState<{
+    price: number;
+    is_free: boolean;
+    stripe_price_id: string;
+  }>({
+    price: 0,
+    is_free: true,
+    stripe_price_id: '',
+  });
+  const [savingPricing, setSavingPricing] = useState(false);
 
   // Check if user is logged in via server session
   useEffect(() => {
@@ -176,6 +188,65 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleEditPricing = (story: any) => {
+    setEditingStory(story.id);
+    setPricingData({
+      price: story.price || 0,
+      is_free: story.is_free !== false,
+      stripe_price_id: story.stripe_price_id || '',
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStory(null);
+    setPricingData({
+      price: 0,
+      is_free: true,
+      stripe_price_id: '',
+    });
+  };
+
+  const handleSavePricing = async (storyId: string) => {
+    setSavingPricing(true);
+    try {
+      const updates: any = {
+        price: Number(pricingData.price),
+        is_free: pricingData.is_free,
+      };
+
+      // Only include stripe_price_id if it's provided
+      if (pricingData.stripe_price_id.trim()) {
+        updates.stripe_price_id = pricingData.stripe_price_id.trim();
+      } else {
+        updates.stripe_price_id = null;
+      }
+
+      const response = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(updates),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert('✅ Pricing updated successfully!');
+        setEditingStory(null);
+        loadStories(); // Reload to show updated data
+      } else {
+        alert(data.error || 'Failed to update pricing');
+      }
+    } catch (error) {
+      console.error('❌ Pricing update error:', error);
+      alert('Failed to update pricing');
+    } finally {
+      setSavingPricing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-4xl mx-auto px-4">
@@ -202,6 +273,12 @@ export default function AdminDashboard() {
                 className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
               >
                 🗺️ Journey Map
+              </button>
+              <button
+                onClick={() => setShowPricing(!showPricing)}
+                className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700"
+              >
+                💰 Pricing
               </button>
               <button
                 onClick={handleLogout}
@@ -295,6 +372,130 @@ export default function AdminDashboard() {
                   <p className="text-red-700">{result.error}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Pricing Management Section */}
+          {showPricing && (
+            <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                💰 Story Pricing Management
+              </h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Configure pricing for your stories. Set the price, mark as free, and link to Stripe Price ID.
+              </p>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Story</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Free</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stripe Price ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {stories.map((story) => (
+                      <tr key={story.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-4">
+                          <div className="text-sm font-medium text-gray-900">{story.title}</div>
+                          <div className="text-xs text-gray-500">{story.slug}</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          {editingStory === story.id ? (
+                            <input
+                              type="checkbox"
+                              checked={pricingData.is_free}
+                              onChange={(e) => setPricingData({ ...pricingData, is_free: e.target.checked })}
+                              className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                            />
+                          ) : (
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                              story.is_free !== false
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {story.is_free !== false ? 'Free' : 'Paid'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          {editingStory === story.id ? (
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={pricingData.price}
+                              onChange={(e) => setPricingData({ ...pricingData, price: parseFloat(e.target.value) || 0 })}
+                              className="w-24 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
+                              placeholder="0.00"
+                            />
+                          ) : (
+                            <span className="text-sm text-gray-900">
+                              ${Number(story.price || 0).toFixed(2)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          {editingStory === story.id ? (
+                            <input
+                              type="text"
+                              value={pricingData.stripe_price_id}
+                              onChange={(e) => setPricingData({ ...pricingData, stripe_price_id: e.target.value })}
+                              className="w-full px-2 py-1 border border-gray-300 rounded text-sm text-gray-900 font-mono"
+                              placeholder="price_xxxxxxxxxxxxx"
+                            />
+                          ) : (
+                            <span className="text-xs text-gray-600 font-mono">
+                              {story.stripe_price_id || 'Not set'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          {editingStory === story.id ? (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => handleSavePricing(story.id)}
+                                disabled={savingPricing}
+                                className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-400"
+                              >
+                                {savingPricing ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={handleCancelEdit}
+                                disabled={savingPricing}
+                                className="px-3 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 disabled:bg-gray-400"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleEditPricing(story)}
+                              className="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">📝 Instructions:</h3>
+                <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                  <li>Create a product in Stripe Dashboard → Products (Live mode)</li>
+                  <li>Copy the Price ID (starts with <code className="bg-blue-100 px-1 rounded">price_</code>)</li>
+                  <li>Paste it in the Stripe Price ID field for your story</li>
+                  <li>Set the price to match your Stripe product price</li>
+                  <li>Uncheck "Free" to make the story paid</li>
+                </ul>
+              </div>
             </div>
           )}
 

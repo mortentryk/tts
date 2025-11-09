@@ -35,13 +35,17 @@ export async function canUserAccessStory(
 
   // Check if user has active subscription
   if (user.subscription_status === 'active') {
+    // Lifetime subscriptions have null or far-future period_end
+    if (!user.subscription_period_end) {
+      return { hasAccess: true, reason: 'subscription' };
+    }
+    
     // Check if subscription hasn't expired
-    if (user.subscription_period_end) {
-      const now = new Date();
-      const periodEnd = new Date(user.subscription_period_end);
-      if (periodEnd > now) {
-        return { hasAccess: true, reason: 'subscription' };
-      }
+    const now = new Date();
+    const periodEnd = new Date(user.subscription_period_end);
+    // Treat dates far in the future (like 2099) as lifetime
+    if (periodEnd.getFullYear() >= 2099 || periodEnd > now) {
+      return { hasAccess: true, reason: 'subscription' };
     }
   }
 
@@ -94,11 +98,12 @@ export async function getUserPurchases(userEmail: string | null) {
 
   const purchasedStoryIds = purchases?.map((p) => p.story_id) || [];
 
-  // Check subscription status
+  // Check subscription status (including lifetime subscriptions)
   const hasActiveSubscription =
     user.subscription_status === 'active' &&
-    user.subscription_period_end &&
-    new Date(user.subscription_period_end) > new Date();
+    (!user.subscription_period_end || 
+     user.subscription_period_end.getFullYear() >= 2099 ||
+     new Date(user.subscription_period_end) > new Date());
 
   return {
     purchasedStories: purchasedStoryIds,
