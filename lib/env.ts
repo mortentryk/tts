@@ -82,8 +82,8 @@ export const SUPABASE_ANON_KEY = getEnvVar(
 
 export const SUPABASE_SERVICE_ROLE_KEY = getEnvVar('SUPABASE_SERVICE_ROLE_KEY', false, DEFAULT_SUPABASE_SERVICE_ROLE_KEY);
 
-// Admin Authentication
-export const ADMIN_PASSWORD = getEnvVar('ADMIN_PASSWORD');
+// Admin Authentication (optional - only required for admin routes)
+export const ADMIN_PASSWORD = getEnvVar('ADMIN_PASSWORD', false);
 
 // Cloudinary Configuration
 export const CLOUDINARY_CLOUD_NAME = getEnvVar('CLOUDINARY_CLOUD_NAME');
@@ -128,7 +128,7 @@ export function validateEnv() {
     getEnvVar('NEXT_PUBLIC_SUPABASE_URL');
     getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY');
     getEnvVar('SUPABASE_SERVICE_ROLE_KEY', false, DEFAULT_SUPABASE_SERVICE_ROLE_KEY);
-    getEnvVar('ADMIN_PASSWORD');
+    getEnvVar('ADMIN_PASSWORD', false);
     getEnvVar('CLOUDINARY_CLOUD_NAME');
     getEnvVar('CLOUDINARY_API_KEY');
     getEnvVar('CLOUDINARY_API_SECRET');

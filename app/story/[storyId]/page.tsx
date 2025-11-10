@@ -321,7 +321,15 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     throw e;
   }
 
+  // Get the blob from response (Content-Type is preserved automatically)
   const blob = await res.blob();
+  
+  // Verify blob has content
+  if (blob.size === 0) {
+    throw new Error('TTS Error: Received empty audio response');
+  }
+  
+  // Create object URL for the blob
   const url = URL.createObjectURL(blob);
   audioCache.set(key, url);
 
@@ -333,34 +341,75 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   // Store the audio element in the ref
   audioRef.current = audio;
   
-  try { 
-    await audio.play();
-    // Wait for audio to finish playing
-    return new Promise<void>((resolve) => {
-      audio.onended = () => {
-        audioRef.current = null;
-        onComplete?.();
-        resolve();
-      };
-      audio.onerror = () => {
-        audioRef.current = null;
-        onComplete?.();
-        resolve();
-      };
-    });
-  } catch (playError: any) {
-    audioRef.current = null;
-    URL.revokeObjectURL(url);
-    audioCache.delete(key);
+  // Wait for audio to be ready before playing
+  return new Promise<void>((resolve, reject) => {
+    // Handle audio loading errors
+    audio.onerror = (e) => {
+      console.error('Audio loading error:', e, audio.error);
+      const errorMsg = audio.error?.message || 'Failed to load audio';
+      audioRef.current = null;
+      URL.revokeObjectURL(url);
+      audioCache.delete(key);
+      reject(new Error(`TTS Error: ${errorMsg}`));
+    };
     
-    // Handle autoplay policy errors
-    if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
-      const e = new Error("Autoplay blocked – click the button and try again.");
-      (e as any).code = "AUTOPLAY";
-      throw e;
-    }
-    throw playError;
-  }
+    // Wait for audio to be ready
+    const handleCanPlay = async () => {
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('canplaythrough', handleCanPlay);
+      
+      try {
+        await audio.play();
+        
+        // Set up completion handlers
+        audio.onended = () => {
+          audioRef.current = null;
+          URL.revokeObjectURL(url);
+          onComplete?.();
+          resolve();
+        };
+        
+        // Handle play errors
+        audio.onerror = (e) => {
+          console.error('Audio play error:', e, audio.error);
+          audioRef.current = null;
+          URL.revokeObjectURL(url);
+          audioCache.delete(key);
+          const errorMsg = audio.error?.message || 'Failed to play audio';
+          reject(new Error(`TTS Error: ${errorMsg}`));
+        };
+      } catch (playError: any) {
+        audioRef.current = null;
+        URL.revokeObjectURL(url);
+        audioCache.delete(key);
+        
+        // Handle autoplay policy errors
+        if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
+          const e = new Error("Autoplay blocked – click the button and try again.");
+          (e as any).code = "AUTOPLAY";
+          reject(e);
+          return;
+        }
+        reject(playError);
+      }
+    };
+    
+    // Listen for when audio is ready to play
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('canplaythrough', handleCanPlay);
+    
+    // Fallback: if audio doesn't load within 10 seconds, reject
+    setTimeout(() => {
+      if (audio.readyState < 2) { // HAVE_CURRENT_DATA
+        audio.removeEventListener('canplay', handleCanPlay);
+        audio.removeEventListener('canplaythrough', handleCanPlay);
+        audioRef.current = null;
+        URL.revokeObjectURL(url);
+        audioCache.delete(key);
+        reject(new Error('TTS Error: Audio failed to load within timeout'));
+      }
+    }, 10000);
+  });
 }
 
 export default function Game({ params }: { params: Promise<{ storyId: string }> }) {
