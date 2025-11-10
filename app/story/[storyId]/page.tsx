@@ -77,7 +77,7 @@ function hashText(t: string): string {
 const audioCache = new Map<string, string>(); // key -> objectURL
 
 // Cloud TTS for web — OpenAI only
-async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string): Promise<void> {
+async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string, abortControllerRef?: React.MutableRefObject<AbortController | null>): Promise<void> {
   if (!text || !text.trim()) return;
 
   // Stop any existing audio first
@@ -89,19 +89,99 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
 
   // If we have pre-generated audio URL, use it directly
   if (preGeneratedAudioUrl && preGeneratedAudioUrl.includes('cloudinary.com')) {
-    const audio = new Audio(preGeneratedAudioUrl);
+      const audio = new Audio(preGeneratedAudioUrl);
+    // Mobile-specific: configure audio for iOS Safari
+    audio.preload = 'auto';
+    audio.volume = 1.0; // Ensure volume is set
     audioRef.current = audio;
     
+    console.log('🎵 Mobile: Loading pre-generated audio from Cloudinary');
+    
     try {
+      // For mobile: ensure audio is loaded before playing
+      // Check if audio is already loaded
+      if (audio.readyState >= 3) { // HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA
+        console.log('🎵 Mobile: Audio already loaded, readyState:', audio.readyState);
+      } else {
+        console.log('🎵 Mobile: Waiting for audio to load, current readyState:', audio.readyState);
+        // Wait for audio to load (with timeout for mobile networks)
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            // Check if audio was stopped
+            if (audioRef.current !== audio) {
+              reject(new Error('Audio stopped by user'));
+              return;
+            }
+            // If audio has some data, proceed anyway (mobile networks can be slow)
+            if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
+              console.log('🎵 Mobile: Audio loading timeout but has data, readyState:', audio.readyState);
+              resolve();
+            } else {
+              console.error('🎵 Mobile: Audio loading timeout, readyState:', audio.readyState);
+              reject(new Error('Audio loading timeout - network may be slow'));
+            }
+          }, 10000); // 10 second timeout for mobile networks
+          
+          // Check if audio was stopped (audioRef.current is null or different)
+          const checkStopped = () => {
+            if (audioRef.current !== audio) {
+              clearTimeout(timeout);
+              reject(new Error('Audio stopped by user'));
+            }
+          };
+          
+          audio.oncanplaythrough = () => {
+            checkStopped();
+            if (audioRef.current !== audio) return;
+            console.log('🎵 Mobile: Audio can play through');
+            clearTimeout(timeout);
+            resolve();
+          };
+          audio.oncanplay = () => {
+            checkStopped();
+            if (audioRef.current !== audio) return;
+            // For mobile, canplay is often enough
+            if (audio.readyState >= 2) {
+              console.log('🎵 Mobile: Audio can play, readyState:', audio.readyState);
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          audio.onerror = (e) => {
+            console.error('🎵 Mobile: Audio loading error:', e);
+            clearTimeout(timeout);
+            reject(new Error('Failed to load audio'));
+          };
+          audio.load(); // Explicitly load the audio
+        });
+      }
+      
+      // Check if audio was stopped before playing
+      if (audioRef.current !== audio) {
+        return; // Audio was stopped, exit silently
+      }
+      
+      console.log('🎵 Mobile: Attempting to play audio, readyState:', audio.readyState);
       await audio.play();
+      console.log('🎵 Mobile: Audio playback started successfully');
       return new Promise<void>((resolve) => {
+        // Check if audio was stopped
+        if (audioRef.current !== audio) {
+          resolve();
+          return;
+        }
+        
         audio.onended = () => {
-          audioRef.current = null;
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
           onComplete?.();
           resolve();
         };
-        audio.onerror = () => {
-          audioRef.current = null;
+        audio.onerror = (e) => {
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
           onComplete?.();
           resolve();
         };
@@ -122,6 +202,9 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     const cached = audioCache.get(key);
     if (cached) {
       const audio = new Audio(cached);
+      // Mobile-specific: configure audio for iOS Safari
+      audio.preload = 'auto';
+      audio.volume = 1.0;
       
       // Store the audio element in the ref
       audioRef.current = audio;
@@ -170,11 +253,43 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     }
   }
 
-  const res = await fetch(SERVER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, provider: 'elevenlabs' })
-  });
+  // Add timeout for mobile networks (30 seconds)
+  const controller = new AbortController();
+  if (abortControllerRef) {
+    // Abort any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = controller;
+  }
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  
+  let res: Response;
+  try {
+    res = await fetch(SERVER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, provider: 'elevenlabs' }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+  } catch (fetchError: any) {
+    clearTimeout(timeoutId);
+    if (fetchError.name === 'AbortError') {
+      // Clear the abort controller ref if it was aborted
+      if (abortControllerRef && abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      // Don't throw error if aborted - user intentionally stopped
+      return;
+    }
+    throw fetchError;
+  }
+  
+  // Clear the abort controller ref after successful fetch
+  if (abortControllerRef && abortControllerRef.current === controller) {
+    abortControllerRef.current = null;
+  }
 
   if (!res.ok) {
     let msg = "";
@@ -191,6 +306,9 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   audioCache.set(key, url);
 
   const audio = new Audio(url);
+  // Mobile-specific: configure audio for iOS Safari
+  audio.preload = 'auto';
+  audio.volume = 1.0;
   
   // Store the audio element in the ref
   audioRef.current = audio;
@@ -239,6 +357,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isTTSRunningRef = useRef<boolean>(false);
   const lastTTSFinishTimeRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Dice roll state
   const [pendingDiceRoll, setPendingDiceRoll] = useState<{
@@ -282,6 +401,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   // --- TTS Controls ---
   const stopSpeak = useCallback(() => {
     try {
+      // Abort any in-flight fetch requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      
+      // Stop any playing audio
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -296,6 +422,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       audioRef.current = null;
       setSpeaking(false);
       isTTSRunningRef.current = false;
+      abortControllerRef.current = null;
     }
   }, []);
 
@@ -351,19 +478,34 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         setSpeaking(false);
         isTTSRunningRef.current = false;
         lastTTSFinishTimeRef.current = Date.now();
-      }, passage?.audio); // Pass pre-generated audio URL
+        // Clear abort controller when TTS completes
+        abortControllerRef.current = null;
+      }, passage?.audio, abortControllerRef); // Pass pre-generated audio URL and abort controller ref
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
       setSpeaking(false);
       isTTSRunningRef.current = false;
+      abortControllerRef.current = null; // Clear abort controller on error
+      
+      // Don't show error if it was aborted or stopped by user
+      if (e?.message?.includes('aborted') || e?.message?.includes('stopped by user') || e?.name === 'AbortError') {
+        return;
+      }
+      
       // Show a more user-friendly error message
       if (e?.message?.includes("API key not configured")) {
         alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
       } else if (e?.message?.includes("Incorrect API key")) {
         alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
+      } else if (e?.code === "AUTOPLAY") {
+        // Mobile browsers sometimes block autoplay even with user interaction
+        alert("Audio playback was blocked. Please try clicking the play button again.");
+      } else if (e?.message?.includes("timeout") || e?.message?.includes("network")) {
+        // Mobile network issues
+        alert("Network error. Please check your connection and try again.");
       } else {
-        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+        alert(`TTS Error: ${e?.message || "Could not play voice narration. Please try again."}`);
       }
     }
   }, [passage?.choices, passage?.audio, startVoiceListening, speaking]);
@@ -1251,7 +1393,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           </button>
 
           <button 
-            className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors disabled:bg-gray-600"
+            className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
             onClick={stopSpeak}
             disabled={!speaking}
           >
