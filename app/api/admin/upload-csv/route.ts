@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
     // Check if story already exists
     const { data: existingStory } = await supabaseAdmin
       .from('stories')
-      .select('id, version')
+      .select('id, version, is_published')
       .eq('slug', storySlug)
       .single();
 
@@ -246,14 +246,22 @@ export async function POST(request: NextRequest) {
     if (existingStory) {
       // Update existing story
       console.log('📝 Updating existing story:', existingStory.id);
-      const updateData = {
+      // Preserve existing is_published status unless explicitly publishing
+      // This prevents accidentally unpublishing stories when checkbox is unchecked
+      const updateData: any = {
         title: metadata.title || storySlug,
         description: metadata.description || null,
         cover_image_url: metadata.cover_image_url || null,
-        is_published: publishStory,
         version: (existingStory.version || 1) + 1,
         updated_at: new Date().toISOString()
       };
+      
+      // Only update is_published if explicitly publishing (checkbox checked)
+      // If unchecked, preserve the existing status to avoid accidental unpublishing
+      if (publishStory) {
+        updateData.is_published = true;
+      }
+      // If publishStory is false, we don't set is_published, preserving the existing value
       
       const result = await supabaseAdmin
         .from('stories')
