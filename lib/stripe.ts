@@ -4,6 +4,17 @@ if (!process.env.STRIPE_SECRET_KEY) {
   console.warn('STRIPE_SECRET_KEY is not set - Stripe functionality will be disabled');
 }
 
+/**
+ * Normalize a URL by adding https:// if protocol is missing
+ */
+function normalizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed.match(/^https?:\/\//)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
 export const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2025-09-30.clover',
@@ -37,7 +48,7 @@ export async function createCheckoutSession({
     throw new Error('Stripe is not configured');
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const siteUrl = normalizeUrl(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
 
   const session = await stripe.checkout.sessions.create({
     customer_email: userEmail,
@@ -72,7 +83,7 @@ export async function createSubscriptionSession({
     throw new Error('Stripe is not configured');
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const siteUrl = normalizeUrl(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
 
   const session = await stripe.checkout.sessions.create({
     customer_email: userEmail,

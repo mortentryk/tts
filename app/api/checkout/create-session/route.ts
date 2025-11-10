@@ -74,7 +74,11 @@ export async function POST(request: NextRequest) {
           throw new Error('Stripe is not configured');
         }
         
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+        // Normalize URL by adding https:// if protocol is missing
+        let siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').trim();
+        if (!siteUrl.match(/^https?:\/\//)) {
+          siteUrl = `https://${siteUrl}`;
+        }
         session = await stripe.checkout.sessions.create({
           customer_email: userEmail,
           payment_method_types: ['card'],

@@ -12,7 +12,18 @@ const getAllowedOrigins = (): string[] => {
   const origins = process.env.ALLOWED_ORIGINS?.split(',') || [];
   // Always allow the site URL
   if (SITE_URL) {
-    origins.push(new URL(SITE_URL).origin);
+    try {
+      // Auto-add https:// if protocol is missing
+      let siteUrl = SITE_URL.trim();
+      if (!siteUrl.match(/^https?:\/\//)) {
+        siteUrl = `https://${siteUrl}`;
+      }
+      const siteOrigin = new URL(siteUrl).origin;
+      origins.push(siteOrigin);
+    } catch (error) {
+      console.warn('⚠️ Invalid SITE_URL format:', SITE_URL, error);
+      // Skip invalid URL, continue with other origins
+    }
   }
   // In development, allow localhost
   if (process.env.NODE_ENV === 'development') {
