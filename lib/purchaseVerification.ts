@@ -40,9 +40,22 @@ export async function canUserAccessStory(
       return { hasAccess: true, reason: 'subscription' };
     }
     
+    // Safely parse subscription_period_end (may be string or Date)
+    const periodEndValue = user.subscription_period_end;
+    const periodEnd = typeof periodEndValue === 'string' 
+      ? new Date(periodEndValue)
+      : periodEndValue instanceof Date
+      ? periodEndValue
+      : new Date(periodEndValue);
+    
+    // Check if date is valid
+    if (isNaN(periodEnd.getTime())) {
+      // Invalid date, treat as lifetime
+      return { hasAccess: true, reason: 'subscription' };
+    }
+    
     // Check if subscription hasn't expired
     const now = new Date();
-    const periodEnd = new Date(user.subscription_period_end);
     // Treat dates far in the future (like 2099) as lifetime
     if (periodEnd.getFullYear() >= 2099 || periodEnd > now) {
       return { hasAccess: true, reason: 'subscription' };
@@ -99,11 +112,30 @@ export async function getUserPurchases(userEmail: string | null) {
   const purchasedStoryIds = purchases?.map((p) => p.story_id) || [];
 
   // Check subscription status (including lifetime subscriptions)
-  const hasActiveSubscription =
-    user.subscription_status === 'active' &&
-    (!user.subscription_period_end || 
-     user.subscription_period_end.getFullYear() >= 2099 ||
-     new Date(user.subscription_period_end) > new Date());
+  let hasActiveSubscription = false;
+  if (user.subscription_status === 'active') {
+    if (!user.subscription_period_end) {
+      hasActiveSubscription = true; // null means lifetime
+    } else {
+      // Safely parse subscription_period_end (may be string or Date)
+      const periodEndValue = user.subscription_period_end;
+      const periodEnd = typeof periodEndValue === 'string' 
+        ? new Date(periodEndValue)
+        : periodEndValue instanceof Date
+        ? periodEndValue
+        : new Date(periodEndValue);
+      
+      // Check if date is valid
+      if (isNaN(periodEnd.getTime())) {
+        // Invalid date, treat as lifetime
+        hasActiveSubscription = true;
+      } else {
+        // Treat dates far in the future (like 2099) as lifetime, or if not expired
+        const now = new Date();
+        hasActiveSubscription = periodEnd.getFullYear() >= 2099 || periodEnd > now;
+      }
+    }
+  }
 
   return {
     purchasedStories: purchasedStoryIds,
