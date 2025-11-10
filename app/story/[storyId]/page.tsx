@@ -293,11 +293,31 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
 
   if (!res.ok) {
     let msg = "";
-    try { 
-      msg = await res.text(); 
-    } catch {}
-    const e = new Error(`TTS failed (${res.status})${msg ? `: ${msg.slice(0,180)}` : ""}`);
+    let errorDetails: any = null;
+    try {
+      // Try to parse as JSON first (API returns JSON errors)
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        errorDetails = await res.json();
+        msg = errorDetails.error || errorDetails.message || JSON.stringify(errorDetails);
+      } else {
+        msg = await res.text();
+      }
+    } catch (parseError) {
+      console.error('Failed to parse error response:', parseError);
+      msg = `HTTP ${res.status} ${res.statusText}`;
+    }
+    
+    console.error('TTS API Error:', {
+      status: res.status,
+      statusText: res.statusText,
+      message: msg,
+      details: errorDetails
+    });
+    
+    const e = new Error(`TTS failed (${res.status})${msg ? `: ${msg.slice(0,300)}` : ""}`);
     (e as any).status = res.status;
+    (e as any).details = errorDetails;
     throw e;
   }
 
@@ -493,17 +513,29 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         return;
       }
       
+      // Log full error details for debugging
+      console.error('TTS Error Details:', {
+        message: e?.message,
+        status: e?.status,
+        details: e?.details,
+        stack: e?.stack
+      });
+      
       // Show a more user-friendly error message
-      if (e?.message?.includes("API key not configured")) {
-        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
-      } else if (e?.message?.includes("Incorrect API key")) {
-        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
+      if (e?.message?.includes("API key not configured") || e?.message?.includes("ELEVENLABS_API_KEY")) {
+        alert("TTS is not configured. Please set up your ElevenLabs API key to enable voice narration.");
+      } else if (e?.message?.includes("Incorrect API key") || e?.message?.includes("invalid") || e?.message?.includes("unauthorized")) {
+        alert("TTS API key is invalid or expired. Please update your ElevenLabs API key to enable voice narration.");
       } else if (e?.code === "AUTOPLAY") {
         // Mobile browsers sometimes block autoplay even with user interaction
         alert("Audio playback was blocked. Please try clicking the play button again.");
       } else if (e?.message?.includes("timeout") || e?.message?.includes("network")) {
         // Mobile network issues
         alert("Network error. Please check your connection and try again.");
+      } else if (e?.status === 500) {
+        // Server error - show more details if available
+        const errorMsg = e?.details?.error || e?.message || "Server error occurred";
+        alert(`TTS Server Error: ${errorMsg}\n\nPlease check the console for more details.`);
       } else {
         alert(`TTS Error: ${e?.message || "Could not play voice narration. Please try again."}`);
       }

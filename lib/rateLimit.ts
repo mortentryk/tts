@@ -118,8 +118,17 @@ export async function withRateLimit(
   try {
     const response = await handler();
     
-    // Clone response to ensure headers are mutable
-    const newResponse = response.clone();
+    // Try to clone response to ensure headers are mutable
+    // If cloning fails (e.g., body already consumed), use original response
+    let newResponse: Response;
+    try {
+      newResponse = response.clone();
+    } catch (cloneError) {
+      console.warn('Failed to clone response, using original:', cloneError);
+      newResponse = response;
+    }
+    
+    // Add rate limit headers
     newResponse.headers.set('X-RateLimit-Limit', limit.toString());
     newResponse.headers.set('X-RateLimit-Remaining', result.remaining.toString());
     newResponse.headers.set('X-RateLimit-Reset', result.resetAt.toString());
@@ -127,6 +136,7 @@ export async function withRateLimit(
     return newResponse;
   } catch (error: any) {
     console.error('Error in rate-limited handler:', error);
+    console.error('Error stack:', error?.stack);
     // Return error response with rate limit headers
     const errorResponse = new Response(
       JSON.stringify({
