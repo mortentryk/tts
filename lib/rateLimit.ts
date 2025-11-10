@@ -115,14 +115,35 @@ export async function withRateLimit(
   }
 
   // Add rate limit headers to response
-  const response = await handler();
-  
-  // Clone response to ensure headers are mutable
-  const newResponse = response.clone();
-  newResponse.headers.set('X-RateLimit-Limit', limit.toString());
-  newResponse.headers.set('X-RateLimit-Remaining', result.remaining.toString());
-  newResponse.headers.set('X-RateLimit-Reset', result.resetAt.toString());
+  try {
+    const response = await handler();
+    
+    // Clone response to ensure headers are mutable
+    const newResponse = response.clone();
+    newResponse.headers.set('X-RateLimit-Limit', limit.toString());
+    newResponse.headers.set('X-RateLimit-Remaining', result.remaining.toString());
+    newResponse.headers.set('X-RateLimit-Reset', result.resetAt.toString());
 
-  return newResponse;
+    return newResponse;
+  } catch (error: any) {
+    console.error('Error in rate-limited handler:', error);
+    // Return error response with rate limit headers
+    const errorResponse = new Response(
+      JSON.stringify({
+        error: error?.message || 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error?.stack : undefined,
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': limit.toString(),
+          'X-RateLimit-Remaining': result.remaining.toString(),
+          'X-RateLimit-Reset': result.resetAt.toString(),
+        },
+      }
+    );
+    return errorResponse;
+  }
 }
 

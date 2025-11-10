@@ -183,7 +183,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withRateLimit(request, 50, 60000, async () => {
     try {
-      const { text, nodeKey, storyId } = await request.json();
+      let body;
+      try {
+        body = await request.json();
+      } catch (parseError) {
+        console.error("Failed to parse request body:", parseError);
+        const errorResponse = NextResponse.json({ 
+          error: "Invalid JSON in request body" 
+        }, { status: 400 });
+        return setCors(errorResponse, request);
+      }
+
+      const { text, nodeKey, storyId } = body;
       const clean = (text || "").toString().trim();
       
       if (!clean) {
@@ -196,29 +207,43 @@ export async function POST(request: NextRequest) {
 
       // Check if we have cached audio for this exact text
       if (nodeKey && storyId) {
-        const { data: node } = await supabaseAdmin
-          .from('story_nodes')
-          .select('audio_url, text_hash')
-          .eq('story_id', storyId)
-          .eq('node_key', nodeKey)
-          .single();
+        try {
+          const { data: node, error: dbError } = await supabaseAdmin
+            .from('story_nodes')
+            .select('audio_url, text_hash')
+            .eq('story_id', storyId)
+            .eq('node_key', nodeKey)
+            .single();
 
-        // If hash matches and we have audio_url, return cached URL
-        if (node?.text_hash === textHash && node?.audio_url) {
-          console.log(`✅ Using cached audio for node ${nodeKey}`);
-          
-          // Fetch the audio from Cloudinary and return it
-          const audioResponse = await fetch(node.audio_url);
-          if (audioResponse.ok) {
-            const audioBuffer = await audioResponse.arrayBuffer();
-            const response = new NextResponse(audioBuffer, {
-              status: 200,
-              headers: {
-                "Content-Type": "audio/mpeg",
-              },
-            });
-            return setCors(response, request);
+          if (dbError) {
+            console.error("Database error checking cache:", dbError);
+            // Continue to generate new audio instead of failing
+          } else if (node?.text_hash === textHash && node?.audio_url) {
+            console.log(`✅ Using cached audio for node ${nodeKey}`);
+            
+            // Fetch the audio from Cloudinary and return it
+            try {
+              const audioResponse = await fetch(node.audio_url);
+              if (audioResponse.ok) {
+                const audioBuffer = await audioResponse.arrayBuffer();
+                const response = new NextResponse(audioBuffer, {
+                  status: 200,
+                  headers: {
+                    "Content-Type": "audio/mpeg",
+                  },
+                });
+                return setCors(response, request);
+              } else {
+                console.warn(`Failed to fetch cached audio from ${node.audio_url}, generating new audio`);
+              }
+            } catch (fetchError) {
+              console.error("Error fetching cached audio:", fetchError);
+              // Continue to generate new audio
+            }
           }
+        } catch (cacheError) {
+          console.error("Error checking cache:", cacheError);
+          // Continue to generate new audio instead of failing
         }
       }
 
@@ -253,7 +278,7 @@ export async function POST(request: NextRequest) {
           const chunk = chunks[i];
           console.log(`🎙️ Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)...`);
           
-          const body = {
+          const chunkRequestBody = {
             text: chunk,
             model_id: "eleven_multilingual_v2",
             voice_settings: {
@@ -270,7 +295,7 @@ export async function POST(request: NextRequest) {
               "Content-Type": "application/json",
               "xi-api-key": apiKey
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify(chunkRequestBody)
           });
 
           if (!audioResponse.ok) {
@@ -301,7 +326,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Text is within limit, process normally
-      const body = {
+      const requestBody = {
         text: clean,
         model_id: "eleven_multilingual_v2",
         voice_settings: {
@@ -318,7 +343,7 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
           "xi-api-key": apiKey
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(requestBody)
       });
 
       if (!audioResponse.ok) {
@@ -339,7 +364,12 @@ export async function POST(request: NextRequest) {
       return setCors(response, request);
     } catch (e: any) {
       console.error("TTS handler error:", e);
-      const errorResponse = NextResponse.json({ error: e?.message || "TTS failed in handler" }, { status: 500 });
+      console.error("Error stack:", e?.stack);
+      const errorMessage = e?.message || "TTS failed in handler";
+      const errorResponse = NextResponse.json({ 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? e?.stack : undefined
+      }, { status: 500 });
       return setCors(errorResponse, request);
     }
   });
