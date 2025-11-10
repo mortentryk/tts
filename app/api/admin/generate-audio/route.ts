@@ -76,8 +76,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎙️ Generating audio for node ${nodeId} in story "${story.title}"`);
 
-    // Use Danish multilingual voice (Adam)
-    const voiceId = "pNInz6obpgDQGcFmaJgB";
+    // Use Danish multilingual voice
+    const voiceId = "qhEux886xDKbOdF7jkFP";
 
     const body = {
       text: text.substring(0, 5000), // ElevenLabs limit

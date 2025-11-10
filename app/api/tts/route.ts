@@ -259,8 +259,8 @@ export async function POST(request: NextRequest) {
       console.log("🎙️ Generating audio with ElevenLabs...");
       console.log(`📏 Text length: ${clean.length} characters`);
 
-      // Use Danish multilingual voice (Adam is good for Danish)
-      const voiceId = "pNInz6obpgDQGcFmaJgB"; // Adam - multilingual
+      // Use Danish multilingual voice
+      const voiceId = "qhEux886xDKbOdF7jkFP";
 
       // ElevenLabs has a 5000 character limit per request
       const ELEVENLABS_MAX_CHARS = 5000;
