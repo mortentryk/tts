@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateImage, createStoryImagePrompt } from '../../../../lib/aiImageGenerator';
+import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -115,6 +115,8 @@ export async function POST(request: NextRequest) {
 
     // Get the first image from the story to use as style reference
     let referenceImageUrl: string | null = null;
+    let extractedStyleDescription: string | undefined = undefined;
+    
     try {
       const { data: firstNode } = await supabase
         .from('story_nodes')
@@ -128,6 +130,16 @@ export async function POST(request: NextRequest) {
       if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
         referenceImageUrl = firstNode.image_url;
         console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key})`);
+        
+        // Analyze the reference image to extract style descriptors
+        try {
+          extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+          if (extractedStyleDescription) {
+            console.log('✅ Extracted style description from reference image');
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to analyze reference image style, using text-based matching:', error);
+        }
       }
     } catch (error) {
       // No first image found, that's okay - we'll generate without reference
@@ -139,11 +151,21 @@ export async function POST(request: NextRequest) {
     
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;
-    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters, referenceImageUrl || undefined);
+    const prompt = createStoryImagePrompt(
+      fullStoryText, 
+      story.title || storyTitle || '', 
+      visualStyle, 
+      nodeCharacters, 
+      referenceImageUrl || undefined,
+      extractedStyleDescription
+    );
     console.log('📝 Generated prompt:', prompt);
     console.log('🎨 Using visual style:', visualStyle);
     if (referenceImageUrl) {
       console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
+    }
+    if (extractedStyleDescription) {
+      console.log('🎭 Using extracted style description for precise matching');
     }
 
     // Generate image with AI

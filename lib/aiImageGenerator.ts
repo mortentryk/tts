@@ -138,6 +138,56 @@ export async function generateMultipleImages(
 }
 
 /**
+ * Analyze an image using GPT-4 Vision to extract detailed style descriptors
+ */
+export async function analyzeImageStyle(imageUrl: string): Promise<string> {
+  try {
+    console.log('🔍 Analyzing image style with GPT-4 Vision:', imageUrl);
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert art director and visual style analyst. Analyze the provided image and extract detailed style descriptors that can be used to recreate the same visual style in other images. Focus on:
+- Artistic style (e.g., "Disney-style animation", "watercolor", "digital painting")
+- Color palette and mood (warm/cool, vibrant/muted, bright/dark)
+- Lighting characteristics (soft/harsh, warm/cool, direction)
+- Character design approach (realistic/stylized, proportions, features)
+- Overall mood and atmosphere (friendly/scary, whimsical/serious, magical/realistic)
+- Composition style
+- Texture and rendering quality
+
+Return ONLY a detailed style description that can be used in image generation prompts. Be specific and detailed.`
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: imageUrl }
+            },
+            {
+              type: 'text',
+              text: 'Analyze this image and provide a detailed style description that can be used to match this exact visual style in other images.'
+            }
+          ]
+        }
+      ],
+      max_tokens: 500,
+    });
+
+    const styleDescription = response.choices[0]?.message?.content || '';
+    console.log('✅ Extracted style description:', styleDescription);
+    return styleDescription;
+  } catch (error) {
+    console.error('❌ Image style analysis error:', error);
+    // Return empty string if analysis fails - we'll fall back to text-based matching
+    return '';
+  }
+}
+
+/**
  * Create a story-specific image prompt with character consistency
  */
 export function createStoryImagePrompt(
@@ -152,7 +202,8 @@ export function createStoryImagePrompt(
     emotion?: string;
     action?: string;
   }>,
-  referenceImageUrl?: string
+  referenceImageUrl?: string,
+  extractedStyleDescription?: string
 ): string {
   // Build character descriptions with better structure
   let characterSection = '';
@@ -188,15 +239,19 @@ export function createStoryImagePrompt(
   // Use up to 600 characters of the story text for better context
   const sceneDescription = cleanStoryText.substring(0, 600).trim();
   
-  // Add style reference instruction if we have a reference image
+  // Add style reference instruction if we have a reference image or extracted style
   let styleReferenceSection = '';
-  if (referenceImageUrl) {
-    styleReferenceSection = ' Match the exact artistic style, color palette, lighting, character design approach, and visual aesthetic of the first scene image from this story. Maintain consistent visual storytelling style throughout.';
+  if (extractedStyleDescription) {
+    // Use the AI-extracted style description for precise matching
+    styleReferenceSection = ` CRITICAL STYLE MATCHING: ${extractedStyleDescription} You MUST match this exact style in every detail - same artistic approach, same color palette, same lighting, same character design style, same mood and atmosphere.`;
+  } else if (referenceImageUrl) {
+    // Fallback to text-based instructions if we don't have extracted style
+    styleReferenceSection = ' CRITICAL: Match the exact same artistic style, color palette, lighting mood, character design approach, and visual aesthetic as the first scene image from this story. Use the same warm, inviting lighting (not dark or scary). Characters should have the same friendly, expressive design style (not menacing, scary, or horror-like). Maintain the same whimsical, storybook illustration quality with vibrant colors and soft, rounded shapes. Keep the same family-friendly, magical atmosphere throughout. Avoid dark, ominous, or scary elements. The visual style must be identical to the first image - same artistic approach, same mood, same character rendering style.';
   }
   
   // Build a well-structured prompt with clear sections
   // Structure: [Style] [Scene Description] [Characters] [Style Reference] [Quality Requirements]
-  const prompt = `${style}. Scene: ${sceneDescription}${characterSection}${styleReferenceSection} High quality illustration, dynamic composition, expressive and appealing, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
+  const prompt = `${style}. Scene: ${sceneDescription}${characterSection}${styleReferenceSection} High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, no text, no words, no writing, no letters, no dialogue boxes, no UI elements, no dark or scary elements`;
   
   return prompt;
 }

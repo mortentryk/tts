@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateImage, createStoryImagePrompt } from '../../../../lib/aiImageGenerator';
+import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -80,6 +80,8 @@ export async function POST(request: NextRequest) {
 
     // Get the first image from the story to use as style reference for all subsequent images
     let referenceImageUrl: string | null = null;
+    let extractedStyleDescription: string | undefined = undefined;
+    
     try {
       const { data: firstNode } = await supabase
         .from('story_nodes')
@@ -93,6 +95,16 @@ export async function POST(request: NextRequest) {
       if (firstNode && firstNode.image_url) {
         referenceImageUrl = firstNode.image_url;
         console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key}) - will use for style consistency`);
+        
+        // Analyze the reference image once to extract style descriptors (reuse for all images)
+        try {
+          extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+          if (extractedStyleDescription) {
+            console.log('✅ Extracted style description from reference image - will use for all subsequent images');
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to analyze reference image style, using text-based matching:', error);
+        }
       }
     } catch (error) {
       // No first image found yet, that's okay - first image will be generated without reference
@@ -143,11 +155,15 @@ export async function POST(request: NextRequest) {
           story.title, 
           style, 
           nodeCharacters,
-          useReferenceImage ? referenceImageUrlForPrompt : undefined
+          useReferenceImage ? referenceImageUrlForPrompt : undefined,
+          useReferenceImage ? extractedStyleDescription : undefined
         );
         
         if (useReferenceImage) {
           console.log(`🖼️ Using reference image for style consistency on node ${node.node_key}`);
+          if (extractedStyleDescription) {
+            console.log(`🎭 Using extracted style description for precise matching on node ${node.node_key}`);
+          }
         }
         
         // Generate image with AI
