@@ -149,16 +149,21 @@ export async function analyzeImageStyle(imageUrl: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: `You are an expert art director and visual style analyst. Analyze the provided image and extract detailed style descriptors that can be used to recreate the same visual style in other images. Focus on:
-- Artistic style (e.g., "Disney-style animation", "watercolor", "digital painting")
-- Color palette and mood (warm/cool, vibrant/muted, bright/dark)
-- Lighting characteristics (soft/harsh, warm/cool, direction)
-- Character design approach (realistic/stylized, proportions, features)
-- Overall mood and atmosphere (friendly/scary, whimsical/serious, magical/realistic)
-- Composition style
-- Texture and rendering quality
+          content: `You are an expert art director and visual style analyst. Analyze the provided image and extract detailed style descriptors that can be used to recreate the EXACT same visual style in other images. 
 
-Return ONLY a detailed style description that can be used in image generation prompts. Be specific and detailed.`
+CRITICAL: Focus on capturing the EXACT style characteristics:
+- Artistic style (e.g., "Disney-style animation", "watercolor", "digital painting")
+- Color palette and mood (warm/cool, vibrant/muted, bright/dark) - be specific about colors
+- Lighting characteristics (soft/harsh, warm/cool, direction, brightness level)
+- Character design approach (realistic/stylized, proportions, facial features, friendly/scary appearance)
+- Overall mood and atmosphere (friendly/scary, whimsical/serious, magical/realistic, light/dark)
+- Composition style and camera angle
+- Texture and rendering quality
+- Any specific visual elements that define the style
+
+IMPORTANT: If the image has a friendly, warm, family-friendly style, emphasize that. If it avoids dark/scary elements, explicitly state that. Be very specific about what makes this style unique and what should be avoided.
+
+Return ONLY a detailed, specific style description (2-3 sentences) that can be used in image generation prompts to match this exact visual style.`
         },
         {
           role: 'user',
@@ -241,19 +246,25 @@ export function createStoryImagePrompt(
   // Use up to 600 characters of the story text for better context
   const sceneDescription = cleanStoryText.substring(0, 600).trim();
   
-  // Add style reference instruction if we have a reference image or extracted style
+  // Build style reference section - this MUST come FIRST to ensure DALL-E 3 prioritizes it
   let styleReferenceSection = '';
   if (extractedStyleDescription) {
     // Use the AI-extracted style description for precise matching
-    styleReferenceSection = ` CRITICAL STYLE MATCHING: ${extractedStyleDescription} You MUST match this exact style in every detail - same artistic approach, same color palette, same lighting, same character design style, same mood and atmosphere.`;
+    // Put it FIRST in the prompt so DALL-E 3 prioritizes style over content
+    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): ${extractedStyleDescription}. CRITICAL: You MUST use this exact style - same artistic approach, same color palette, same lighting mood, same character design style, same overall atmosphere. `;
   } else if (referenceImageUrl) {
     // Fallback to text-based instructions if we don't have extracted style
-    styleReferenceSection = ' CRITICAL: Match the exact same artistic style, color palette, lighting mood, character design approach, and visual aesthetic as the first scene image from this story. Use the same warm, inviting lighting (not dark or scary). Characters should have the same friendly, expressive design style (not menacing, scary, or horror-like). Maintain the same whimsical, storybook illustration quality with vibrant colors and soft, rounded shapes. Keep the same family-friendly, magical atmosphere throughout. Avoid dark, ominous, or scary elements. The visual style must be identical to the first image - same artistic approach, same mood, same character rendering style.';
+    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): Match the exact same artistic style, color palette, lighting mood, character design approach, and visual aesthetic as the first scene image from this story. Use the same warm, inviting lighting (NOT dark or scary). Characters must have the same friendly, expressive design style (NOT menacing, scary, or horror-like). Maintain the same whimsical, storybook illustration quality with vibrant colors and soft, rounded shapes. Keep the same family-friendly, magical atmosphere. AVOID dark, ominous, or scary elements. The visual style must be IDENTICAL to the first image. `;
   }
   
-  // Build a well-structured prompt with clear sections
-  // Structure: [Style] [Scene Description] [Characters] [Style Reference] [Quality Requirements]
-  const prompt = `${style}. Scene: ${sceneDescription}${characterSection}${styleReferenceSection} High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, no text, no words, no writing, no letters, no dialogue boxes, no UI elements, no dark or scary elements`;
+  // Build negative instructions to prevent unwanted styles
+  const negativeInstructions = referenceImageUrl || extractedStyleDescription 
+    ? ' ABSOLUTELY AVOID: dark lighting, scary atmosphere, horror elements, menacing characters, ominous mood, dark shadows, creepy designs, horror-style, gothic elements, scary facial expressions, dark color schemes, nightmarish imagery.'
+    : '';
+  
+  // Build a well-structured prompt with style FIRST
+  // Structure: [Style Requirements FIRST] [Base Style] [Scene Description] [Characters] [Negative Instructions] [Quality Requirements]
+  const prompt = `${styleReferenceSection}${style}. Scene: ${sceneDescription}${characterSection}${negativeInstructions} High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
   
   return prompt;
 }
