@@ -134,13 +134,16 @@ export async function POST(request: NextRequest) {
         // Use reference image only if it's not the first node (first node sets the style)
         const useReferenceImage = referenceImageUrl && node.node_key !== nodes[0]?.node_key;
         
+        // Convert null to undefined for the function parameter
+        const referenceImageUrlForPrompt: string | undefined = referenceImageUrl ?? undefined;
+        
         // Create AI prompt from story text with character consistency and style reference
         const prompt = createStoryImagePrompt(
           node.text_md, 
           story.title, 
           style, 
           nodeCharacters,
-          useReferenceImage ? referenceImageUrl : undefined
+          useReferenceImage ? referenceImageUrlForPrompt : undefined
         );
         
         if (useReferenceImage) {
