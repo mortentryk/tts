@@ -11,9 +11,9 @@ interface Story {
   id: string;
   slug: string;
   title: string;
-  description: string;
-  journey_order: number;
-  landmark_type: string;
+  description?: string;
+  journey_order?: number | null;
+  landmark_type?: string;
   thumbnail?: string;
 }
 
@@ -44,8 +44,8 @@ export default function JourneyMap({ stories, onExit, showIntro = true }: Journe
 
   // Get journey stories sorted by order
   const journeyStories = stories
-    .filter(story => story.journey_order !== null)
-    .sort((a, b) => a.journey_order - b.journey_order);
+    .filter(story => story.journey_order !== null && story.journey_order !== undefined)
+    .sort((a, b) => (a.journey_order ?? 0) - (b.journey_order ?? 0));
 
   // Load journey state from localStorage
   useEffect(() => {
@@ -219,7 +219,7 @@ export default function JourneyMap({ stories, onExit, showIntro = true }: Journe
                     {story.landmark_type === 'cave' && '🕳️'}
                     {story.landmark_type === 'castle' && '🏰'}
                     {story.landmark_type === 'forest' && '🌲'}
-                    {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(story.landmark_type) && '📍'}
+                    {(!story.landmark_type || !['tree', 'sea', 'cave', 'castle', 'forest'].includes(story.landmark_type)) && '📍'}
                   </div>
                   
                   {/* Story Title */}

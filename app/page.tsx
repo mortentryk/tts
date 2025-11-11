@@ -81,7 +81,19 @@ export default function Home() {
       console.error('❌ Failed to load stories:', error);
       console.log('🔄 Using fallback stories...');
       setStories([
-        { id: 'cave-adventure', title: 'Cave Adventure', description: 'Explore a mysterious cave filled with treasures and dangers.', is_free: true, price: 0 },
+        { 
+          id: 'cave-adventure', 
+          slug: 'cave-adventure',
+          title: 'Cave Adventure', 
+          description: 'Explore a mysterious cave filled with treasures and dangers.', 
+          lang: 'en',
+          is_published: true,
+          version: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_free: true, 
+          price: 0 
+        },
       ]);
     } finally {
       console.log('🏁 Finished loading stories');
@@ -128,7 +140,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type,
-          userEmail: userEmailState,
+          userEmail: userEmail,
           planId,
         }),
       });
@@ -155,8 +167,8 @@ export default function Home() {
     );
   }
 
-  const freeStories = stories.filter(s => s.is_free || s.price === 0);
-  const paidStories = stories.filter(s => !s.is_free && s.price > 0);
+  const freeStories = stories.filter(s => s.is_free || (s.price ?? 0) === 0);
+  const paidStories = stories.filter(s => !s.is_free && (s.price ?? 0) > 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900 text-white">
@@ -219,7 +231,7 @@ export default function Home() {
                   key={story.id}
                   story={story}
                   hasAccess={checkAccess(story)}
-                  userEmail={userEmailState}
+                  userEmail={userEmail}
                   onSelect={(story) => router.push(`/story/${story.slug || story.id}`)}
                 />
               ))}
@@ -240,7 +252,7 @@ export default function Home() {
                   key={story.id}
                   story={story}
                   hasAccess={checkAccess(story)}
-                  userEmail={userEmailState}
+                  userEmail={userEmail}
                   onSelect={(story) => {
                     if (checkAccess(story)) {
                       router.push(`/story/${story.slug || story.id}`);
@@ -294,7 +306,7 @@ export default function Home() {
                     </ul>
                     <button
                       onClick={() => {
-                        if (userEmailState) {
+                        if (userEmail) {
                           handleSubscription(monthlyPlan.id, 'subscription');
                         } else {
                           openEmailDialog(
@@ -335,7 +347,7 @@ export default function Home() {
                     </ul>
                     <button
                       onClick={() => {
-                        if (userEmailState) {
+                        if (userEmail) {
                           handleSubscription(lifetimePlan.id, 'lifetime');
                         } else {
                           openEmailDialog(

@@ -7,9 +7,9 @@ interface Story {
   id: string;
   slug: string;
   title: string;
-  description: string;
-  journey_order: number;
-  landmark_type: string;
+  description?: string;
+  journey_order?: number | null;
+  landmark_type?: string;
   thumbnail?: string;
 }
 
@@ -44,8 +44,8 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
 
   // Get journey stories sorted by order
   const journeyStories = stories
-    .filter(story => story.journey_order !== null)
-    .sort((a, b) => a.journey_order - b.journey_order);
+    .filter(story => story.journey_order !== null && story.journey_order !== undefined)
+    .sort((a, b) => (a.journey_order ?? 0) - (b.journey_order ?? 0));
 
   const currentStory = journeyStories[currentStoryIndex];
 
@@ -270,7 +270,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                   {currentStory.landmark_type === 'cave' && '🕳️'}
                   {currentStory.landmark_type === 'castle' && '🏰'}
                   {currentStory.landmark_type === 'forest' && '🌲'}
-                  {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '📍'}
+                  {(!currentStory.landmark_type || !['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type)) && '📍'}
                 </div>
                 <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
                   {currentStory.title}
@@ -321,7 +321,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                 {currentStory.landmark_type === 'cave' && '🕳️'}
                 {currentStory.landmark_type === 'castle' && '🏰'}
                 {currentStory.landmark_type === 'forest' && '🌲'}
-                {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '⚔️'}
+                {(!currentStory.landmark_type || !['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type)) && '⚔️'}
               </div>
 
               {/* Quest Title */}

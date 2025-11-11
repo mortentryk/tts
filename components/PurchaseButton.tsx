@@ -10,8 +10,8 @@ interface PurchaseButtonProps {
     id: string;
     title: string;
     slug: string;
-    price: number;
-    is_free: boolean;
+    price?: number;
+    is_free?: boolean;
     cover_image_url?: string;
     description?: string;
   };
@@ -59,7 +59,7 @@ export default function PurchaseButton({ story, hasAccess, userEmail }: Purchase
           ${
             hasAccess
               ? 'bg-green-600 hover:bg-green-700 text-white'
-              : story.is_free
+              : story.is_free ?? false
               ? 'bg-blue-600 hover:bg-blue-700 text-white'
               : 'bg-yellow-600 hover:bg-yellow-700 text-white'
           }
@@ -70,10 +70,10 @@ export default function PurchaseButton({ story, hasAccess, userEmail }: Purchase
           'Indlæser...'
         ) : hasAccess ? (
           '▶️ Spil Historie'
-        ) : story.is_free ? (
+        ) : (story.is_free ?? false) ? (
           '▶️ Spil Gratis'
         ) : (
-          `🔒 Køb for $${Number(story.price).toFixed(2)}`
+          `🔒 Køb for $${Number(story.price ?? 0).toFixed(2)}`
         )}
       </button>
 

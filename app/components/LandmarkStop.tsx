@@ -5,8 +5,8 @@ import React from 'react';
 interface Story {
   id: string;
   title: string;
-  description: string;
-  landmark_type: string;
+  description?: string;
+  landmark_type?: string;
   thumbnail?: string;
 }
 
@@ -25,7 +25,7 @@ export default function LandmarkStop({
   onExit, 
   isAnimating 
 }: LandmarkStopProps) {
-  const getLandmarkDescription = (landmarkType: string) => {
+  const getLandmarkDescription = (landmarkType?: string) => {
     switch (landmarkType) {
       case 'tree':
         return 'A magical tree stands before you, its branches reaching toward the sky...';
@@ -42,7 +42,7 @@ export default function LandmarkStop({
     }
   };
 
-  const getLandmarkEmoji = (landmarkType: string) => {
+  const getLandmarkEmoji = (landmarkType?: string) => {
     switch (landmarkType) {
       case 'tree':
         return '🌳';
