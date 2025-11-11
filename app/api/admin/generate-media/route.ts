@@ -92,8 +92,33 @@ export async function POST(request: NextRequest) {
         };
       }) || [];
 
+      // Get the first image from the story to use as style reference
+      let referenceImageUrl: string | null = null;
+      try {
+        const { data: firstNode } = await supabase
+          .from('story_nodes')
+          .select('image_url, node_key')
+          .eq('story_id', story.id)
+          .not('image_url', 'is', null)
+          .order('sort_index', { ascending: true })
+          .limit(1)
+          .single();
+
+        if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
+          referenceImageUrl = firstNode.image_url;
+          console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key})`);
+        }
+      } catch (error) {
+        // No first image found, that's okay - we'll generate without reference
+        console.log('📝 No reference image found, generating without style reference');
+      }
+
       // Create AI prompt
-      const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+      const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters, referenceImageUrl || undefined);
+      
+      if (referenceImageUrl) {
+        console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
+      }
       
       // Generate image
       const generatedImage = await generateImage(prompt, {

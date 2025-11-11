@@ -113,14 +113,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Get the first image from the story to use as style reference
+    let referenceImageUrl: string | null = null;
+    try {
+      const { data: firstNode } = await supabase
+        .from('story_nodes')
+        .select('image_url, node_key')
+        .eq('story_id', story.id)
+        .not('image_url', 'is', null)
+        .order('sort_index', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
+        referenceImageUrl = firstNode.image_url;
+        console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key})`);
+      }
+    } catch (error) {
+      // No first image found, that's okay - we'll generate without reference
+      console.log('📝 No reference image found, generating without style reference');
+    }
+
     // Use story's visual style or fallback to Disney-style
     const visualStyle = storyVisualStyle || style || 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality';
     
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;
-    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters);
+    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters, referenceImageUrl || undefined);
     console.log('📝 Generated prompt:', prompt);
     console.log('🎨 Using visual style:', visualStyle);
+    if (referenceImageUrl) {
+      console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
+    }
 
     // Generate image with AI
     const generatedImage = await generateImage(prompt, {

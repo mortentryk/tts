@@ -151,7 +151,8 @@ export function createStoryImagePrompt(
     role?: string;
     emotion?: string;
     action?: string;
-  }>
+  }>,
+  referenceImageUrl?: string
 ): string {
   // Build character descriptions with better structure
   let characterSection = '';
@@ -187,9 +188,15 @@ export function createStoryImagePrompt(
   // Use up to 600 characters of the story text for better context
   const sceneDescription = cleanStoryText.substring(0, 600).trim();
   
+  // Add style reference instruction if we have a reference image
+  let styleReferenceSection = '';
+  if (referenceImageUrl) {
+    styleReferenceSection = ' Match the exact artistic style, color palette, lighting, character design approach, and visual aesthetic of the first scene image from this story. Maintain consistent visual storytelling style throughout.';
+  }
+  
   // Build a well-structured prompt with clear sections
-  // Structure: [Style] [Scene Description] [Characters] [Quality Requirements]
-  const prompt = `${style}. Scene: ${sceneDescription}${characterSection} High quality illustration, dynamic composition, expressive and appealing, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
+  // Structure: [Style] [Scene Description] [Characters] [Style Reference] [Quality Requirements]
+  const prompt = `${style}. Scene: ${sceneDescription}${characterSection}${styleReferenceSection} High quality illustration, dynamic composition, expressive and appealing, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
   
   return prompt;
 }

@@ -68,6 +68,27 @@ export async function POST(request: NextRequest) {
       `)
       .eq('story_id', story.id);
 
+    // Get the first image from the story to use as style reference for all subsequent images
+    let referenceImageUrl: string | null = null;
+    try {
+      const { data: firstNode } = await supabase
+        .from('story_nodes')
+        .select('image_url, node_key')
+        .eq('story_id', story.id)
+        .not('image_url', 'is', null)
+        .order('sort_index', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (firstNode && firstNode.image_url) {
+        referenceImageUrl = firstNode.image_url;
+        console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key}) - will use for style consistency`);
+      }
+    } catch (error) {
+      // No first image found yet, that's okay - first image will be generated without reference
+      console.log('📝 No reference image found yet - first image will set the style');
+    }
+
     // Process each node
     for (const node of nodes) {
       try {
@@ -113,7 +134,20 @@ export async function POST(request: NextRequest) {
 
         // Generate image if needed
         if (nodeMediaType === 'image' || nodeMediaType === 'both') {
-          const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+          // Use reference image only if it's not the first node (first node sets the style)
+          const useReferenceImage = referenceImageUrl && node.node_key !== nodes[0]?.node_key;
+          
+          const prompt = createStoryImagePrompt(
+            node.text_md, 
+            story.title, 
+            style, 
+            nodeCharacters,
+            useReferenceImage ? referenceImageUrl : undefined
+          );
+          
+          if (useReferenceImage) {
+            console.log(`🖼️ Using reference image for style consistency on node ${node.node_key}`);
+          }
           const generatedImage = await generateImage(prompt, {
             model: model as any,
             size: size as any,
