@@ -143,7 +143,7 @@ export async function generateMultipleImages(
 export function createStoryImagePrompt(
   storyText: string,
   storyTitle: string,
-  style: string = 'fantasy adventure book illustration',
+  style: string = 'vibrant anime-style illustration, playful and fun, appealing to all ages',
   characters?: Array<{
     name: string;
     description?: string;
@@ -180,7 +180,7 @@ export function createStoryImagePrompt(
   const sceneDescription = cleanStoryText.substring(0, 500).trim();
   
   // Create a comprehensive prompt with the actual story text
-  const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, book illustration style, cinematic lighting, no text, no words, no writing, no letters`;
+  const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Anime-inspired art style, vibrant colors, playful and whimsical, child-friendly, expressive characters, dynamic composition, fun and engaging illustration, appealing to all ages, high quality, no text, no words, no writing, no letters`;
   
   return prompt;
 }

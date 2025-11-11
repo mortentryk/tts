@@ -1344,11 +1344,18 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             <div className="mb-4 sm:mb-6 flex justify-center">
               <video 
                 src={passage.video}
+                autoPlay
+                muted
+                playsInline
+                loop
                 controls
                 className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
                 onError={(e) => {
                   console.error('Failed to load video:', passage.video);
                   e.currentTarget.style.display = 'none';
+                }}
+                onLoadedData={() => {
+                  console.log('✅ Video loaded and playing:', passage.video);
                 }}
               >
                 Your browser does not support the video tag.
