@@ -132,13 +132,15 @@ export async function POST(request: NextRequest) {
         console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key})`);
         
         // Analyze the reference image to extract style descriptors
-        try {
-          extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
-          if (extractedStyleDescription) {
-            console.log('✅ Extracted style description from reference image');
+        if (referenceImageUrl) {
+          try {
+            extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+            if (extractedStyleDescription) {
+              console.log('✅ Extracted style description from reference image');
+            }
+          } catch (error) {
+            console.warn('⚠️ Failed to analyze reference image style, using text-based matching:', error);
           }
-        } catch (error) {
-          console.warn('⚠️ Failed to analyze reference image style, using text-based matching:', error);
         }
       }
     } catch (error) {

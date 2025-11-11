@@ -165,13 +165,15 @@ Return ONLY a detailed style description that can be used in image generation pr
           content: [
             {
               type: 'image_url',
-              image_url: { url: imageUrl }
+              image_url: {
+                url: imageUrl
+              }
             },
             {
               type: 'text',
               text: 'Analyze this image and provide a detailed style description that can be used to match this exact visual style in other images.'
             }
-          ]
+          ] as any
         }
       ],
       max_tokens: 500,
