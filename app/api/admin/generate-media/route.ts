@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       nodeId, 
       mediaType = 'auto', // 'image', 'video', 'both', 'auto'
       model = 'dalle3',
-      style = 'fantasy adventure book illustration',
+      style = 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality',
       size = '1024x1024',
       quality = 'standard'
     } = body;

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       storyText, 
       storyTitle, 
       model = 'dalle3',
-      style = 'fantasy adventure book illustration',
+      style = 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality',
       size = '1024x1024',
       quality = 'standard'
     } = body;
@@ -113,8 +113,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Use story's visual style or fallback to generic style
-    const visualStyle = storyVisualStyle || style || 'fantasy adventure book illustration, detailed, cinematic lighting, consistent art style';
+    // Use story's visual style or fallback to Disney-style
+    const visualStyle = storyVisualStyle || style || 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality';
     
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;

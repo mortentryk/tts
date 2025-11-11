@@ -41,7 +41,7 @@ export async function generateImageWithDALLE3(
       prompt,
       size: options.size || '1024x1024',
       quality: options.quality || 'standard',
-      style: options.style || 'vivid',
+      style: 'vivid', // Use 'vivid' for Disney-style vibrant colors
       n: 1,
     });
 
@@ -143,7 +143,7 @@ export async function generateMultipleImages(
 export function createStoryImagePrompt(
   storyText: string,
   storyTitle: string,
-  style: string = 'vibrant anime-style illustration, playful and fun, appealing to all ages',
+  style: string = 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality',
   characters?: Array<{
     name: string;
     description?: string;
@@ -153,34 +153,43 @@ export function createStoryImagePrompt(
     action?: string;
   }>
 ): string {
-  // Build character descriptions
-  let characterDescriptions = '';
+  // Build character descriptions with better structure
+  let characterSection = '';
   if (characters && characters.length > 0) {
     const characterParts = characters.map(char => {
       let desc = char.name;
-      if (char.description) desc += ` (${char.description})`;
-      if (char.appearancePrompt) desc += `, ${char.appearancePrompt}`;
-      if (char.emotion) desc += `, ${char.emotion} expression`;
-      if (char.action) desc += `, ${char.action}`;
+      if (char.appearancePrompt) {
+        desc += `, ${char.appearancePrompt}`;
+      } else if (char.description) {
+        desc += `, ${char.description}`;
+      }
+      if (char.emotion) {
+        desc += `, showing ${char.emotion} expression`;
+      }
+      if (char.action) {
+        desc += `, ${char.action}`;
+      }
       return desc;
     });
-    characterDescriptions = `, featuring ${characterParts.join(', ')}`;
+    characterSection = ` Characters: ${characterParts.join('. ')}.`;
   }
   
-  // Use the full story text as the main description, but limit to reasonable length for AI processing
-  // Clean up the story text and use more of it for better context
+  // Clean up the story text for better AI processing
   const cleanStoryText = storyText
     .replace(/\*\*/g, '') // Remove markdown bold
     .replace(/\*/g, '') // Remove markdown italic
     .replace(/#{1,6}\s/g, '') // Remove markdown headers
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert markdown links to plain text
+    .replace(/\n+/g, ' ') // Replace newlines with spaces
+    .replace(/\s+/g, ' ') // Normalize whitespace
     .trim();
   
-  // Use up to 500 characters of the story text for better context
-  const sceneDescription = cleanStoryText.substring(0, 500).trim();
+  // Use up to 600 characters of the story text for better context
+  const sceneDescription = cleanStoryText.substring(0, 600).trim();
   
-  // Create a comprehensive prompt with the actual story text
-  const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Anime-inspired art style, vibrant colors, playful and whimsical, child-friendly, expressive characters, dynamic composition, fun and engaging illustration, appealing to all ages, high quality, no text, no words, no writing, no letters`;
+  // Build a well-structured prompt with clear sections
+  // Structure: [Style] [Scene Description] [Characters] [Quality Requirements]
+  const prompt = `${style}. Scene: ${sceneDescription}${characterSection} High quality illustration, dynamic composition, expressive and appealing, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
   
   return prompt;
 }
