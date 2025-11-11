@@ -14,6 +14,10 @@ const nextConfig = {
     // your project has type errors.
     // ignoreBuildErrors: true, // Uncomment if TypeScript errors block deployment
   },
+  // For Capacitor Android builds, use static export
+  // Note: This disables API routes. For full functionality, point Capacitor to deployed URL instead
+  // Uncomment the line below for static export (for offline-capable Android app):
+  // output: process.env.BUILD_STATIC === 'true' ? 'export' : undefined,
 }
 
 module.exports = nextConfig

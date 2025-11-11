@@ -4,14 +4,16 @@ const config: CapacitorConfig = {
   appId: 'com.yourcompany.tts',
   appName: 'Interaktive Historier',
   // For Next.js static export, use 'out' directory
-  // For Next.js with server components, you may need to use a different approach
-  webDir: 'out', // Change to '.next' if not using static export
+  // For production builds, this will be populated after 'npm run build:android'
+  webDir: process.env.CAPACITOR_WEB_DIR || 'out',
   server: {
     androidScheme: 'https',
     iosScheme: 'https',
-    // For development, you can uncomment this to use your local dev server
+    // For development, uncomment to use local dev server
     // url: 'http://localhost:3000',
     // cleartext: true
+    // For production, uncomment to use deployed URL
+    // url: 'https://your-vercel-deployment.vercel.app',
   },
   plugins: {
     SplashScreen: {
@@ -23,6 +25,12 @@ const config: CapacitorConfig = {
       showSpinner: false,
       splashFullScreen: true,
       splashImmersive: true,
+    },
+  },
+  android: {
+    buildOptions: {
+      keystorePath: undefined, // Set path to your keystore for release builds
+      keystoreAlias: undefined, // Set your keystore alias
     },
   },
 };
