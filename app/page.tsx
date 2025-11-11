@@ -176,7 +176,7 @@ export default function Home() {
       <section className="py-20 px-4">
         <div className="max-w-6xl mx-auto text-center">
           <h1 className="text-5xl sm:text-7xl font-bold mb-6 bg-gradient-to-r from-yellow-300 to-pink-400 bg-clip-text text-transparent">
-            Interaktive Historier
+            Storific Stories
           </h1>
           <p className="text-xl sm:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
             Magiske historier med stemme-fortælling, interaktive valg og fantastiske visuelle effekter. 
@@ -407,7 +407,7 @@ export default function Home() {
             </div>
             <div>
               <h4 className="font-bold mb-4">© 2024</h4>
-              <p className="text-gray-400 text-sm">TTS Historier Platform</p>
+              <p className="text-gray-400 text-sm">Storific Stories</p>
             </div>
           </div>
         </div>

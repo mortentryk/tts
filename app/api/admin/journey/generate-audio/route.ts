@@ -40,6 +40,16 @@ export async function POST(request: NextRequest) {
     }
 
     const text = journey.journey_text;
+    
+    // Validate text exists and is not empty
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      console.error('❌ Journey segment has no text content:', journeyId);
+      return NextResponse.json(
+        { error: 'Journey segment has no text content to generate audio from' },
+        { status: 400 }
+      );
+    }
+    
     const currentHash = generateTextHash(text);
 
     // Check if audio is already up-to-date

@@ -5,8 +5,24 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Dungeon Story Game',
-  description: 'An interactive dungeon adventure with TTS',
+  title: 'Storific Stories',
+  description: 'Interactive stories with voice narration for kids',
+  manifest: '/manifest',
+  themeColor: '#e94560',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Storific',
+  },
+  icons: {
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+  },
 }
 
 export default function RootLayout({

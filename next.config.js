@@ -1,3 +1,22 @@
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+  runtimeCaching: [
+    {
+      urlPattern: /^https?.*/,
+      handler: 'NetworkFirst',
+      options: {
+        cacheName: 'offlineCache',
+        expiration: {
+          maxEntries: 200,
+        },
+      },
+    },
+  ],
+})
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // App Router is now stable in Next.js 15, no experimental flag needed
@@ -20,4 +39,4 @@ const nextConfig = {
   // output: process.env.BUILD_STATIC === 'true' ? 'export' : undefined,
 }
 
-module.exports = nextConfig
+module.exports = withPWA(nextConfig)

@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.yourcompany.tts',
-  appName: 'Interaktive Historier',
+  appName: 'Storific Stories',
   // For Next.js static export, use 'out' directory
   // For production builds, this will be populated after 'npm run build:android'
   webDir: process.env.CAPACITOR_WEB_DIR || 'out',
