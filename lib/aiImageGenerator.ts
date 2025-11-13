@@ -138,10 +138,11 @@ export async function generateImageWithStableDiffusion(
     
     // Use the prediction API pattern for more reliable handling
     // Use flux-schnell which is fast and reliable
+    // flux-schnell can handle longer prompts (up to ~2000 chars), so we use more to include full scene description
     const prediction = await replicate.predictions.create({
       model: "black-forest-labs/flux-schnell",
         input: {
-        prompt: prompt.substring(0, 1000), // Limit prompt length
+        prompt: prompt.substring(0, 1500), // Increased limit to capture full scene description + style
         aspect_ratio: "1:1",
       }
     });
@@ -257,7 +258,7 @@ export async function generateImageWithStableDiffusionImg2Img(
       prediction = await replicate.predictions.create({
         model: "black-forest-labs/flux-dev",
         input: {
-          prompt: prompt.substring(0, 1000),
+          prompt: prompt.substring(0, 1500), // Increased to capture full scene description
           image: referenceImageUrl, // Use URL directly - Replicate can fetch it
           strength: strength,
           aspect_ratio: "1:1",
@@ -270,7 +271,7 @@ export async function generateImageWithStableDiffusionImg2Img(
       prediction = await replicate.predictions.create({
         model: "black-forest-labs/flux-schnell",
         input: {
-          prompt: prompt.substring(0, 1000), // Prompt already includes extracted style description
+          prompt: prompt.substring(0, 1500), // Increased to capture full scene description + style
           aspect_ratio: "1:1",
         }
       });
@@ -503,11 +504,14 @@ export function createStoryImagePrompt(
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim();
   
-  // Sanitize the story text to make it child-friendly
-  cleanStoryText = sanitizePromptForDALLE3(cleanStoryText);
+  // Use more of the story text (up to 1000 chars) to capture full scene details
+  // Don't sanitize the story text too aggressively - we want to preserve important details
+  // Only sanitize after we've extracted the key scene description
+  let sceneDescription = cleanStoryText.substring(0, 1000).trim();
   
-  // Use up to 600 characters of the story text for better context
-  const sceneDescription = cleanStoryText.substring(0, 600).trim();
+  // Sanitize only the scene description (not the full text) to make it child-friendly
+  // but preserve important story elements
+  sceneDescription = sanitizePromptForDALLE3(sceneDescription);
   
   // Build style reference section - this MUST come FIRST to ensure DALL-E 3 prioritizes it
   let styleReferenceSection = '';
@@ -531,9 +535,16 @@ export function createStoryImagePrompt(
     ? ' Use warm, bright lighting. Maintain friendly, expressive character designs. Keep a light, cheerful atmosphere. All characters must appear friendly and approachable, never scary or threatening.'
     : ' All characters must appear friendly and approachable, never scary or threatening. Use warm, bright lighting throughout.';
   
-  // Build a well-structured prompt with style FIRST
-  // Structure: [Style Requirements FIRST] [Base Style] [Scene Description] [Characters] [Negative Instructions] [Quality Requirements]
-  const prompt = `${styleReferenceSection}${defaultStyle}. Scene: ${sceneDescription}${characterSection}${negativeInstructions} High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, Disney Pixar style, anime-inspired, child-appropriate, no scary elements, no dark shadows, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
+  // Build a well-structured prompt that emphasizes BOTH style AND story content
+  // Structure: [Style Requirements] [Base Style] [SCENE DESCRIPTION - PROMINENT] [Characters] [Negative Instructions] [Quality Requirements]
+  // Make the scene description prominent so the AI reads and follows the story
+  const prompt = `${styleReferenceSection}${defaultStyle}. 
+
+IMPORTANT SCENE DESCRIPTION (READ CAREFULLY AND DEPICT ACCURATELY): ${sceneDescription}
+
+${characterSection}${negativeInstructions} 
+
+High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, Disney Pixar style, anime-inspired, child-appropriate, no scary elements, no dark shadows, no text, no words, no writing, no letters, no dialogue boxes, no UI elements. The image must accurately show the scene described above, including all key elements, characters, objects, and setting details mentioned in the scene description.`;
   
   return prompt;
 }
