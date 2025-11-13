@@ -11,8 +11,8 @@ export async function POST(request: NextRequest) {
       nodeId, 
       storyText, 
       storyTitle, 
-      model = 'dalle3',
-      style = 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
+      model = 'stable-diffusion', // Default to Stable Diffusion for better style consistency with img2img and reference images
+      style, // No hard-coded default - use story's visual_style or let createStoryImagePrompt use its default
       size = '1024x1024',
       quality = 'standard',
       referenceImageNodeKey
@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
+    console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}`);
 
     // Get story ID and title (visual_style is optional)
     const { data: story, error: storyError } = await supabase
@@ -35,12 +36,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (storyError || !story) {
-      console.error('Story fetch error:', storyError);
+      console.error('❌ Story fetch error:', storyError);
       return NextResponse.json(
         { error: 'Story not found' },
         { status: 404 }
       );
     }
+    
+    console.log(`✅ DEBUG: Found story - ID: ${story.id}, Title: ${story.title}`);
     
     // Try to get visual_style if the column exists
     let storyVisualStyle = null;
@@ -51,9 +54,10 @@ export async function POST(request: NextRequest) {
         .eq('id', story.id)
         .single();
       storyVisualStyle = storyWithStyle?.visual_style;
+      console.log(`🎨 DEBUG: Story visual_style: ${storyVisualStyle || 'NOT SET (will use default)'}`);
     } catch (error) {
       // Column doesn't exist yet, that's okay
-      console.log('Note: visual_style column not yet added to database');
+      console.log('⚠️ Note: visual_style column not yet added to database');
     }
 
     // Get character assignments for this node
@@ -89,41 +93,78 @@ export async function POST(request: NextRequest) {
       };
     }) || [];
 
-    console.log(`🎭 Found ${nodeCharacters.length} characters for this node`);
-
-    // Get previous nodes for context (up to 2 previous nodes)
-    const currentNodeIndex = parseInt(nodeId) || 0;
-    const previousNodeKeys = [];
-    for (let i = Math.max(1, currentNodeIndex - 2); i < currentNodeIndex; i++) {
-      previousNodeKeys.push(i.toString());
+    console.log(`🎭 DEBUG: Found ${nodeCharacters.length} characters for this node`);
+    if (nodeCharacters.length > 0) {
+      nodeCharacters.forEach((char, idx) => {
+        console.log(`   Character ${idx + 1}: ${char.name} (${char.role || 'no role'}, ${char.emotion || 'no emotion'}, ${char.action || 'no action'})`);
+      });
     }
 
-    let previousContext = '';
-    if (previousNodeKeys.length > 0) {
-      const { data: previousNodes } = await supabase
-        .from('story_nodes')
-        .select('node_key, text_md')
-        .eq('story_id', story.id)
-        .in('node_key', previousNodeKeys)
-        .order('sort_index', { ascending: true });
+    // DEBUG: List all nodes in this story to see what's available
+    const { data: allNodes, error: allNodesError } = await supabase
+      .from('story_nodes')
+      .select('node_key, sort_index, image_url')
+      .eq('story_id', story.id)
+      .order('sort_index', { ascending: true });
+    
+    if (!allNodesError && allNodes) {
+      console.log(`📊 DEBUG: All nodes in story (${allNodes.length} total):`);
+      allNodes.forEach(node => {
+        const hasImage = node.image_url ? '✅ HAS IMAGE' : '❌ NO IMAGE';
+        console.log(`   Node ${node.node_key} (sort_index: ${node.sort_index}): ${hasImage}${node.image_url ? ` - ${node.image_url.substring(0, 50)}...` : ''}`);
+      });
+    }
 
-      if (previousNodes && previousNodes.length > 0) {
-        const contextTexts = previousNodes.map(n => n.text_md.substring(0, 100)).join('. ');
-        previousContext = `Previous scene: ${contextTexts}. Now: `;
-        console.log(`📖 Using context from ${previousNodes.length} previous nodes`);
+    // Get PREVIOUS node's text for context - use sort_index to find the immediate previous node
+    let previousNodeText = '';
+    let previousNodeKey: string | null = null;
+    
+    try {
+      // Get current node's sort_index
+      const { data: currentNode } = await supabase
+        .from('story_nodes')
+        .select('sort_index, text_md')
+        .eq('story_id', story.id)
+        .eq('node_key', nodeId)
+        .single();
+
+      if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
+        // Get the immediate previous node (sort_index - 1)
+        const { data: previousNode } = await supabase
+          .from('story_nodes')
+          .select('node_key, text_md, sort_index')
+          .eq('story_id', story.id)
+          .eq('sort_index', currentNode.sort_index - 1)
+          .single();
+
+        if (previousNode && previousNode.text_md) {
+          previousNodeText = previousNode.text_md;
+          previousNodeKey = previousNode.node_key;
+          console.log(`📖 DEBUG: Found previous node ${previousNodeKey} (sort_index: ${previousNode.sort_index})`);
+          console.log(`   Previous node text (${previousNodeText.length} chars): ${previousNodeText.substring(0, 150)}...`);
+        } else {
+          console.log(`⚠️ DEBUG: No previous node found at sort_index ${currentNode.sort_index - 1}`);
+        }
+      } else {
+        console.log(`⚠️ DEBUG: Current node sort_index is ${currentNode?.sort_index || 'null'} (first node or no sort_index)`);
       }
+    } catch (error) {
+      console.log(`⚠️ DEBUG: Error finding previous node text:`, error);
     }
 
     // Get the reference image - use PREVIOUS scene (or specified node, or first scene as fallback)
     let referenceImageUrl: string | null = null;
     let extractedStyleDescription: string | undefined = undefined;
     
+    console.log(`🔍 DEBUG: Starting reference image search for node ${nodeId} in story ${story.id} (${storySlug})`);
+    
     try {
       let referenceNode;
       
       // If a specific reference node is provided, use that
       if (referenceImageNodeKey) {
-        const { data: refNode } = await supabase
+        console.log(`🔍 DEBUG: Looking for specified reference node: ${referenceImageNodeKey}`);
+        const { data: refNode, error: refError } = await supabase
           .from('story_nodes')
           .select('image_url, node_key, sort_index')
           .eq('story_id', story.id)
@@ -131,42 +172,92 @@ export async function POST(request: NextRequest) {
           .not('image_url', 'is', null)
           .single();
         
+        if (refError) {
+          console.log(`⚠️ DEBUG: Error finding specified reference node: ${refError.message}`);
+        } else if (refNode) {
+          console.log(`🔍 DEBUG: Found specified reference node:`, {
+            node_key: refNode.node_key,
+            sort_index: refNode.sort_index,
+            has_image: !!refNode.image_url,
+            image_url_preview: refNode.image_url ? refNode.image_url.substring(0, 60) + '...' : 'null'
+          });
+        }
+        
         if (refNode && refNode.image_url && refNode.node_key !== nodeId) {
           referenceNode = refNode;
-          console.log(`🎨 Using specified reference image from node ${referenceImageNodeKey}`);
+          console.log(`✅ DEBUG: Using specified reference image from node ${referenceImageNodeKey}`);
         }
       }
       
       // If no specific reference, try to use PREVIOUS scene
       if (!referenceNode) {
+        console.log(`🔍 DEBUG: No specified reference, looking for previous scene...`);
         // Get current node's sort_index
-        const { data: currentNode } = await supabase
+        const { data: currentNode, error: currentNodeError } = await supabase
           .from('story_nodes')
-          .select('sort_index')
+          .select('sort_index, node_key, image_url')
           .eq('story_id', story.id)
           .eq('node_key', nodeId)
           .single();
 
+        if (currentNodeError) {
+          console.log(`❌ DEBUG: Error finding current node: ${currentNodeError.message}`);
+        } else if (currentNode) {
+          console.log(`🔍 DEBUG: Current node found:`, {
+            node_key: currentNode.node_key,
+            sort_index: currentNode.sort_index,
+            has_image: !!currentNode.image_url
+          });
+        }
+
         if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
-          // Get the previous node (sort_index - 1)
-          const { data: previousNode } = await supabase
+          console.log(`🔍 DEBUG: Current node sort_index is ${currentNode.sort_index}, searching for previous node with image...`);
+          
+          // Get the immediate previous node (same one we got text from) - this ensures text and image match
+          const { data: prevNodeWithImage, error: prevNodesError } = await supabase
             .from('story_nodes')
-            .select('image_url, node_key, sort_index')
+            .select('image_url, node_key, sort_index, text_md')
             .eq('story_id', story.id)
             .eq('sort_index', currentNode.sort_index - 1)
             .not('image_url', 'is', null)
             .single();
 
-          if (previousNode && previousNode.image_url) {
-            referenceNode = previousNode;
-            console.log(`🎨 Using previous scene as reference (node ${previousNode.node_key})`);
+          if (prevNodesError) {
+            console.log(`❌ DEBUG: Error finding previous node with image: ${prevNodesError.message}`);
+            // Fallback: search for any previous node with image
+            const { data: fallbackNodes } = await supabase
+              .from('story_nodes')
+              .select('image_url, node_key, sort_index')
+              .eq('story_id', story.id)
+              .lt('sort_index', currentNode.sort_index)
+              .not('image_url', 'is', null)
+              .order('sort_index', { ascending: false })
+              .limit(1);
+            
+            if (fallbackNodes && fallbackNodes.length > 0 && fallbackNodes[0].image_url) {
+              referenceNode = fallbackNodes[0];
+              console.log(`✅ DEBUG: Using fallback previous scene (node ${referenceNode.node_key})`);
+            }
+          } else if (prevNodeWithImage && prevNodeWithImage.image_url) {
+            referenceNode = prevNodeWithImage;
+            console.log(`✅ DEBUG: Using previous scene as reference (node ${referenceNode.node_key}, sort_index ${referenceNode.sort_index})`);
+            console.log(`   Reference image URL: ${referenceNode.image_url.substring(0, 80)}...`);
+            // Verify this matches the previous node we got text from
+            if (previousNodeKey && referenceNode.node_key !== previousNodeKey) {
+              console.log(`⚠️ DEBUG: WARNING - Previous node for text (${previousNodeKey}) doesn't match previous node for image (${referenceNode.node_key})`);
+            }
+          } else {
+            console.log(`⚠️ DEBUG: Previous node found but has no image`);
           }
+        } else {
+          console.log(`⚠️ DEBUG: Current node sort_index is ${currentNode?.sort_index || 'null'} (must be > 1 to have previous nodes)`);
         }
       }
       
       // If still no reference (first scene or no previous scene), fall back to first image
       if (!referenceNode) {
-        const { data: firstNode } = await supabase
+        console.log(`🔍 DEBUG: No previous scene found, falling back to first image...`);
+        const { data: firstNode, error: firstNodeError } = await supabase
           .from('story_nodes')
           .select('image_url, node_key, sort_index')
           .eq('story_id', story.id)
@@ -175,37 +266,103 @@ export async function POST(request: NextRequest) {
           .limit(1)
           .single();
 
+        if (firstNodeError) {
+          console.log(`❌ DEBUG: Error finding first node: ${firstNodeError.message}`);
+        } else if (firstNode) {
+          console.log(`🔍 DEBUG: First node found:`, {
+            node_key: firstNode.node_key,
+            sort_index: firstNode.sort_index,
+            is_current_node: firstNode.node_key === nodeId,
+            image_url_preview: firstNode.image_url ? firstNode.image_url.substring(0, 60) + '...' : 'null'
+          });
+        }
+
         if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
           referenceNode = firstNode;
-          console.log(`🎨 Using first image as fallback reference (node ${firstNode.node_key})`);
+          console.log(`✅ DEBUG: Using first image as fallback reference (node ${firstNode.node_key})`);
+        } else {
+          console.log(`⚠️ DEBUG: Cannot use first node as reference (is current node or has no image)`);
         }
       }
 
       if (referenceNode && referenceNode.image_url) {
         referenceImageUrl = referenceNode.image_url;
+        console.log(`✅ DEBUG: Reference image selected:`, {
+          node_key: referenceNode.node_key,
+          sort_index: referenceNode.sort_index,
+          image_url: referenceImageUrl ? referenceImageUrl.substring(0, 80) + '...' : 'null'
+        });
         
-        // Analyze the reference image to extract style descriptors
-        if (referenceImageUrl) {
+        // Only analyze style with GPT-4 Vision if we're NOT using img2img
+        // img2img sees the image directly, so text description is redundant
+        const willUseImg2Img = referenceImageUrl && model !== 'dalle3';
+        
+        if (!willUseImg2Img && referenceImageUrl) {
+          // Only for DALL-E 3 - it can't see images, needs text description
           try {
+            console.log(`🔍 DEBUG: Analyzing reference image style for DALL-E 3 (img2img would see image directly)...`);
             extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
             if (extractedStyleDescription) {
-              console.log('✅ Extracted style description from reference image');
+              console.log(`✅ DEBUG: Extracted style description (${extractedStyleDescription.length} chars): ${extractedStyleDescription.substring(0, 150)}...`);
+            } else {
+              console.log(`⚠️ DEBUG: Style analysis returned empty description`);
             }
           } catch (error) {
-            console.warn('⚠️ Failed to analyze reference image style, using text-based matching:', error);
+            console.warn(`⚠️ DEBUG: Failed to analyze reference image style:`, error);
           }
+        } else {
+          console.log(`⏭️ DEBUG: Skipping GPT-4 Vision analysis - using img2img which sees image directly`);
         }
+      } else {
+        console.log(`⚠️ DEBUG: No reference node found or reference node has no image_url`);
       }
     } catch (error) {
       // No reference image found, that's okay - we'll generate without reference
+      console.log(`❌ DEBUG: Exception during reference image search:`, error);
       console.log('📝 No reference image found, generating without style reference');
     }
 
-    // Use story's visual style or fallback to Disney/anime-style for children
-    const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+    // Use story's visual style from database, or provided style, or let createStoryImagePrompt use its default
+    // Don't hard-code defaults here - let the prompt function handle it
+    const visualStyle = storyVisualStyle || style || undefined;
     
-    // Create AI prompt from story text with character consistency and context
-    const fullStoryText = previousContext + storyText;
+    console.log(`🎨 DEBUG: Visual style to use:`, {
+      from_database: !!storyVisualStyle,
+      from_request: !!style,
+      will_use_default: !visualStyle,
+      style_length: visualStyle?.length || 0,
+      style_preview: visualStyle ? visualStyle.substring(0, 100) + '...' : 'will use createStoryImagePrompt default'
+    });
+    
+    // Combine previous node text + current node text for full context
+    // Previous node text provides continuity, current node text is the scene to depict
+    let fullStoryText = storyText;
+    if (previousNodeText) {
+      // Include previous scene context so the model understands continuity
+      const previousContext = previousNodeText.length > 500 
+        ? previousNodeText.substring(0, 500) + '...' 
+        : previousNodeText;
+      fullStoryText = `Previous scene context: ${previousContext}\n\nCurrent scene to depict: ${storyText}`;
+      console.log(`📖 DEBUG: Combined previous + current node text (${fullStoryText.length} total chars)`);
+    } else {
+      console.log(`📖 DEBUG: No previous node text, using only current node text`);
+    }
+    console.log(`📝 DEBUG: Story text for prompt:`, {
+      previous_node_text_length: previousNodeText.length,
+      current_node_text_length: storyText.length,
+      combined_text_length: fullStoryText.length,
+      current_text_preview: storyText.substring(0, 150) + '...',
+      previous_text_preview: previousNodeText ? previousNodeText.substring(0, 100) + '...' : '(none)'
+    });
+    
+    console.log(`🔧 DEBUG: Creating prompt with:`, {
+      story_title: story.title || storyTitle || '',
+      visual_style_length: visualStyle?.length || 0,
+      characters_count: nodeCharacters.length,
+      has_reference_image: !!referenceImageUrl,
+      has_extracted_style: !!extractedStyleDescription
+    });
+    
     const prompt = createStoryImagePrompt(
       fullStoryText, 
       story.title || storyTitle || '', 
@@ -214,30 +371,57 @@ export async function POST(request: NextRequest) {
       referenceImageUrl || undefined,
       extractedStyleDescription
     );
-    console.log('📝 Generated prompt:', prompt);
-    console.log('🎨 Using visual style:', visualStyle);
+    
+    console.log(`📝 DEBUG: Generated prompt (${prompt.length} chars):`);
+    console.log(`   First 200 chars: ${prompt.substring(0, 200)}...`);
+    console.log(`   Last 200 chars: ...${prompt.substring(prompt.length - 200)}`);
+    
     if (referenceImageUrl) {
-      console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
+      console.log(`🖼️ DEBUG: Reference image URL: ${referenceImageUrl.substring(0, 80)}...`);
     }
     if (extractedStyleDescription) {
-      console.log('🎭 Using extracted style description for precise matching');
+      console.log(`🎭 DEBUG: Extracted style description (${extractedStyleDescription.length} chars): ${extractedStyleDescription.substring(0, 150)}...`);
     }
 
     // Generate image with AI
-    // Use img2img if we have a reference image for better style consistency
-    const useImg2Img = referenceImageUrl && model === 'stable-diffusion';
-    const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
+    // IMPORTANT: Use stable-diffusion with img2img when we have a reference image for MUCH better style consistency
+    // DALL-E 3 doesn't support img2img, so we automatically switch to stable-diffusion-img2img when we have a reference
+    const useImg2Img = referenceImageUrl && model !== 'dalle3'; // Use img2img if we have reference and not forcing dalle3
+    const shouldUseStableDiffusionImg2Img = referenceImageUrl && model === 'dalle3'; // Switch to SD img2img if we have reference but model is dalle3
+    const imageModel = useImg2Img || shouldUseStableDiffusionImg2Img
+      ? 'stable-diffusion-img2img' 
+      : (model as any);
+    
+    console.log(`🔧 DEBUG: Model selection:`, {
+      requested_model: model,
+      has_reference_image: !!referenceImageUrl,
+      use_img2img: useImg2Img || shouldUseStableDiffusionImg2Img,
+      final_model: imageModel,
+      will_use_reference_in_img2img: (useImg2Img || shouldUseStableDiffusionImg2Img) && !!referenceImageUrl
+    });
+    
+    if (shouldUseStableDiffusionImg2Img) {
+      console.log('🔄 DEBUG: Auto-switching to stable-diffusion-img2img for better reference image support (DALL-E 3 doesn\'t support img2img)');
+    }
+    
+    console.log(`🚀 DEBUG: Calling generateImage with:`, {
+      model: imageModel,
+      size,
+      quality,
+      has_reference_url: !!(useImg2Img || shouldUseStableDiffusionImg2Img) && !!referenceImageUrl,
+      strength: 0.65
+    });
     
     const generatedImage = await generateImage(prompt, {
       model: imageModel,
       size: size as any,
       quality: quality as any,
-      referenceImageUrl: useImg2Img ? (referenceImageUrl || undefined) : undefined,
+      referenceImageUrl: (useImg2Img || shouldUseStableDiffusionImg2Img) ? (referenceImageUrl || undefined) : undefined,
       strength: 0.65, // Good balance: maintains style while allowing scene changes
     });
     
-    if (useImg2Img) {
-      console.log('🔄 Using img2img mode for style consistency');
+    if (useImg2Img || shouldUseStableDiffusionImg2Img) {
+      console.log('✅ DEBUG: Used img2img mode for style consistency');
     }
 
     console.log('✅ Image generated:', generatedImage.url);

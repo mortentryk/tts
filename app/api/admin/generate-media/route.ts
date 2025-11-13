@@ -106,18 +106,20 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
-          // Get the previous node (sort_index - 1)
-          const { data: previousNode } = await supabase
+          // Get all previous nodes with images, ordered by sort_index descending
+          // This finds the most recent previous scene with an image
+          const { data: previousNodes } = await supabase
             .from('story_nodes')
             .select('image_url, node_key, sort_index')
             .eq('story_id', story.id)
-            .eq('sort_index', currentNode.sort_index - 1)
+            .lt('sort_index', currentNode.sort_index)
             .not('image_url', 'is', null)
-            .single();
+            .order('sort_index', { ascending: false })
+            .limit(1);
 
-          if (previousNode && previousNode.image_url) {
-            referenceImageUrl = previousNode.image_url;
-            console.log(`🎨 Using previous scene as reference (node ${previousNode.node_key})`);
+          if (previousNodes && previousNodes.length > 0 && previousNodes[0].image_url) {
+            referenceImageUrl = previousNodes[0].image_url;
+            console.log(`🎨 Using previous scene as reference (node ${previousNodes[0].node_key}, sort_index ${previousNodes[0].sort_index})`);
             
             // Analyze style from previous scene
             try {
@@ -186,11 +188,29 @@ export async function POST(request: NextRequest) {
       }
       
       // Generate image
+      // IMPORTANT: Use stable-diffusion with img2img when we have a reference image for MUCH better style consistency
+      // DALL-E 3 doesn't support img2img, so we automatically switch to stable-diffusion-img2img when we have a reference
+      const useImg2Img = referenceImageUrl && model !== 'dalle3';
+      const shouldUseStableDiffusionImg2Img = referenceImageUrl && model === 'dalle3';
+      const imageModel = useImg2Img || shouldUseStableDiffusionImg2Img
+        ? 'stable-diffusion-img2img' 
+        : (model as any);
+      
+      if (shouldUseStableDiffusionImg2Img) {
+        console.log('🔄 Auto-switching to stable-diffusion-img2img for better reference image support (DALL-E 3 doesn\'t support img2img)');
+      }
+      
       const generatedImage = await generateImage(prompt, {
-        model: model as any,
+        model: imageModel,
         size: size as any,
         quality: quality as any,
+        referenceImageUrl: (useImg2Img || shouldUseStableDiffusionImg2Img) ? (referenceImageUrl || undefined) : undefined,
+        strength: 0.65, // Good balance: maintains style while allowing scene changes
       });
+      
+      if (useImg2Img || shouldUseStableDiffusionImg2Img) {
+        console.log('🔄 Using img2img mode for style consistency');
+      }
 
       // Upload to Cloudinary
       const imageResponse = await fetch(generatedImage.url);

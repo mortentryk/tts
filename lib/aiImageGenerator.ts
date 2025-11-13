@@ -299,55 +299,67 @@ export async function generateImageWithStableDiffusionImg2Img(
     console.log('🎨 Generating image with Stable Diffusion img2img:', prompt);
     console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
     
-    // Download reference image
+    // Download and verify reference image
+    console.log('📥 Downloading reference image from:', referenceImageUrl);
     const imageResponse = await fetch(referenceImageUrl);
     if (!imageResponse.ok) {
-      throw new Error(`Failed to fetch reference image: ${imageResponse.statusText}`);
+      throw new Error(`Failed to fetch reference image: ${imageResponse.statusText} (Status: ${imageResponse.status})`);
     }
     
     const imageBuffer = await imageResponse.arrayBuffer();
+    const imageSize = imageBuffer.byteLength;
+    console.log(`✅ Reference image downloaded: ${(imageSize / 1024).toFixed(2)} KB`);
+    
+    // Convert to base64 for Replicate (more reliable than URL)
     const imageBase64 = Buffer.from(imageBuffer).toString('base64');
+    const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
+    const imageDataUri = `data:${mimeType};base64,${imageBase64}`;
     
-    // Replicate expects the image as a data URI or URL
-    // Try using the URL directly first, if that doesn't work, use base64
-    let imageInput: string;
-    try {
-      // Try using the URL directly (Replicate can fetch from URLs)
-      imageInput = referenceImageUrl;
-    } catch {
-      // Fallback to base64 data URI
-      const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
-      imageInput = `data:${mimeType};base64,${imageBase64}`;
-    }
+    console.log(`🖼️ Reference image prepared: ${mimeType}, ${imageBase64.length} chars base64`);
     
-    // Try using a model that supports img2img
-    // Use the image URL directly (Replicate can fetch from URLs)
+    // Use flux-dev for img2img - it properly reads the reference image
     const strength = options.strength || 0.65;
+    console.log(`🎨 Using img2img with strength: ${strength} (0.65 = keeps 65% of reference style, allows 35% change)`);
     
-    // Try using flux-dev which might support img2img better
-    // If that fails, we'll fall back to prompt-only with style description
     let prediction;
     try {
+      // Use base64 data URI - more reliable than URL for Replicate
       prediction = await replicate.predictions.create({
         model: "black-forest-labs/flux-dev",
         input: {
-          prompt: prompt.substring(0, 1500), // Increased to capture full scene description
-          image: referenceImageUrl, // Use URL directly - Replicate can fetch it
-          strength: strength,
+          prompt: prompt.substring(0, 1500), // Full scene description
+          image: imageDataUri, // Base64 data URI - Replicate reads this directly
+          strength: strength, // How much to change (0.65 = good balance)
           aspect_ratio: "1:1",
         }
       });
-      console.log('✅ Using flux-dev with img2img');
+      console.log('✅ Created img2img prediction with flux-dev - model will read reference image directly');
     } catch (img2imgError: any) {
-      // If img2img fails, fall back to prompt-only with style description
-      console.warn('⚠️ img2img failed, using enhanced prompt with style description instead:', img2imgError.message);
-      prediction = await replicate.predictions.create({
-        model: "black-forest-labs/flux-schnell",
-        input: {
-          prompt: prompt.substring(0, 1500), // Increased to capture full scene description + style
-          aspect_ratio: "1:1",
-        }
-      });
+      // If base64 fails, try URL as fallback
+      console.warn('⚠️ Base64 img2img failed, trying URL fallback:', img2imgError.message);
+      try {
+        prediction = await replicate.predictions.create({
+          model: "black-forest-labs/flux-dev",
+          input: {
+            prompt: prompt.substring(0, 1500),
+            image: referenceImageUrl, // Try URL directly
+            strength: strength,
+            aspect_ratio: "1:1",
+          }
+        });
+        console.log('✅ Created img2img prediction with URL fallback');
+      } catch (urlError: any) {
+        // Last resort: prompt-only (but this loses style consistency)
+        console.error('❌ img2img completely failed, falling back to prompt-only (style consistency will be reduced):', urlError.message);
+        prediction = await replicate.predictions.create({
+          model: "black-forest-labs/flux-schnell",
+          input: {
+            prompt: prompt.substring(0, 1500),
+            aspect_ratio: "1:1",
+          }
+        });
+        console.warn('⚠️ Using prompt-only mode - reference image NOT being used by model');
+      }
     }
 
     console.log('🔍 Prediction created:', prediction.id, 'status:', prediction.status);
