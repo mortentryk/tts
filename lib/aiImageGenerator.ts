@@ -129,24 +129,33 @@ export async function generateImageWithStableDiffusion(
   options: ImageGenerationOptions = {}
 ): Promise<GeneratedImage> {
   try {
+    // Check if API token is set
+    if (!process.env.REPLICATE_API_TOKEN) {
+      throw new Error('REPLICATE_API_TOKEN environment variable is not set');
+    }
+    
     console.log('🎨 Generating image with Stable Diffusion:', prompt);
     
     const output = await replicate.run(
-      "stability-ai/stable-diffusion:27b93a2413e7f36cd83da926f3656280b2931564ff050bf9575f1fdf9bcd747e",
+      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
       {
         input: {
-          prompt,
+          prompt: prompt.substring(0, 1000), // Limit prompt length
           width: 1024,
           height: 1024,
           num_outputs: 1,
-          scheduler: "K_EULER",
-          num_inference_steps: 50,
+          num_inference_steps: 30,
           guidance_scale: 7.5,
+          scheduler: "K_EULER",
         }
       }
     );
 
     const imageUrl = Array.isArray(output) ? output[0] : output;
+    
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      throw new Error(`Invalid output from Stable Diffusion: ${JSON.stringify(output)}`);
+    }
     
     return {
       url: imageUrl as string,
@@ -154,9 +163,10 @@ export async function generateImageWithStableDiffusion(
       size: '1024x1024',
       cost: 0.0023, // Replicate Stable Diffusion cost
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Stable Diffusion generation error:', error);
-    throw new Error(`Stable Diffusion generation failed: ${error}`);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    throw new Error(`Stable Diffusion generation failed: ${errorMessage}`);
   }
 }
 
@@ -170,6 +180,11 @@ export async function generateImageWithStableDiffusionImg2Img(
   options: ImageGenerationOptions = {}
 ): Promise<GeneratedImage> {
   try {
+    // Check if API token is set
+    if (!process.env.REPLICATE_API_TOKEN) {
+      throw new Error('REPLICATE_API_TOKEN environment variable is not set');
+    }
+    
     console.log('🎨 Generating image with Stable Diffusion img2img:', prompt);
     console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
     
@@ -181,7 +196,18 @@ export async function generateImageWithStableDiffusionImg2Img(
     
     const imageBuffer = await imageResponse.arrayBuffer();
     const imageBase64 = Buffer.from(imageBuffer).toString('base64');
-    const imageDataUri = `data:image/jpeg;base64,${imageBase64}`;
+    
+    // Replicate expects the image as a data URI or URL
+    // Try using the URL directly first, if that doesn't work, use base64
+    let imageInput: string;
+    try {
+      // Try using the URL directly (Replicate can fetch from URLs)
+      imageInput = referenceImageUrl;
+    } catch {
+      // Fallback to base64 data URI
+      const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
+      imageInput = `data:${mimeType};base64,${imageBase64}`;
+    }
     
     // Use SDXL which has good img2img support
     // strength: 0.6-0.7 is good for maintaining style while allowing scene changes
@@ -191,13 +217,13 @@ export async function generateImageWithStableDiffusionImg2Img(
       "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
       {
         input: {
-          prompt: prompt,
-          image: imageDataUri,
+          prompt: prompt.substring(0, 1000), // Limit prompt length
+          image: imageInput,
           strength: strength, // Lower = more similar to reference (0.5-0.8 is good range)
           width: 1024,
           height: 1024,
           num_outputs: 1,
-          num_inference_steps: 50,
+          num_inference_steps: 30,
           guidance_scale: 7.5,
           scheduler: "K_EULER",
         }
@@ -206,15 +232,20 @@ export async function generateImageWithStableDiffusionImg2Img(
 
     const imageUrl = Array.isArray(output) ? output[0] : output;
     
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      throw new Error(`Invalid output from Stable Diffusion img2img: ${JSON.stringify(output)}`);
+    }
+    
     return {
       url: imageUrl as string,
       model: 'stable-diffusion-img2img',
       size: '1024x1024',
       cost: 0.0023, // Similar cost to regular SD
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Stable Diffusion img2img generation error:', error);
-    throw new Error(`Stable Diffusion img2img generation failed: ${error}`);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    throw new Error(`Stable Diffusion img2img generation failed: ${errorMessage}`);
   }
 }
 
