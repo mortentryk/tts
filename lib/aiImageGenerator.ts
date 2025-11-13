@@ -136,10 +136,10 @@ export async function generateImageWithStableDiffusion(
     
     console.log('🎨 Generating image with Stable Diffusion:', prompt);
     
-    // Use a more reliable model - flux-schnell for faster generation
-    // Or use black-forest-labs/flux-dev for better quality
+    // Use flux-schnell for faster, reliable generation
+    // This model returns the image URL directly
     const output = await replicate.run(
-      "black-forest-labs/flux-dev",
+      "black-forest-labs/flux-schnell",
       {
         input: {
           prompt: prompt.substring(0, 1000), // Limit prompt length
@@ -227,21 +227,24 @@ export async function generateImageWithStableDiffusionImg2Img(
       imageInput = `data:${mimeType};base64,${imageBase64}`;
     }
     
-    // Use SDXL which has good img2img support
+    // Use SDXL for img2img - it has reliable img2img support
     // strength: 0.6-0.7 is good for maintaining style while allowing scene changes
     const strength = options.strength || 0.65;
     
-    // Use flux-dev which has better img2img support
+    // Use SDXL which has proven img2img support
     const output = await replicate.run(
-      "black-forest-labs/flux-dev",
+      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
       {
         input: {
           prompt: prompt.substring(0, 1000), // Limit prompt length
           image: imageInput,
           strength: strength, // Lower = more similar to reference (0.5-0.8 is good range)
-          aspect_ratio: "1:1",
-          output_format: "png",
-          output_quality: 90,
+          width: 1024,
+          height: 1024,
+          num_outputs: 1,
+          num_inference_steps: 30,
+          guidance_scale: 7.5,
+          scheduler: "K_EULER",
         }
       }
     );
@@ -295,18 +298,18 @@ export async function generateImage(
   const model = options.model || 'dalle3';
   
   try {
-    switch (model) {
-      case 'dalle3':
+  switch (model) {
+    case 'dalle3':
         return await generateImageWithDALLE3(prompt, options);
-      case 'stable-diffusion':
+    case 'stable-diffusion':
         return await generateImageWithStableDiffusion(prompt, options);
       case 'stable-diffusion-img2img':
         if (!options.referenceImageUrl) {
           throw new Error('referenceImageUrl is required for stable-diffusion-img2img model');
         }
         return await generateImageWithStableDiffusionImg2Img(prompt, options.referenceImageUrl, options);
-      default:
-        throw new Error(`Unsupported model: ${model}`);
+    default:
+      throw new Error(`Unsupported model: ${model}`);
     }
   } catch (error: any) {
     // If DALL-E 3 is rejected by safety system, fall back to Stable Diffusion
