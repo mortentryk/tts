@@ -121,14 +121,23 @@ export async function POST(request: NextRequest) {
             referenceImageUrl = previousNodes[0].image_url;
             console.log(`🎨 Using previous scene as reference (node ${previousNodes[0].node_key}, sort_index ${previousNodes[0].sort_index})`);
             
-            // Analyze style from previous scene
-            try {
-              extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
-              if (extractedStyleDescription) {
-                console.log('✅ Extracted style description from previous scene');
+            // Only analyze style with GPT-4 Vision if we're NOT using img2img
+            // img2img sees the image directly, so text description is redundant
+            const willUseImg2Img = referenceImageUrl && model !== 'dalle3';
+            
+            if (!willUseImg2Img && referenceImageUrl) {
+              // Only for DALL-E 3 - it can't see images, needs text description
+              try {
+                console.log('🔍 Analyzing reference image style for DALL-E 3 (img2img would see image directly)...');
+                extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+                if (extractedStyleDescription) {
+                  console.log('✅ Extracted style description from previous scene');
+                }
+              } catch (error) {
+                console.warn('⚠️ Failed to analyze previous scene style:', error);
               }
-            } catch (error) {
-              console.warn('⚠️ Failed to analyze previous scene style:', error);
+            } else {
+              console.log('⏭️ Skipping GPT-4 Vision analysis - using img2img which sees image directly');
             }
           }
         }
