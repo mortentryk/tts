@@ -542,7 +542,11 @@ export function createStoryImagePrompt(
 
 IMPORTANT SCENE DESCRIPTION (READ CAREFULLY AND DEPICT ACCURATELY): ${sceneDescription}
 
-${characterSection}${negativeInstructions} 
+${characterSection}
+
+CRITICAL SETTING REQUIREMENTS: Pay special attention to WHERE this scene takes place. If the story mentions being inside a spaceship, UFO, building, room, laboratory, or any enclosed space, the image MUST clearly show an interior environment with walls, ceiling, and enclosed space. If it mentions being outside, show an exterior environment. The location and setting described in the scene must be clearly visible and accurate.
+
+${negativeInstructions} 
 
 High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, Disney Pixar style, anime-inspired, child-appropriate, no scary elements, no dark shadows, no text, no words, no writing, no letters, no dialogue boxes, no UI elements. The image must accurately show the scene described above, including all key elements, characters, objects, and setting details mentioned in the scene description.`;
   
