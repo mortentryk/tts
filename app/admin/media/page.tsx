@@ -572,7 +572,8 @@ export default function MediaManager() {
           nodeId: nodeKey,
           storyText: customPrompt, // Use custom prompt as story text
           storyTitle: selectedStoryData?.title || selectedStory,
-          style: '', // No style prefix, use prompt as-is
+          // Don't pass style - let the API use story's visual_style and previous scene reference
+          // This ensures custom prompts still get style consistency
         }),
       });
 

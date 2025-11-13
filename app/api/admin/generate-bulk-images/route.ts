@@ -78,39 +78,17 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ Could not load character assignments:', assignmentsError);
     }
 
-    // Get the first image from the story to use as style reference for all subsequent images
-    let referenceImageUrl: string | null = null;
-    let extractedStyleDescription: string | undefined = undefined;
-    
+    // Get story visual style
+    let storyVisualStyle = null;
     try {
-      const { data: firstNode } = await supabase
-        .from('story_nodes')
-        .select('image_url, node_key')
-        .eq('story_id', story.id)
-        .not('image_url', 'is', null)
-        .order('sort_index', { ascending: true })
-        .limit(1)
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
         .single();
-
-      if (firstNode && firstNode.image_url) {
-        referenceImageUrl = firstNode.image_url;
-        console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key}) - will use for style consistency`);
-        
-        // Analyze the reference image once to extract style descriptors (reuse for all images)
-        if (referenceImageUrl) {
-          try {
-            extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
-            if (extractedStyleDescription) {
-              console.log('✅ Extracted style description from reference image - will use for all subsequent images');
-            }
-          } catch (error) {
-            console.warn('⚠️ Failed to analyze reference image style, using text-based matching:', error);
-          }
-        }
-      }
+      storyVisualStyle = storyWithStyle?.visual_style;
     } catch (error) {
-      // No first image found yet, that's okay - first image will be generated without reference
-      console.log('📝 No reference image found yet - first image will set the style');
+      console.log('Note: visual_style column not yet added to database');
     }
 
     // Process each node
@@ -145,28 +123,55 @@ export async function POST(request: NextRequest) {
             };
           }) || [];
 
-        // Use reference image only if it's not the first node (first node sets the style)
-        const useReferenceImage = referenceImageUrl && node.node_key !== nodes[0]?.node_key;
+        // Get PREVIOUS scene as reference (not first scene)
+        let referenceImageUrl: string | null = null;
+        let extractedStyleDescription: string | undefined = undefined;
         
-        // Convert null to undefined for the function parameter
-        const referenceImageUrlForPrompt: string | undefined = referenceImageUrl ?? undefined;
+        // Find previous node with an image
+        const currentNodeIndex = nodes.findIndex(n => n.node_key === node.node_key);
+        if (currentNodeIndex > 0) {
+          // Look backwards for the most recent node with an image
+          for (let i = currentNodeIndex - 1; i >= 0; i--) {
+            const prevNode = nodes[i];
+            if (prevNode.image_url) {
+              referenceImageUrl = prevNode.image_url;
+              console.log(`🎨 Using previous scene (node ${prevNode.node_key}) as reference for node ${node.node_key}`);
+              
+              // Analyze style from previous scene (cache for efficiency)
+              if (referenceImageUrl) {
+                try {
+                  extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+                  if (extractedStyleDescription) {
+                    console.log(`✅ Extracted style from previous scene for node ${node.node_key}`);
+                  }
+                } catch (error) {
+                  console.warn(`⚠️ Failed to analyze previous scene style:`, error);
+                }
+              }
+              break;
+            }
+          }
+        }
+        
+        // Use story's visual style or fallback
+        const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
         
         // Create AI prompt from story text with character consistency and style reference
         const prompt = createStoryImagePrompt(
           node.text_md, 
           story.title, 
-          style, 
+          visualStyle, 
           nodeCharacters,
-          useReferenceImage ? referenceImageUrlForPrompt : undefined,
-          useReferenceImage ? extractedStyleDescription : undefined
+          referenceImageUrl || undefined,
+          extractedStyleDescription
         );
         
         // Use img2img if we have a reference image and using stable-diffusion for better style consistency
-        const useImg2Img = useReferenceImage && model === 'stable-diffusion' && referenceImageUrl;
+        const useImg2Img = referenceImageUrl && model === 'stable-diffusion';
         const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
         
-        if (useReferenceImage) {
-          console.log(`🖼️ Using reference image for style consistency on node ${node.node_key}`);
+        if (referenceImageUrl) {
+          console.log(`🖼️ Using previous scene image for style consistency on node ${node.node_key}`);
           if (extractedStyleDescription) {
             console.log(`🎭 Using extracted style description for precise matching on node ${node.node_key}`);
           }

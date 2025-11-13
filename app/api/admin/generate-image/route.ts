@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get the reference image - either from specified node or first image
+    // Get the reference image - use PREVIOUS scene (or specified node, or first scene as fallback)
     let referenceImageUrl: string | null = null;
     let extractedStyleDescription: string | undefined = undefined;
     
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
       if (referenceImageNodeKey) {
         const { data: refNode } = await supabase
           .from('story_nodes')
-          .select('image_url, node_key')
+          .select('image_url, node_key, sort_index')
           .eq('story_id', story.id)
           .eq('node_key', referenceImageNodeKey)
           .not('image_url', 'is', null)
@@ -137,11 +137,38 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      // If no specific reference or it wasn't found, fall back to first image
+      // If no specific reference, try to use PREVIOUS scene
+      if (!referenceNode) {
+        // Get current node's sort_index
+        const { data: currentNode } = await supabase
+          .from('story_nodes')
+          .select('sort_index')
+          .eq('story_id', story.id)
+          .eq('node_key', nodeId)
+          .single();
+
+        if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
+          // Get the previous node (sort_index - 1)
+          const { data: previousNode } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key, sort_index')
+            .eq('story_id', story.id)
+            .eq('sort_index', currentNode.sort_index - 1)
+            .not('image_url', 'is', null)
+            .single();
+
+          if (previousNode && previousNode.image_url) {
+            referenceNode = previousNode;
+            console.log(`🎨 Using previous scene as reference (node ${previousNode.node_key})`);
+          }
+        }
+      }
+      
+      // If still no reference (first scene or no previous scene), fall back to first image
       if (!referenceNode) {
         const { data: firstNode } = await supabase
           .from('story_nodes')
-          .select('image_url, node_key')
+          .select('image_url, node_key, sort_index')
           .eq('story_id', story.id)
           .not('image_url', 'is', null)
           .order('sort_index', { ascending: true })
@@ -150,7 +177,7 @@ export async function POST(request: NextRequest) {
 
         if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
           referenceNode = firstNode;
-          console.log(`🎨 Using first image as reference (node ${firstNode.node_key})`);
+          console.log(`🎨 Using first image as fallback reference (node ${firstNode.node_key})`);
         }
       }
 

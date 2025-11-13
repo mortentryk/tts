@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateImage, createStoryImagePrompt } from '../../../../lib/aiImageGenerator';
+import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../../../lib/aiImageGenerator';
 import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
@@ -92,32 +92,97 @@ export async function POST(request: NextRequest) {
         };
       }) || [];
 
-      // Get the first image from the story to use as style reference
+      // Get PREVIOUS scene as reference (or first scene as fallback)
       let referenceImageUrl: string | null = null;
+      let extractedStyleDescription: string | undefined = undefined;
+      
       try {
-        const { data: firstNode } = await supabase
+        // Get current node's sort_index
+        const { data: currentNode } = await supabase
           .from('story_nodes')
-          .select('image_url, node_key')
+          .select('sort_index')
           .eq('story_id', story.id)
-          .not('image_url', 'is', null)
-          .order('sort_index', { ascending: true })
-          .limit(1)
+          .eq('node_key', nodeId)
           .single();
 
-        if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
-          referenceImageUrl = firstNode.image_url;
-          console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key})`);
+        if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
+          // Get the previous node (sort_index - 1)
+          const { data: previousNode } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key, sort_index')
+            .eq('story_id', story.id)
+            .eq('sort_index', currentNode.sort_index - 1)
+            .not('image_url', 'is', null)
+            .single();
+
+          if (previousNode && previousNode.image_url) {
+            referenceImageUrl = previousNode.image_url;
+            console.log(`🎨 Using previous scene as reference (node ${previousNode.node_key})`);
+            
+            // Analyze style from previous scene
+            try {
+              extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+              if (extractedStyleDescription) {
+                console.log('✅ Extracted style description from previous scene');
+              }
+            } catch (error) {
+              console.warn('⚠️ Failed to analyze previous scene style:', error);
+            }
+          }
+        }
+        
+        // If no previous scene, fall back to first scene
+        if (!referenceImageUrl) {
+          const { data: firstNode } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key')
+            .eq('story_id', story.id)
+            .not('image_url', 'is', null)
+            .order('sort_index', { ascending: true })
+            .limit(1)
+            .single();
+
+          if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
+            referenceImageUrl = firstNode.image_url;
+            console.log(`🎨 Using first scene as fallback reference (node ${firstNode.node_key})`);
+          }
         }
       } catch (error) {
-        // No first image found, that's okay - we'll generate without reference
+        // No reference image found, that's okay - we'll generate without reference
         console.log('📝 No reference image found, generating without style reference');
       }
+      
+      // Get story visual style
+      let storyVisualStyle = null;
+      try {
+        const { data: storyWithStyle } = await supabase
+          .from('stories')
+          .select('visual_style')
+          .eq('id', story.id)
+          .single();
+        storyVisualStyle = storyWithStyle?.visual_style;
+      } catch (error) {
+        console.log('Note: visual_style column not yet added to database');
+      }
+      
+      // Use story's visual style or fallback
+      const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
 
       // Create AI prompt
-      const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters, referenceImageUrl || undefined);
+      const prompt = createStoryImagePrompt(
+        node.text_md, 
+        story.title, 
+        visualStyle, 
+        nodeCharacters, 
+        referenceImageUrl || undefined,
+        extractedStyleDescription
+      );
       
       if (referenceImageUrl) {
-        console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
+        console.log('🖼️ Using previous scene image for style consistency:', referenceImageUrl);
+      }
+      if (extractedStyleDescription) {
+        console.log('🎭 Using extracted style description for precise matching');
       }
       
       // Generate image
