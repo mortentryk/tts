@@ -136,18 +136,35 @@ export async function generateImageWithStableDiffusion(
     
     console.log('🎨 Generating image with Stable Diffusion:', prompt);
     
-    // Use flux-schnell for faster, reliable generation
-    // This model returns the image URL directly
-    const output = await replicate.run(
-      "black-forest-labs/flux-schnell",
-      {
-        input: {
-          prompt: prompt.substring(0, 1000), // Limit prompt length
-          aspect_ratio: "1:1",
-        }
+    // Use the prediction API pattern for more reliable handling
+    // Use flux-schnell which is fast and reliable
+    const prediction = await replicate.predictions.create({
+      model: "black-forest-labs/flux-schnell",
+      input: {
+        prompt: prompt.substring(0, 1000), // Limit prompt length
+        aspect_ratio: "1:1",
       }
-    );
+    });
 
+    console.log('🔍 Prediction created:', prediction.id, 'status:', prediction.status);
+
+    // Wait for the prediction to complete
+    let finalPrediction = prediction;
+    while (finalPrediction.status !== 'succeeded' && finalPrediction.status !== 'failed' && finalPrediction.status !== 'canceled') {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
+      finalPrediction = await replicate.predictions.get(prediction.id);
+      console.log('⏳ Prediction status:', finalPrediction.status);
+    }
+
+    if (finalPrediction.status === 'failed') {
+      throw new Error(`Replicate prediction failed: ${finalPrediction.error || 'Unknown error'}`);
+    }
+
+    if (finalPrediction.status === 'canceled') {
+      throw new Error('Replicate prediction was canceled');
+    }
+
+    const output = finalPrediction.output;
     console.log('📦 Raw output from Replicate:', JSON.stringify(output, null, 2));
     
     // Handle different output formats
@@ -159,9 +176,13 @@ export async function generateImageWithStableDiffusion(
       // Find first string URL in array
       imageUrl = output.find((item: any) => typeof item === 'string') || null;
       // Or if array contains objects, look for url property
-      if (!imageUrl) {
-        const urlObj = output.find((item: any) => item && typeof item === 'object' && item.url);
-        imageUrl = urlObj?.url || null;
+      if (!imageUrl && output.length > 0) {
+        const firstItem = output[0];
+        if (typeof firstItem === 'string') {
+          imageUrl = firstItem;
+        } else if (firstItem && typeof firstItem === 'object') {
+          imageUrl = firstItem.url || firstItem.output || null;
+        }
       }
     } else if (output && typeof output === 'object') {
       // Check for common URL properties
