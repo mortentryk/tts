@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
           model: imageModel,
           size: size as any,
           quality: quality as any,
-          referenceImageUrl: useImg2Img ? referenceImageUrl : undefined,
+          referenceImageUrl: useImg2Img ? (referenceImageUrl || undefined) : undefined,
           strength: 0.65, // Good balance: maintains style while allowing scene changes
         });
 
