@@ -19,6 +19,16 @@ interface Story {
   description?: string;
   is_published: boolean;
   node_count: number;
+  visual_style?: string;
+}
+
+interface CharacterAssignment {
+  node_key: string;
+  character_id: string;
+  character_name: string;
+  role?: string;
+  emotion?: string;
+  action?: string;
 }
 
 export default function CharacterManager() {
@@ -26,9 +36,12 @@ export default function CharacterManager() {
   const [stories, setStories] = useState<Story[]>([]);
   const [selectedStory, setSelectedStory] = useState<string>('');
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
+  const [visualStyle, setVisualStyle] = useState<string>('');
+  const [savingStyle, setSavingStyle] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -60,14 +73,18 @@ export default function CharacterManager() {
     loadStories();
   }, []);
 
-  // Load characters when story changes
+  // Load characters, assignments, and visual style when story changes
   useEffect(() => {
     if (selectedStory) {
       loadCharacters();
+      loadCharacterAssignments();
+      loadVisualStyle();
     } else {
       setCharacters([]);
+      setCharacterAssignments([]);
+      setVisualStyle('');
     }
-  }, [selectedStory]);
+  }, [selectedStory, stories]);
 
   const loadStories = async () => {
     try {
@@ -96,6 +113,76 @@ export default function CharacterManager() {
       }
     } catch (error) {
       console.error('Failed to load characters:', error);
+    }
+  };
+
+  const loadCharacterAssignments = async () => {
+    if (!selectedStory) return;
+    try {
+      const response = await fetch(`/api/admin/character-assignments?storySlug=${selectedStory}`, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Transform the data to match our interface
+        const transformed = (data || []).map((assignment: any) => ({
+          node_key: assignment.node_key,
+          character_id: assignment.character_id,
+          character_name: assignment.characters?.name || 'Unknown',
+          role: assignment.role,
+          emotion: assignment.emotion,
+          action: assignment.action,
+        }));
+        setCharacterAssignments(transformed);
+      }
+    } catch (error) {
+      console.error('Failed to load character assignments:', error);
+    }
+  };
+
+  const loadVisualStyle = async () => {
+    if (!selectedStory) return;
+    try {
+      const story = stories.find(s => s.slug === selectedStory);
+      if (story && story.visual_style !== undefined) {
+        setVisualStyle(story.visual_style || '');
+      }
+    } catch (error) {
+      console.error('Failed to load visual style:', error);
+    }
+  };
+
+  const handleSaveVisualStyle = async () => {
+    if (!selectedStory) return;
+    const story = stories.find(s => s.slug === selectedStory);
+    if (!story) return;
+
+    setSavingStyle(true);
+    try {
+      const response = await fetch(`/api/admin/stories/${story.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ visual_style: visualStyle }),
+      });
+
+      if (response.ok) {
+        alert('✅ Visual style saved successfully!');
+        // Update the story in the list
+        setStories(stories.map(s => 
+          s.id === story.id ? { ...s, visual_style: visualStyle } : s
+        ));
+      } else {
+        const data = await response.json();
+        alert(`❌ Failed to save visual style: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to save visual style:', error);
+      alert('❌ Failed to save visual style');
+    } finally {
+      setSavingStyle(false);
     }
   };
 
@@ -224,7 +311,7 @@ export default function CharacterManager() {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">
-              🎭 Character Manager
+              🎭 Story Configuration Hub
             </h1>
             <div className="space-x-4">
               <button
@@ -286,24 +373,129 @@ export default function CharacterManager() {
                 )}
               </div>
 
-              {/* Character Management */}
+              {/* Story Configuration Section */}
               {selectedStory && (
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold text-gray-800">
-                      🎭 Characters ({characters.length})
+                <div className="space-y-8">
+                  {/* Visual Style Configuration */}
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-lg border border-purple-200">
+                    <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                      🎨 Visual Style Configuration
                     </h2>
-                    <button
-                      onClick={() => {
-                        setEditingCharacter(null);
-                        setFormData({ name: '', description: '', referenceImageUrl: '', appearancePrompt: '' });
-                        setShowCreateForm(true);
-                      }}
-                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-                    >
-                      ➕ Add Character
-                    </button>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Set the visual style for all images in this story. This ensures consistent look and feel across all generated images.
+                    </p>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Visual Style Description
+                        </label>
+                        <textarea
+                          value={visualStyle}
+                          onChange={(e) => setVisualStyle(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          rows={3}
+                          placeholder="e.g., Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          💡 Tip: Be specific about art style, colors, lighting, and mood. This style will be applied to all images.
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <button
+                          onClick={handleSaveVisualStyle}
+                          disabled={savingStyle}
+                          className="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {savingStyle ? 'Saving...' : '💾 Save Visual Style'}
+                        </button>
+                        <button
+                          onClick={() => setVisualStyle('Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality')}
+                          className="text-gray-600 hover:text-gray-800 text-sm"
+                        >
+                          Use Default Disney Style
+                        </button>
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Quick Actions */}
+                  <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                    <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                      ⚡ Quick Actions
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <button
+                        onClick={() => router.push(`/admin/images/simple?story=${selectedStory}`)}
+                        className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 text-left"
+                      >
+                        <div className="font-semibold">🎨 Generate Images</div>
+                        <div className="text-sm opacity-90">Create images for all scenes</div>
+                      </button>
+                      <button
+                        onClick={() => router.push(`/admin/media?story=${selectedStory}`)}
+                        className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 text-left"
+                      >
+                        <div className="font-semibold">📹 Manage Media</div>
+                        <div className="text-sm opacity-90">View and manage generated media</div>
+                      </button>
+                      <button
+                        onClick={() => router.push(`/admin/images/simple?story=${selectedStory}`)}
+                        className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 text-left"
+                      >
+                        <div className="font-semibold">👥 Assign Characters</div>
+                        <div className="text-sm opacity-90">Assign characters to scenes</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Character Assignment Overview */}
+                  {characterAssignments.length > 0 && (
+                    <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+                      <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                        📋 Character Assignment Overview
+                      </h2>
+                      <div className="text-sm text-gray-700 mb-4">
+                        {characterAssignments.length} character assignment{characterAssignments.length !== 1 ? 's' : ''} across {new Set(characterAssignments.map(a => a.node_key)).size} scene{new Set(characterAssignments.map(a => a.node_key)).size !== 1 ? 's' : ''}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto">
+                        {Array.from(new Set(characterAssignments.map(a => a.node_key))).map(nodeKey => {
+                          const nodeAssignments = characterAssignments.filter(a => a.node_key === nodeKey);
+                          return (
+                            <div key={nodeKey} className="bg-white p-3 rounded border border-yellow-300">
+                              <div className="font-semibold text-sm mb-2">Scene {nodeKey}</div>
+                              <div className="space-y-1">
+                                {nodeAssignments.map((assignment, idx) => (
+                                  <div key={idx} className="text-xs text-gray-600">
+                                    • {assignment.character_name}
+                                    {assignment.role && ` (${assignment.role})`}
+                                    {assignment.emotion && ` - ${assignment.emotion}`}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Character Management */}
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-xl font-semibold text-gray-800">
+                        🎭 Characters ({characters.length})
+                      </h2>
+                      <button
+                        onClick={() => {
+                          setEditingCharacter(null);
+                          setFormData({ name: '', description: '', referenceImageUrl: '', appearancePrompt: '' });
+                          setShowCreateForm(true);
+                        }}
+                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                      >
+                        ➕ Add Character
+                      </button>
+                    </div>
 
                   {/* Character List */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -350,11 +542,12 @@ export default function CharacterManager() {
                     ))}
                   </div>
 
-                  {characters.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      No characters found. Add your first character to get started.
-                    </div>
-                  )}
+                    {characters.length === 0 && (
+                      <div className="text-center py-8 text-gray-500">
+                        No characters found. Add your first character to get started.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -441,21 +634,36 @@ export default function CharacterManager() {
               {/* Help Section */}
               <div className="mt-8 bg-gray-50 p-6 rounded-lg">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                  💡 Character Consistency Guide
+                  💡 Story Configuration Workflow
                 </h3>
-                <div className="text-sm text-gray-600 space-y-2">
-                  <p><strong>1. Create Characters:</strong> Add main characters with descriptions and reference images</p>
-                  <p><strong>2. Assign to Nodes:</strong> Link characters to specific story scenes</p>
-                  <p><strong>3. Generate Images:</strong> AI will create consistent character appearances</p>
-                  <p><strong>4. Review & Adjust:</strong> Fine-tune character descriptions as needed</p>
+                <div className="text-sm text-gray-600 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="font-semibold text-gray-800 mb-2">1. Configure Visual Style</p>
+                      <p className="text-gray-600">Set the overall visual style for all images in your story. This ensures consistency across all generated images.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 mb-2">2. Create Characters</p>
+                      <p className="text-gray-600">Add main characters with detailed descriptions and reference images for consistent appearance.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 mb-2">3. Assign Characters</p>
+                      <p className="text-gray-600">Link characters to specific story scenes with roles, emotions, and actions.</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 mb-2">4. Generate Images</p>
+                      <p className="text-gray-600">Use the image generation page to create consistent images with your configured style and characters.</p>
+                    </div>
+                  </div>
                   
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-semibold text-blue-900 mb-2">🎨 Tips for Better Consistency:</h4>
+                    <h4 className="font-semibold text-blue-900 mb-2">🎨 Tips for Better Results:</h4>
                     <ul className="text-blue-700 space-y-1">
-                      <li>• Use detailed appearance prompts</li>
+                      <li>• Set visual style first - it applies to all images</li>
+                      <li>• Use detailed character appearance prompts</li>
                       <li>• Upload reference images when possible</li>
-                      <li>• Be specific about clothing and accessories</li>
-                      <li>• Include character emotions and actions</li>
+                      <li>• Be specific about clothing, colors, and features</li>
+                      <li>• Assign characters to scenes before generating images</li>
                     </ul>
                   </div>
                 </div>

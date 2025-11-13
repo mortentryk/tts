@@ -29,43 +29,109 @@ export interface GeneratedImage {
 }
 
 /**
- * Sanitize prompt for DALL-E 3 safety system
- * Removes potentially problematic words and phrases and makes content child-friendly
+ * Sanitize prompt for DALL-E 3 safety system - TARGETED VERSION
+ * Only removes truly problematic words that trigger safety filters or create scary images
+ * Preserves visual details and descriptive words
  */
 function sanitizePromptForDALLE3(prompt: string): string {
-  // Remove words that might trigger safety filters or create scary images
+  // Only remove words that definitely trigger safety filters or create scary images
+  // Removed overly aggressive words that were removing important visual details
   const problematicWords = [
-    'scary', 'horror', 'menacing', 'creepy', 'nightmarish', 'gothic',
-    'dark shadows', 'ominous', 'frightening', 'terrifying', 'sinister',
-    'evil', 'demonic', 'haunted', 'ghostly', 'spooky', 'eerie',
+    'horror', 'menacing', 'nightmarish', 'gothic',
+    'ominous', 'frightening', 'terrifying', 'sinister',
+    'evil', 'demonic', 'haunted', 'spooky', 'eerie',
     'threatening', 'dangerous', 'violent', 'blood', 'death', 'skull',
-    'bone', 'skeleton', 'grave', 'tomb', 'crypt', 'witchcraft', 'cursed'
+    'skeleton', 'grave', 'tomb', 'crypt', 'witchcraft', 'cursed'
   ];
   
   let sanitized = prompt;
   problematicWords.forEach(word => {
-    const regex = new RegExp(word, 'gi');
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
     sanitized = sanitized.replace(regex, '');
   });
   
-  // Replace scary character descriptions with friendly ones
+  // Replace scary character descriptions with friendly ones (more targeted)
   const scaryReplacements: { [key: string]: string } = {
     'old witch': 'friendly magical character',
     'witch': 'magical character',
-    'wizard': 'friendly wizard',
-    'dark forest': 'enchanted forest',
-    'dark': 'mysterious but bright',
-    'shadowy': 'mysterious but well-lit',
-    'gaunt': 'wise and kind',
-    'bony': 'slender',
     'sharp teeth': 'friendly smile',
     'clawed hands': 'magical hands',
-    'pointed nose': 'distinctive nose',
-    'hooked nose': 'distinctive nose'
   };
   
   Object.entries(scaryReplacements).forEach(([scary, friendly]) => {
-    const regex = new RegExp(scary, 'gi');
+    const regex = new RegExp(`\\b${scary}\\b`, 'gi');
+    sanitized = sanitized.replace(regex, friendly);
+  });
+  
+  // Clean up extra spaces
+  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  
+  return sanitized;
+}
+
+/**
+ * Sanitize character appearance descriptions - PRESERVES VISUAL DETAILS
+ * Only removes truly problematic words while keeping appearance details intact
+ */
+function sanitizeCharacterAppearance(prompt: string): string {
+  // Very targeted - only remove words that would make characters scary
+  // Preserve all visual details like colors, clothing, features, etc.
+  const problematicWords = [
+    'horror', 'menacing', 'nightmarish', 'sinister',
+    'evil', 'demonic', 'threatening', 'dangerous', 'violent',
+    'sharp teeth', 'clawed hands'
+  ];
+  
+  let sanitized = prompt;
+  problematicWords.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    sanitized = sanitized.replace(regex, '');
+  });
+  
+  // Replace only the most problematic character descriptions
+  const scaryReplacements: { [key: string]: string } = {
+    'old witch': 'friendly magical character',
+    'witch': 'magical character',
+    'sharp teeth': 'friendly smile',
+    'clawed hands': 'magical hands',
+  };
+  
+  Object.entries(scaryReplacements).forEach(([scary, friendly]) => {
+    const regex = new RegExp(`\\b${scary}\\b`, 'gi');
+    sanitized = sanitized.replace(regex, friendly);
+  });
+  
+  // Clean up extra spaces
+  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  
+  return sanitized;
+}
+
+/**
+ * Light sanitization for scene descriptions - PRESERVES VISUAL DETAILS
+ * Only removes truly problematic words, keeps all visual and story details
+ */
+function sanitizeSceneDescription(prompt: string): string {
+  // Very minimal - only remove words that definitely trigger safety filters
+  // Preserve all visual details, locations, objects, actions
+  const problematicWords = [
+    'horror', 'menacing', 'nightmarish', 'sinister',
+    'evil', 'demonic', 'threatening', 'dangerous', 'violent', 'blood', 'death'
+  ];
+  
+  let sanitized = prompt;
+  problematicWords.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    sanitized = sanitized.replace(regex, '');
+  });
+  
+  // Only replace the most problematic phrases
+  const scaryReplacements: { [key: string]: string } = {
+    'sharp teeth': 'friendly smile',
+  };
+  
+  Object.entries(scaryReplacements).forEach(([scary, friendly]) => {
+    const regex = new RegExp(`\\b${scary}\\b`, 'gi');
     sanitized = sanitized.replace(regex, friendly);
   });
   
@@ -87,12 +153,19 @@ export async function generateImageWithDALLE3(
     const sanitizedPrompt = sanitizePromptForDALLE3(prompt);
     console.log('🎨 Generating image with DALL-E 3:', sanitizedPrompt);
     
+    // Determine style based on prompt content - use 'natural' for more realistic styles
+    // Use 'vivid' for Disney/anime/cartoon styles (default)
+    const dalleStyle = options.style || (prompt.toLowerCase().includes('realistic') || 
+                                         prompt.toLowerCase().includes('photorealistic') ||
+                                         prompt.toLowerCase().includes('natural')
+                                         ? 'natural' : 'vivid');
+    
     const response = await openai.images.generate({
       model: 'dall-e-3',
       prompt: sanitizedPrompt,
       size: options.size || '1024x1024',
       quality: options.quality || 'standard',
-      style: 'vivid', // Use 'vivid' for Disney-style vibrant colors and child-friendly aesthetic
+      style: dalleStyle,
       n: 1,
     });
 
@@ -467,16 +540,17 @@ export function createStoryImagePrompt(
   referenceImageUrl?: string,
   extractedStyleDescription?: string
 ): string {
-  // Build character descriptions with better structure
+  // Build character descriptions with better structure and prominence
   let characterSection = '';
   if (characters && characters.length > 0) {
     const characterParts = characters.map(char => {
       let desc = char.name;
       if (char.appearancePrompt) {
-        // Sanitize character appearance prompts to be child-friendly
-        desc += `, ${sanitizePromptForDALLE3(char.appearancePrompt)}`;
+        // Use character-specific sanitization that preserves visual details
+        desc += `, ${sanitizeCharacterAppearance(char.appearancePrompt)}`;
       } else if (char.description) {
-        desc += `, ${sanitizePromptForDALLE3(char.description)}`;
+        // Use character-specific sanitization for descriptions too
+        desc += `, ${sanitizeCharacterAppearance(char.description)}`;
       }
       if (char.emotion) {
         // Ensure emotions are child-appropriate
@@ -491,7 +565,8 @@ export function createStoryImagePrompt(
       }
       return desc;
     });
-    characterSection = ` Characters: ${characterParts.join('. ')}.`;
+    // Make character section more prominent with stronger emphasis
+    characterSection = `\n\nCRITICAL CHARACTER REQUIREMENTS (MUST APPEAR CONSISTENTLY): ${characterParts.join('. ')}. These characters MUST appear exactly as described in every image, maintaining the same appearance, clothing, and features throughout the story.`;
   }
   
   // Clean up the story text for better AI processing
@@ -505,22 +580,22 @@ export function createStoryImagePrompt(
     .trim();
   
   // Use more of the story text (up to 1000 chars) to capture full scene details
-  // Don't sanitize the story text too aggressively - we want to preserve important details
-  // Only sanitize after we've extracted the key scene description
+  // Use light sanitization that preserves visual details
   let sceneDescription = cleanStoryText.substring(0, 1000).trim();
   
-  // Sanitize only the scene description (not the full text) to make it child-friendly
-  // but preserve important story elements
-  sceneDescription = sanitizePromptForDALLE3(sceneDescription);
+  // Use light sanitization that preserves visual details, locations, objects, actions
+  sceneDescription = sanitizeSceneDescription(sceneDescription);
   
   // Build style reference section - this MUST come FIRST to ensure DALL-E 3 prioritizes it
+  // IMPORTANT: Don't sanitize extracted style descriptions - they're already analyzed and safe
   let styleReferenceSection = '';
+  let useExtractedStyle = false;
+  
   if (extractedStyleDescription) {
     // Use the AI-extracted style description for precise matching
-    // Put it FIRST in the prompt so DALL-E 3 prioritizes style over content
-    // Sanitize extracted description to remove problematic words
-    const sanitizedDescription = sanitizePromptForDALLE3(extractedStyleDescription);
-    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): ${sanitizedDescription}. CRITICAL: You MUST use this exact style - same artistic approach, same color palette, same lighting mood, same character design style, same overall atmosphere. `;
+    // DO NOT sanitize - it's already analyzed and safe, sanitizing would remove style-specific terms
+    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): ${extractedStyleDescription}. CRITICAL: You MUST use this exact style - same artistic approach, same color palette, same lighting mood, same character design style, same overall atmosphere. `;
+    useExtractedStyle = true;
   } else if (referenceImageUrl) {
     // Fallback to text-based instructions if we don't have extracted style
     // Use positive language only to avoid safety system triggers
@@ -528,27 +603,25 @@ export function createStoryImagePrompt(
   }
   
   // Enhanced default style to be more explicit about Disney/anime and child-friendly
-  const defaultStyle = style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+  // Only use default style if we don't have extracted style (avoid conflicts)
+  const defaultStyle = useExtractedStyle ? '' : (style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children');
   
-  // Build negative instructions to prevent unwanted styles (using safer language for DALL-E 3)
-  const negativeInstructions = referenceImageUrl || extractedStyleDescription 
-    ? ' Use warm, bright lighting. Maintain friendly, expressive character designs. Keep a light, cheerful atmosphere. All characters must appear friendly and approachable, never scary or threatening.'
-    : ' All characters must appear friendly and approachable, never scary or threatening. Use warm, bright lighting throughout.';
+  // Build child-friendly requirements (always included)
+  const childFriendlyRequirements = 'CRITICAL: All content must be child-appropriate and family-friendly. Use warm, bright lighting throughout. All characters must appear friendly and approachable, never scary or threatening. Maintain a light, cheerful, magical atmosphere suitable for children.';
   
-  // Build a well-structured prompt that emphasizes BOTH style AND story content
-  // Structure: [Style Requirements] [Base Style] [SCENE DESCRIPTION - PROMINENT] [Characters] [Negative Instructions] [Quality Requirements]
-  // Make the scene description prominent so the AI reads and follows the story
-  const prompt = `${styleReferenceSection}${defaultStyle}. 
-
-IMPORTANT SCENE DESCRIPTION (READ CAREFULLY AND DEPICT ACCURATELY): ${sceneDescription}
+  // Build a well-structured prompt with clear priority: Style → Characters → Scene → Quality
+  // This structure ensures style consistency, character consistency, and accurate scene depiction
+  const prompt = `${styleReferenceSection}${defaultStyle ? defaultStyle + '. ' : ''}
 
 ${characterSection}
 
+IMPORTANT SCENE DESCRIPTION (READ CAREFULLY AND DEPICT ACCURATELY): ${sceneDescription}
+
 CRITICAL SETTING REQUIREMENTS: Pay special attention to WHERE this scene takes place. If the story mentions being inside a spaceship, UFO, building, room, laboratory, or any enclosed space, the image MUST clearly show an interior environment with walls, ceiling, and enclosed space. If it mentions being outside, show an exterior environment. The location and setting described in the scene must be clearly visible and accurate.
 
-${negativeInstructions} 
+${childFriendlyRequirements}
 
-High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, Disney Pixar style, anime-inspired, child-appropriate, no scary elements, no dark shadows, no text, no words, no writing, no letters, no dialogue boxes, no UI elements. The image must accurately show the scene described above, including all key elements, characters, objects, and setting details mentioned in the scene description.`;
+QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, child-appropriate, no scary elements, no dark shadows, no text, no words, no writing, no letters, no dialogue boxes, no UI elements. The image must accurately show the scene described above, including all key elements, characters, objects, and setting details mentioned in the scene description.`;
   
   return prompt;
 }
