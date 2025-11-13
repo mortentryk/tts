@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import JourneyMap from './components/JourneyMap';
 import PurchaseButton from '../components/PurchaseButton';
 import EmailCaptureDialog from '../components/EmailCaptureDialog';
+import InstallPWAButton from '../components/InstallPWAButton';
 import { getUserEmail, getUserPurchases, setUserEmail } from '@/lib/purchaseVerification';
 import type { SupabaseStory } from '@/lib/supabaseStoryManager';
 
@@ -183,13 +184,15 @@ export default function Home() {
             Perfekt til børn og familier.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12 items-center">
             <button
               onClick={() => setShowJourney(true)}
               className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-10 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
             >
               🗺️ Start Eventyrrejse
             </button>
+            
+            <InstallPWAButton />
             
             {userPurchases.hasActiveSubscription && (
               <div className="bg-green-600 px-6 py-4 rounded-lg font-semibold">
