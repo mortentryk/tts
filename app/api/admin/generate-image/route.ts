@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
       model = 'dalle3',
       style = 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
       size = '1024x1024',
-      quality = 'standard'
+      quality = 'standard',
+      referenceImageNodeKey
     } = body;
 
     if (!storySlug || !nodeId || !storyText) {
@@ -113,23 +114,48 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get the first image from the story to use as style reference
+    // Get the reference image - either from specified node or first image
     let referenceImageUrl: string | null = null;
     let extractedStyleDescription: string | undefined = undefined;
     
     try {
-      const { data: firstNode } = await supabase
-        .from('story_nodes')
-        .select('image_url, node_key')
-        .eq('story_id', story.id)
-        .not('image_url', 'is', null)
-        .order('sort_index', { ascending: true })
-        .limit(1)
-        .single();
+      let referenceNode;
+      
+      // If a specific reference node is provided, use that
+      if (referenceImageNodeKey) {
+        const { data: refNode } = await supabase
+          .from('story_nodes')
+          .select('image_url, node_key')
+          .eq('story_id', story.id)
+          .eq('node_key', referenceImageNodeKey)
+          .not('image_url', 'is', null)
+          .single();
+        
+        if (refNode && refNode.image_url && refNode.node_key !== nodeId) {
+          referenceNode = refNode;
+          console.log(`🎨 Using specified reference image from node ${referenceImageNodeKey}`);
+        }
+      }
+      
+      // If no specific reference or it wasn't found, fall back to first image
+      if (!referenceNode) {
+        const { data: firstNode } = await supabase
+          .from('story_nodes')
+          .select('image_url, node_key')
+          .eq('story_id', story.id)
+          .not('image_url', 'is', null)
+          .order('sort_index', { ascending: true })
+          .limit(1)
+          .single();
 
-      if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
-        referenceImageUrl = firstNode.image_url;
-        console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key})`);
+        if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
+          referenceNode = firstNode;
+          console.log(`🎨 Using first image as reference (node ${firstNode.node_key})`);
+        }
+      }
+
+      if (referenceNode && referenceNode.image_url) {
+        referenceImageUrl = referenceNode.image_url;
         
         // Analyze the reference image to extract style descriptors
         if (referenceImageUrl) {
@@ -144,7 +170,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (error) {
-      // No first image found, that's okay - we'll generate without reference
+      // No reference image found, that's okay - we'll generate without reference
       console.log('📝 No reference image found, generating without style reference');
     }
 

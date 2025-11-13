@@ -22,6 +22,7 @@ interface StoryNode {
   audio_url?: string;
   media_type?: string;
   image_prompt?: string;
+  reference_image_node_key?: string;
 }
 
 interface ImageRow {
@@ -34,6 +35,7 @@ interface ImageRow {
   status: 'empty' | 'generating' | 'ready' | 'error';
   generated_at?: string;
   cost?: number;
+  reference_image_node_key?: string;
 }
 
 interface Character {
@@ -62,6 +64,7 @@ interface ImageRow {
   status: 'empty' | 'generating' | 'ready' | 'error';
   generated_at?: string;
   cost?: number;
+  reference_image_node_key?: string;
 }
 
 interface Character {
@@ -192,7 +195,8 @@ export default function MediaManager() {
           audio_url: node.audio_url || '',
           status: node.image_url ? 'ready' : 'empty',
           generated_at: node.image_url ? new Date().toISOString() : undefined,
-          cost: 0
+          cost: 0,
+          reference_image_node_key: node.reference_image_node_key
         }));
         
         setImageRows(rows);
@@ -242,18 +246,50 @@ export default function MediaManager() {
     }
   };
 
+  const saveReferenceImage = async (nodeKey: string, referenceNodeKey: string | null) => {
+    if (!selectedStory) return;
+    
+    try {
+      const response = await fetch('/api/stories/' + selectedStory + '/nodes/' + nodeKey, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          reference_image_node_key: referenceNodeKey || null,
+        }),
+      });
+
+      if (response.ok) {
+        // Update local state
+        setImageRows(prev => prev.map(row => 
+          row.node_key === nodeKey 
+            ? { ...row, reference_image_node_key: referenceNodeKey || undefined }
+            : row
+        ));
+        loadStoryNodes(); // Reload to sync
+      }
+    } catch (error) {
+      console.error('Failed to save reference image:', error);
+    }
+  };
+
   const generateImage = async (nodeKey: string) => {
     if (!selectedStory) return;
     
     setGenerating(nodeKey);
     
     try {
-      // Find the node to get its text
+      // Find the node to get its text and reference image
       const node = nodes.find(n => n.node_key === nodeKey);
       if (!node) {
         alert('❌ Node not found');
         return;
       }
+
+      const imageRow = imageRows.find(r => r.node_key === nodeKey);
+      const referenceImageNodeKey = imageRow?.reference_image_node_key;
 
       const response = await fetch('/api/admin/generate-image', {
         method: 'POST',
@@ -268,6 +304,7 @@ export default function MediaManager() {
           storyTitle: selectedStoryData?.title || selectedStory,
           model: 'stable-diffusion', // Use Stable Diffusion for better style consistency with img2img
           style: 'fantasy adventure book illustration',
+          referenceImageNodeKey: referenceImageNodeKey || undefined,
         }),
       });
 
@@ -669,6 +706,7 @@ export default function MediaManager() {
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Node</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Text</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Characters</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Reference Image</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Media</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Audio</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Actions</th>
@@ -760,6 +798,32 @@ export default function MediaManager() {
                                   </div>
                                 );
                               })()}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              <div className="space-y-2">
+                                <select
+                                  value={row.reference_image_node_key || ''}
+                                  onChange={(e) => {
+                                    const refKey = e.target.value || null;
+                                    saveReferenceImage(row.node_key, refKey);
+                                  }}
+                                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                                >
+                                  <option value="">Auto (first image)</option>
+                                  {imageRows
+                                    .filter(r => r.node_key !== row.node_key && r.image_url && r.status === 'ready')
+                                    .map(refRow => (
+                                      <option key={refRow.node_key} value={refRow.node_key}>
+                                        {refRow.node_key} {refRow.image_url ? '🖼️' : ''}
+                                      </option>
+                                    ))}
+                                </select>
+                                {row.reference_image_node_key && (
+                                  <div className="text-xs text-gray-600">
+                                    Using: {row.reference_image_node_key}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {(() => {
