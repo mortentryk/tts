@@ -144,8 +144,6 @@ export async function generateImageWithStableDiffusion(
         input: {
           prompt: prompt.substring(0, 1000), // Limit prompt length
           aspect_ratio: "1:1",
-          output_format: "png",
-          output_quality: 90,
         }
       }
     );
