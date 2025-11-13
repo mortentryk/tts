@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Storific Stories',
-  description: 'Interactive stories with voice narration for kids',
+  description: 'Interaktive historier med stemme-fortælling til børn',
   manifest: '/manifest',
   themeColor: '#e94560',
   appleWebApp: {
@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="da">
       <body className={inter.className}>{children}</body>
     </html>
   )

@@ -11,11 +11,13 @@ const replicate = new Replicate({
 });
 
 export interface ImageGenerationOptions {
-  model?: 'dalle3' | 'stable-diffusion';
+  model?: 'dalle3' | 'stable-diffusion' | 'stable-diffusion-img2img';
   size?: '1024x1024' | '1024x1792' | '1792x1024';
   quality?: 'standard' | 'hd';
   style?: 'vivid' | 'natural';
   n?: number;
+  referenceImageUrl?: string; // For img2img - reference image to match style
+  strength?: number; // For img2img - how much to follow reference (0-1, lower = more similar)
 }
 
 export interface GeneratedImage {
@@ -104,6 +106,64 @@ export async function generateImageWithStableDiffusion(
 }
 
 /**
+ * Generate an image using Stable Diffusion Image-to-Image via Replicate
+ * This uses a reference image to maintain style consistency
+ */
+export async function generateImageWithStableDiffusionImg2Img(
+  prompt: string,
+  referenceImageUrl: string,
+  options: ImageGenerationOptions = {}
+): Promise<GeneratedImage> {
+  try {
+    console.log('🎨 Generating image with Stable Diffusion img2img:', prompt);
+    console.log('🖼️ Using reference image for style consistency:', referenceImageUrl);
+    
+    // Download reference image
+    const imageResponse = await fetch(referenceImageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch reference image: ${imageResponse.statusText}`);
+    }
+    
+    const imageBuffer = await imageResponse.arrayBuffer();
+    const imageBase64 = Buffer.from(imageBuffer).toString('base64');
+    const imageDataUri = `data:image/jpeg;base64,${imageBase64}`;
+    
+    // Use SDXL which has good img2img support
+    // strength: 0.6-0.7 is good for maintaining style while allowing scene changes
+    const strength = options.strength || 0.65;
+    
+    const output = await replicate.run(
+      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+      {
+        input: {
+          prompt: prompt,
+          image: imageDataUri,
+          strength: strength, // Lower = more similar to reference (0.5-0.8 is good range)
+          width: 1024,
+          height: 1024,
+          num_outputs: 1,
+          num_inference_steps: 50,
+          guidance_scale: 7.5,
+          scheduler: "K_EULER",
+        }
+      }
+    );
+
+    const imageUrl = Array.isArray(output) ? output[0] : output;
+    
+    return {
+      url: imageUrl as string,
+      model: 'stable-diffusion-img2img',
+      size: '1024x1024',
+      cost: 0.0023, // Similar cost to regular SD
+    };
+  } catch (error) {
+    console.error('❌ Stable Diffusion img2img generation error:', error);
+    throw new Error(`Stable Diffusion img2img generation failed: ${error}`);
+  }
+}
+
+/**
  * Generate an image using the specified model
  */
 export async function generateImage(
@@ -117,6 +177,11 @@ export async function generateImage(
       return generateImageWithDALLE3(prompt, options);
     case 'stable-diffusion':
       return generateImageWithStableDiffusion(prompt, options);
+    case 'stable-diffusion-img2img':
+      if (!options.referenceImageUrl) {
+        throw new Error('referenceImageUrl is required for stable-diffusion-img2img model');
+      }
+      return generateImageWithStableDiffusionImg2Img(prompt, options.referenceImageUrl, options);
     default:
       throw new Error(`Unsupported model: ${model}`);
   }

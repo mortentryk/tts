@@ -171,11 +171,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate image with AI
+    // Use img2img if we have a reference image for better style consistency
+    const useImg2Img = referenceImageUrl && model === 'stable-diffusion';
+    const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
+    
     const generatedImage = await generateImage(prompt, {
-      model: model as any,
+      model: imageModel,
       size: size as any,
       quality: quality as any,
+      referenceImageUrl: useImg2Img ? referenceImageUrl : undefined,
+      strength: 0.65, // Good balance: maintains style while allowing scene changes
     });
+    
+    if (useImg2Img) {
+      console.log('🔄 Using img2img mode for style consistency');
+    }
 
     console.log('✅ Image generated:', generatedImage.url);
 

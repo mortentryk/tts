@@ -149,10 +149,10 @@ export default function Home() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        alert(data.error || 'Kunne ikke starte checkout. Prøv venligst igen.');
+        alert(data.error || 'Kunne ikke starte betaling. Prøv venligst igen.');
       }
     } catch (error) {
-      alert('Fejl ved start af checkout');
+      alert('Fejl ved start af betaling');
     }
   };
 

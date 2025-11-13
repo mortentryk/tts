@@ -1,113 +1,112 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy - TTS Story Platform',
-  description: 'Privacy Policy for our interactive TTS story platform',
+  title: 'Fortrolighedspolitik - TTS Historie Platform',
+  description: 'Fortrolighedspolitik for vores interaktive TTS historie platform',
 };
 
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8">Privacy Policy</h1>
+        <h1 className="text-4xl font-bold mb-8">Fortrolighedspolitik</h1>
         
         <div className="space-y-6 text-gray-300">
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">1. Information We Collect</h2>
-            <p className="mb-2">We collect the following information:</p>
+            <h2 className="text-2xl font-semibold mb-4 text-white">1. Information Vi Indsamler</h2>
+            <p className="mb-2">Vi indsamler følgende information:</p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li><strong>Email Address:</strong> Collected during purchase for order confirmation and account management</li>
-              <li><strong>Payment Information:</strong> Processed securely through Stripe - we never store your payment details</li>
-              <li><strong>Usage Data:</strong> Stories accessed, purchase history, and navigation patterns</li>
+              <li><strong>Email-adresse:</strong> Indsamles under køb til ordrebekræftelse og kontoadministration</li>
+              <li><strong>Betalingsinformation:</strong> Behandles sikkert gennem Stripe - vi gemmer aldrig dine betalingsoplysninger</li>
+              <li><strong>Brugsdata:</strong> Historier tilgået, købshistorik og navigationsmønstre</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">2. How We Use Your Information</h2>
-            <p className="mb-2">We use your information to:</p>
+            <h2 className="text-2xl font-semibold mb-4 text-white">2. Sådan Bruger Vi Din Information</h2>
+            <p className="mb-2">Vi bruger din information til:</p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>Process your purchases and subscriptions</li>
-              <li>Provide access to purchased content</li>
-              <li>Send order confirmations and important updates</li>
-              <li>Improve our service based on usage patterns</li>
-              <li>Respond to support requests</li>
+              <li>Behandle dine køb og abonnementer</li>
+              <li>Tilvejebringe adgang til købt indhold</li>
+              <li>Sende ordrebekræftelser og vigtige opdateringer</li>
+              <li>Forbedre vores service baseret på brugsmønstre</li>
+              <li>Besvare supportanmodninger</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">3. Third-Party Services</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">3. Tredjepartstjenester</h2>
             <p>
-              We use the following third-party services that may collect information:
+              Vi bruger følgende tredjepartstjenester, der kan indsamle information:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li><strong>Stripe:</strong> Payment processing (view Stripe&apos;s privacy policy)</li>
-              <li><strong>Supabase:</strong> Database and authentication (view Supabase&apos;s privacy policy)</li>
-              <li><strong>Vercel:</strong> Hosting and analytics (view Vercel&apos;s privacy policy)</li>
+              <li><strong>Stripe:</strong> Betalingsbehandling (se Stripes fortrolighedspolitik)</li>
+              <li><strong>Supabase:</strong> Database og autentificering (se Supabases fortrolighedspolitik)</li>
+              <li><strong>Vercel:</strong> Hosting og analytics (se Vercels fortrolighedspolitik)</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">4. Data Security</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">4. Datasikkerhed</h2>
             <p>
-              We implement appropriate technical and organizational measures to protect your personal information. 
-              All payment information is encrypted and processed by Stripe in compliance with PCI DSS standards.
+              Vi implementerer passende tekniske og organisatoriske foranstaltninger for at beskytte dine personlige oplysninger. 
+              Al betalingsinformation er krypteret og behandles af Stripe i overensstemmelse med PCI DSS-standarder.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">5. Your Rights (GDPR)</h2>
-            <p className="mb-2">Under GDPR, you have the right to:</p>
+            <h2 className="text-2xl font-semibold mb-4 text-white">5. Dine Rettigheder (GDPR)</h2>
+            <p className="mb-2">Under GDPR har du ret til:</p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>Access your personal data</li>
-              <li>Request correction of inaccurate data</li>
-              <li>Request deletion of your data</li>
-              <li>Object to processing of your data</li>
-              <li>Data portability</li>
-              <li>Withdraw consent at any time</li>
+              <li>Tilgå dine personlige data</li>
+              <li>Anmode om rettelse af unøjagtige data</li>
+              <li>Anmode om sletning af dine data</li>
+              <li>Gøre indsigelse mod behandling af dine data</li>
+              <li>Dataportabilitet</li>
+              <li>Trække samtykke tilbage når som helst</li>
             </ul>
           </section>
 
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-white">6. Cookies</h2>
             <p>
-              We use cookies to maintain your session and remember your preferences. These are essential for 
-              the platform to function properly. You can disable cookies in your browser, but this may affect 
-              platform functionality.
+              Vi bruger cookies til at opretholde din session og huske dine præferencer. Disse er essentielle for 
+              at platformen fungerer korrekt. Du kan deaktivere cookies i din browser, men dette kan påvirke 
+              platformens funktionalitet.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">7. Children&apos;s Privacy</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">7. Børns Fortrolighed</h2>
             <p>
-              Our platform may be suitable for children, but we recommend parental supervision during use. 
-              We do not knowingly collect personal information from children under 13 without parental consent.
+              Vores platform kan være egnet til børn, men vi anbefaler forældretilsyn under brug. 
+              Vi indsamler ikke bevidst personlige oplysninger fra børn under 13 uden forældres samtykke.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">8. International Data Transfers</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">8. Internationale Dataoverførsler</h2>
             <p>
-              Your data may be transferred to and processed in the United States and other countries where 
-              our service providers operate. We ensure appropriate safeguards are in place.
+              Dine data kan blive overført til og behandlet i USA og andre lande, hvor 
+              vores serviceudbydere opererer. Vi sikrer, at passende beskyttelsesforanstaltninger er på plads.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">9. Contact</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">9. Kontakt</h2>
             <p>
-              For privacy-related inquiries or to exercise your rights, please contact us through our 
-              support channels with &quot;Privacy Inquiry&quot; in the subject line.
+              For fortrolighedsrelaterede henvendelser eller for at udøve dine rettigheder, kontakt os venligst gennem vores 
+              supportkanaler med &quot;Fortrolighedshenvendelse&quot; i emnefeltet.
             </p>
           </section>
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-700">
           <p className="text-sm text-gray-400">
-            Last updated: {new Date().toLocaleDateString()}
+            Sidst opdateret: {new Date().toLocaleDateString('da-DK')}
           </p>
         </div>
       </div>
     </div>
   );
 }
-

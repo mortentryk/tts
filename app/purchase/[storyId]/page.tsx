@@ -20,12 +20,12 @@ export default function PurchasePage() {
     try {
       const response = await fetch(`/api/stories/${params.storyId}`);
       if (!response.ok) {
-        throw new Error('Story not found');
+        throw new Error('Historie ikke fundet');
       }
       const data = await response.json();
       setStory(data);
     } catch (error) {
-      setError('Story not found');
+      setError('Historie ikke fundet');
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,7 @@ export default function PurchasePage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create checkout session');
+        throw new Error(data.error || 'Kunne ikke oprette betalingssession');
       }
 
       // Redirect to Stripe checkout
@@ -61,7 +61,7 @@ export default function PurchasePage() {
         window.location.href = data.url;
       }
     } catch (error: any) {
-      setError(error.message || 'Failed to start checkout');
+      setError(error.message || 'Kunne ikke starte betaling');
       setProcessing(false);
     }
   };
@@ -71,7 +71,7 @@ export default function PurchasePage() {
       <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center text-white">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p>Loading...</p>
+          <p>Indlæser...</p>
         </div>
       </div>
     );
@@ -81,12 +81,12 @@ export default function PurchasePage() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 flex items-center justify-center text-white">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Story Not Found</h1>
+          <h1 className="text-2xl font-bold mb-4">Historie ikke fundet</h1>
           <button
             onClick={() => router.push('/')}
             className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg"
           >
-            Back to Stories
+            Tilbage til Historier
           </button>
         </div>
       </div>
@@ -100,18 +100,18 @@ export default function PurchasePage() {
           onClick={() => router.back()}
           className="mb-8 text-gray-400 hover:text-white"
         >
-          ← Back
+          ← Tilbage
         </button>
 
         <div className="bg-gray-800 rounded-lg p-8 shadow-xl">
-          <h1 className="text-3xl font-bold mb-4">Purchase Story</h1>
+          <h1 className="text-3xl font-bold mb-4">Køb Historie</h1>
           <p className="text-gray-300 text-lg mb-8">{story.title}</p>
 
           <div className="mb-6">
             <p className="text-4xl font-bold text-yellow-500">
               ${Number(story.price).toFixed(2)}
             </p>
-            <p className="text-gray-400 text-sm mt-1">One-time purchase</p>
+            <p className="text-gray-400 text-sm mt-1">Engangsbetaling</p>
           </div>
 
           {story.description && (
@@ -123,7 +123,7 @@ export default function PurchasePage() {
           <form onSubmit={handlePurchase}>
             <div className="mb-6">
               <label htmlFor="email" className="block text-sm font-medium mb-2">
-                Email Address
+                Email-adresse
               </label>
               <input
                 type="email"
@@ -132,10 +132,10 @@ export default function PurchasePage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="w-full px-4 py-3 bg-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                placeholder="your@email.com"
+                placeholder="din@email.dk"
               />
               <p className="text-sm text-gray-400 mt-2">
-                We'll send your purchase confirmation to this email
+                Vi sender din købsbekræftelse til denne email
               </p>
             </div>
 
@@ -150,13 +150,13 @@ export default function PurchasePage() {
               disabled={processing || !email}
               className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 rounded-lg transition-colors"
             >
-              {processing ? 'Processing...' : `Purchase for $${Number(story.price).toFixed(2)}`}
+              {processing ? 'Behandler...' : `Køb for $${Number(story.price).toFixed(2)}`}
             </button>
           </form>
 
           <div className="mt-6 pt-6 border-t border-gray-700">
             <p className="text-sm text-gray-400">
-              🔒 Secure checkout powered by Stripe
+              🔒 Sikker betaling via Stripe
             </p>
           </div>
         </div>

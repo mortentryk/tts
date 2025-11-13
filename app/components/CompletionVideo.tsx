@@ -78,10 +78,10 @@ export default function CompletionVideo({ onComplete, onReplay }: CompletionVide
                 🎉
               </div>
               <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
-                Adventure Complete!
+                Eventyr Gennemført!
               </h1>
               <p className="text-2xl text-yellow-200 opacity-90 mb-8 animate-fade-in">
-                You've successfully completed your magical journey through all the enchanted lands!
+                Du har succesfuldt gennemført din magiske rejse gennem alle de fortryllede lande!
               </p>
               
               {/* Progress Bar */}
@@ -92,7 +92,7 @@ export default function CompletionVideo({ onComplete, onReplay }: CompletionVide
                 />
               </div>
               <p className="text-white text-lg opacity-80">
-                🏆 Celebrating your heroic achievements...
+                🏆 Fejrer dine heltemodige præstationer...
               </p>
             </div>
           </div>
@@ -107,23 +107,23 @@ export default function CompletionVideo({ onComplete, onReplay }: CompletionVide
               🏆
             </div>
             <h2 className="text-3xl font-bold text-white mb-4">
-              Congratulations!
+              Tillykke!
             </h2>
             <p className="text-dungeon-text mb-6">
-              You've completed all the magical quests and explored every enchanted land!
+              Du har gennemført alle de magiske opgaver og udforsket hvert fortryllede land!
             </p>
             <div className="space-y-3">
               <button
                 onClick={onReplay}
                 className="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
               >
-                🔄 Start New Adventure
+                🔄 Start Nyt Eventyr
               </button>
               <button
                 onClick={onComplete}
                 className="w-full bg-dungeon-accent hover:bg-dungeon-accent-active text-white px-6 py-3 rounded-lg transition-colors"
               >
-                📋 Browse All Stories
+                📋 Gennemse Alle Historier
               </button>
             </div>
           </div>
@@ -136,7 +136,7 @@ export default function CompletionVideo({ onComplete, onReplay }: CompletionVide
           onClick={() => setShowOptions(true)}
           className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm hover:bg-opacity-70 transition-colors"
         >
-          Skip
+          Spring Over
         </button>
       </div>
     </div>

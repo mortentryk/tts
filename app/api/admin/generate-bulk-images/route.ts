@@ -161,18 +161,27 @@ export async function POST(request: NextRequest) {
           useReferenceImage ? extractedStyleDescription : undefined
         );
         
+        // Use img2img if we have a reference image and using stable-diffusion for better style consistency
+        const useImg2Img = useReferenceImage && model === 'stable-diffusion' && referenceImageUrl;
+        const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
+        
         if (useReferenceImage) {
           console.log(`🖼️ Using reference image for style consistency on node ${node.node_key}`);
           if (extractedStyleDescription) {
             console.log(`🎭 Using extracted style description for precise matching on node ${node.node_key}`);
           }
+          if (useImg2Img) {
+            console.log(`🔄 Using img2img mode for better style consistency on node ${node.node_key}`);
+          }
         }
         
         // Generate image with AI
         const generatedImage = await generateImage(prompt, {
-          model: model as any,
+          model: imageModel,
           size: size as any,
           quality: quality as any,
+          referenceImageUrl: useImg2Img ? referenceImageUrl : undefined,
+          strength: 0.65, // Good balance: maintains style while allowing scene changes
         });
 
         // Upload to Cloudinary
