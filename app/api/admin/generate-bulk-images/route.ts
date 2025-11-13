@@ -137,9 +137,14 @@ export async function POST(request: NextRequest) {
               referenceImageUrl = prevNode.image_url;
               console.log(`🎨 Using previous scene (node ${prevNode.node_key}) as reference for node ${node.node_key}`);
               
-              // Analyze style from previous scene (cache for efficiency)
-              if (referenceImageUrl) {
+              // Only analyze style with GPT-4 Vision if we're NOT using img2img
+              // img2img sees the image directly, so text description is redundant
+              const willUseImg2Img = referenceImageUrl && model === 'stable-diffusion';
+              
+              if (!willUseImg2Img && referenceImageUrl) {
+                // Only for DALL-E 3 - it can't see images, needs text description
                 try {
+                  console.log(`🔍 Analyzing previous scene style for DALL-E 3 (node ${node.node_key})...`);
                   extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
                   if (extractedStyleDescription) {
                     console.log(`✅ Extracted style from previous scene for node ${node.node_key}`);
@@ -147,6 +152,8 @@ export async function POST(request: NextRequest) {
                 } catch (error) {
                   console.warn(`⚠️ Failed to analyze previous scene style:`, error);
                 }
+              } else {
+                console.log(`⏭️ Skipping GPT-4 Vision analysis for node ${node.node_key} - using img2img which sees image directly`);
               }
               break;
             }
