@@ -199,6 +199,12 @@ export default function MediaManager() {
           reference_image_node_key: node.reference_image_node_key
         }));
         
+        // Log video URLs for debugging
+        const nodesWithVideos = rows.filter(r => r.video_url);
+        if (nodesWithVideos.length > 0) {
+          console.log(`📹 Found ${nodesWithVideos.length} nodes with videos:`, nodesWithVideos.map(r => ({ node: r.node_key, video: r.video_url })));
+        }
+        
         setImageRows(rows);
       }
     } catch (error) {
@@ -382,9 +388,13 @@ export default function MediaManager() {
       const data = await response.json();
 
       if (response.ok) {
+        console.log('✅ Video generated successfully:', data.video);
         alert(`✅ Video generated! URL: ${data.video.url}\nCost: $${data.video.cost}`);
-        loadStoryNodes();
+        // Reload nodes to show the new video
+        await loadStoryNodes();
+        console.log('✅ Story nodes reloaded after video generation');
       } else {
+        console.error('❌ Video generation failed:', data.error);
         alert(`❌ Failed to generate video: ${data.error}`);
       }
     } catch (error) {

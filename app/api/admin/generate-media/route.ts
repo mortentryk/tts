@@ -274,7 +274,10 @@ export async function POST(request: NextRequest) {
       const videoResponse = await fetch(generatedVideo.url);
       const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
       
-      const videoPublicId = generateStoryAssetId(storySlug, nodeId, 'video');
+      // Generate public ID - extract just the filename part since we pass folder separately
+      const fullPublicId = generateStoryAssetId(storySlug, nodeId, 'video');
+      // Remove the folder prefix since we'll pass it separately
+      const videoPublicId = fullPublicId.replace(`tts-books/${storySlug}/`, '');
       const videoUploadResult = await uploadVideoToCloudinary(
         videoBuffer,
         `tts-books/${storySlug}`,

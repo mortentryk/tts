@@ -85,10 +85,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Use custom prompt as scene description, but apply story's visual style
+      // IMPORTANT: Custom prompts are ENVIRONMENT-ONLY - no characters should be included
       const customSceneDescription = storyText.trim();
       const visualStyle = storyVisualStyle || style || undefined;
       
-      // Build prompt: Style + Custom Scene Description (no characters, no previous context)
+      // Build prompt: Style + Custom Scene Description (ENVIRONMENT ONLY - no characters, no previous context)
       let styleSection = '';
       if (referenceImageUrl) {
         styleSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): Match the exact same artistic style, color palette, lighting mood, and visual aesthetic as the reference image from this story. `;
@@ -102,11 +103,13 @@ export async function POST(request: NextRequest) {
       
       const customPrompt = `${styleSection}
 
-IMPORTANT SCENE DESCRIPTION (READ CAREFULLY AND DEPICT ACCURATELY): ${customSceneDescription}
+ENVIRONMENT DESCRIPTION (ENVIRONMENT ONLY - NO CHARACTERS): ${customSceneDescription}
+
+CRITICAL: This is an environment-only scene. Do NOT include any characters, people, or living beings. Focus only on the setting, scenery, objects, and atmosphere described above.
 
 ${childFriendlyRequirements}
 
-QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, child-appropriate, no text, no words, no writing, no letters, no dialogue boxes, no UI elements.`;
+QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, child-appropriate, no text, no words, no writing, no letters, no dialogue boxes, no UI elements, no characters, no people, no living beings.`;
 
       console.log(`📝 Custom prompt built (${customPrompt.length} chars): ${customPrompt.substring(0, 300)}...`);
 
