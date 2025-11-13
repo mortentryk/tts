@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       storySlug, 
       mediaType = 'image', // 'image', 'video', 'both'
       model = 'dalle3',
-      style = 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality',
+      style = 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
       size = '1024x1024',
       quality = 'standard',
       replaceExisting = false

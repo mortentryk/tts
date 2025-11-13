@@ -29,6 +29,53 @@ export interface GeneratedImage {
 }
 
 /**
+ * Sanitize prompt for DALL-E 3 safety system
+ * Removes potentially problematic words and phrases and makes content child-friendly
+ */
+function sanitizePromptForDALLE3(prompt: string): string {
+  // Remove words that might trigger safety filters or create scary images
+  const problematicWords = [
+    'scary', 'horror', 'menacing', 'creepy', 'nightmarish', 'gothic',
+    'dark shadows', 'ominous', 'frightening', 'terrifying', 'sinister',
+    'evil', 'demonic', 'haunted', 'ghostly', 'spooky', 'eerie',
+    'threatening', 'dangerous', 'violent', 'blood', 'death', 'skull',
+    'bone', 'skeleton', 'grave', 'tomb', 'crypt', 'witchcraft', 'cursed'
+  ];
+  
+  let sanitized = prompt;
+  problematicWords.forEach(word => {
+    const regex = new RegExp(word, 'gi');
+    sanitized = sanitized.replace(regex, '');
+  });
+  
+  // Replace scary character descriptions with friendly ones
+  const scaryReplacements: { [key: string]: string } = {
+    'old witch': 'friendly magical character',
+    'witch': 'magical character',
+    'wizard': 'friendly wizard',
+    'dark forest': 'enchanted forest',
+    'dark': 'mysterious but bright',
+    'shadowy': 'mysterious but well-lit',
+    'gaunt': 'wise and kind',
+    'bony': 'slender',
+    'sharp teeth': 'friendly smile',
+    'clawed hands': 'magical hands',
+    'pointed nose': 'distinctive nose',
+    'hooked nose': 'distinctive nose'
+  };
+  
+  Object.entries(scaryReplacements).forEach(([scary, friendly]) => {
+    const regex = new RegExp(scary, 'gi');
+    sanitized = sanitized.replace(regex, friendly);
+  });
+  
+  // Clean up extra spaces
+  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  
+  return sanitized;
+}
+
+/**
  * Generate an image using DALL-E 3
  */
 export async function generateImageWithDALLE3(
@@ -36,14 +83,16 @@ export async function generateImageWithDALLE3(
   options: ImageGenerationOptions = {}
 ): Promise<GeneratedImage> {
   try {
-    console.log('🎨 Generating image with DALL-E 3:', prompt);
+    // Sanitize prompt for DALL-E 3 safety system
+    const sanitizedPrompt = sanitizePromptForDALLE3(prompt);
+    console.log('🎨 Generating image with DALL-E 3:', sanitizedPrompt);
     
     const response = await openai.images.generate({
       model: 'dall-e-3',
-      prompt,
+      prompt: sanitizedPrompt,
       size: options.size || '1024x1024',
       quality: options.quality || 'standard',
-      style: 'vivid', // Use 'vivid' for Disney-style vibrant colors
+      style: 'vivid', // Use 'vivid' for Disney-style vibrant colors and child-friendly aesthetic
       n: 1,
     });
 
@@ -60,8 +109,14 @@ export async function generateImageWithDALLE3(
       size: options.size || '1024x1024',
       cost: 0.04, // DALL-E 3 cost per image
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ DALL-E 3 generation error:', error);
+    
+    // Check if it's a safety system rejection
+    if (error?.message?.includes('safety system') || error?.status === 400) {
+      throw new Error('DALL-E_3_SAFETY_REJECTION'); // Special error code for fallback
+    }
+    
     throw new Error(`DALL-E 3 generation failed: ${error}`);
   }
 }
@@ -165,6 +220,7 @@ export async function generateImageWithStableDiffusionImg2Img(
 
 /**
  * Generate an image using the specified model
+ * Automatically falls back to Stable Diffusion if DALL-E 3 is rejected by safety system
  */
 export async function generateImage(
   prompt: string,
@@ -172,18 +228,27 @@ export async function generateImage(
 ): Promise<GeneratedImage> {
   const model = options.model || 'dalle3';
   
-  switch (model) {
-    case 'dalle3':
-      return generateImageWithDALLE3(prompt, options);
-    case 'stable-diffusion':
-      return generateImageWithStableDiffusion(prompt, options);
-    case 'stable-diffusion-img2img':
-      if (!options.referenceImageUrl) {
-        throw new Error('referenceImageUrl is required for stable-diffusion-img2img model');
-      }
-      return generateImageWithStableDiffusionImg2Img(prompt, options.referenceImageUrl, options);
-    default:
-      throw new Error(`Unsupported model: ${model}`);
+  try {
+    switch (model) {
+      case 'dalle3':
+        return await generateImageWithDALLE3(prompt, options);
+      case 'stable-diffusion':
+        return await generateImageWithStableDiffusion(prompt, options);
+      case 'stable-diffusion-img2img':
+        if (!options.referenceImageUrl) {
+          throw new Error('referenceImageUrl is required for stable-diffusion-img2img model');
+        }
+        return await generateImageWithStableDiffusionImg2Img(prompt, options.referenceImageUrl, options);
+      default:
+        throw new Error(`Unsupported model: ${model}`);
+    }
+  } catch (error: any) {
+    // If DALL-E 3 is rejected by safety system, fall back to Stable Diffusion
+    if (model === 'dalle3' && error?.message?.includes('DALL-E_3_SAFETY_REJECTION')) {
+      console.warn('⚠️ DALL-E 3 rejected by safety system, falling back to Stable Diffusion');
+      return await generateImageWithStableDiffusion(prompt, options);
+    }
+    throw error;
   }
 }
 
@@ -214,21 +279,26 @@ export async function analyzeImageStyle(imageUrl: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: `You are an expert art director and visual style analyst. Analyze the provided image and extract detailed style descriptors that can be used to recreate the EXACT same visual style in other images. 
+          content: `You are an expert art director and visual style analyst specializing in child-friendly, Disney and anime-style illustrations. Analyze the provided image and extract detailed style descriptors that can be used to recreate the EXACT same visual style in other images. 
 
 CRITICAL: Focus on capturing the EXACT style characteristics:
-- Artistic style (e.g., "Disney-style animation", "watercolor", "digital painting")
-- Color palette and mood (warm/cool, vibrant/muted, bright/dark) - be specific about colors
-- Lighting characteristics (soft/harsh, warm/cool, direction, brightness level)
-- Character design approach (realistic/stylized, proportions, facial features, friendly/scary appearance)
-- Overall mood and atmosphere (friendly/scary, whimsical/serious, magical/realistic, light/dark)
+- Artistic style (e.g., "Disney-style animation", "anime-inspired", "watercolor", "digital painting")
+- Color palette and mood (warm/cool, vibrant/muted, bright/dark) - be specific about colors, emphasize bright and cheerful colors
+- Lighting characteristics (soft/harsh, warm/cool, direction, brightness level) - emphasize warm, bright lighting
+- Character design approach (realistic/stylized, proportions, facial features) - emphasize friendly, approachable, non-threatening appearances
+- Overall mood and atmosphere (friendly, whimsical, magical, light, cheerful) - emphasize positive, child-appropriate moods
 - Composition style and camera angle
 - Texture and rendering quality
 - Any specific visual elements that define the style
 
-IMPORTANT: If the image has a friendly, warm, family-friendly style, emphasize that. If it avoids dark/scary elements, explicitly state that. Be very specific about what makes this style unique and what should be avoided.
+IMPORTANT: 
+- ALWAYS emphasize if the image has a friendly, warm, family-friendly, Disney/anime style suitable for children
+- ALWAYS note if characters appear friendly and approachable, never scary or threatening
+- ALWAYS emphasize bright, warm lighting and cheerful atmosphere
+- If the image avoids dark/scary elements, explicitly state that
+- Be very specific about what makes this style unique and child-appropriate
 
-Return ONLY a detailed, specific style description (2-3 sentences) that can be used in image generation prompts to match this exact visual style.`
+Return ONLY a detailed, specific style description (2-3 sentences) that can be used in image generation prompts to match this exact visual style. The description must emphasize child-friendly, Disney/anime aesthetic.`
         },
         {
           role: 'user',
@@ -283,12 +353,18 @@ export function createStoryImagePrompt(
     const characterParts = characters.map(char => {
       let desc = char.name;
       if (char.appearancePrompt) {
-        desc += `, ${char.appearancePrompt}`;
+        // Sanitize character appearance prompts to be child-friendly
+        desc += `, ${sanitizePromptForDALLE3(char.appearancePrompt)}`;
       } else if (char.description) {
-        desc += `, ${char.description}`;
+        desc += `, ${sanitizePromptForDALLE3(char.description)}`;
       }
       if (char.emotion) {
-        desc += `, showing ${char.emotion} expression`;
+        // Ensure emotions are child-appropriate
+        const friendlyEmotion = char.emotion.toLowerCase().includes('angry') || 
+                               char.emotion.toLowerCase().includes('scary') ||
+                               char.emotion.toLowerCase().includes('frightened')
+          ? 'curious or surprised' : char.emotion;
+        desc += `, showing ${friendlyEmotion} expression`;
       }
       if (char.action) {
         desc += `, ${char.action}`;
@@ -299,7 +375,7 @@ export function createStoryImagePrompt(
   }
   
   // Clean up the story text for better AI processing
-  const cleanStoryText = storyText
+  let cleanStoryText = storyText
     .replace(/\*\*/g, '') // Remove markdown bold
     .replace(/\*/g, '') // Remove markdown italic
     .replace(/#{1,6}\s/g, '') // Remove markdown headers
@@ -307,6 +383,9 @@ export function createStoryImagePrompt(
     .replace(/\n+/g, ' ') // Replace newlines with spaces
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim();
+  
+  // Sanitize the story text to make it child-friendly
+  cleanStoryText = sanitizePromptForDALLE3(cleanStoryText);
   
   // Use up to 600 characters of the story text for better context
   const sceneDescription = cleanStoryText.substring(0, 600).trim();
@@ -316,20 +395,26 @@ export function createStoryImagePrompt(
   if (extractedStyleDescription) {
     // Use the AI-extracted style description for precise matching
     // Put it FIRST in the prompt so DALL-E 3 prioritizes style over content
-    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): ${extractedStyleDescription}. CRITICAL: You MUST use this exact style - same artistic approach, same color palette, same lighting mood, same character design style, same overall atmosphere. `;
+    // Sanitize extracted description to remove problematic words
+    const sanitizedDescription = sanitizePromptForDALLE3(extractedStyleDescription);
+    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): ${sanitizedDescription}. CRITICAL: You MUST use this exact style - same artistic approach, same color palette, same lighting mood, same character design style, same overall atmosphere. `;
   } else if (referenceImageUrl) {
     // Fallback to text-based instructions if we don't have extracted style
-    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): Match the exact same artistic style, color palette, lighting mood, character design approach, and visual aesthetic as the first scene image from this story. Use the same warm, inviting lighting (NOT dark or scary). Characters must have the same friendly, expressive design style (NOT menacing, scary, or horror-like). Maintain the same whimsical, storybook illustration quality with vibrant colors and soft, rounded shapes. Keep the same family-friendly, magical atmosphere. AVOID dark, ominous, or scary elements. The visual style must be IDENTICAL to the first image. `;
+    // Use positive language only to avoid safety system triggers
+    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): Match the exact same artistic style, color palette, lighting mood, character design approach, and visual aesthetic as the first scene image from this story. Use the same warm, inviting lighting. Characters must have the same friendly, expressive design style. Maintain the same whimsical, storybook illustration quality with vibrant colors and soft, rounded shapes. Keep the same family-friendly, magical atmosphere. The visual style must be IDENTICAL to the first image. `;
   }
   
-  // Build negative instructions to prevent unwanted styles
+  // Enhanced default style to be more explicit about Disney/anime and child-friendly
+  const defaultStyle = style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+  
+  // Build negative instructions to prevent unwanted styles (using safer language for DALL-E 3)
   const negativeInstructions = referenceImageUrl || extractedStyleDescription 
-    ? ' ABSOLUTELY AVOID: dark lighting, scary atmosphere, horror elements, menacing characters, ominous mood, dark shadows, creepy designs, horror-style, gothic elements, scary facial expressions, dark color schemes, nightmarish imagery.'
-    : '';
+    ? ' Use warm, bright lighting. Maintain friendly, expressive character designs. Keep a light, cheerful atmosphere. All characters must appear friendly and approachable, never scary or threatening.'
+    : ' All characters must appear friendly and approachable, never scary or threatening. Use warm, bright lighting throughout.';
   
   // Build a well-structured prompt with style FIRST
   // Structure: [Style Requirements FIRST] [Base Style] [Scene Description] [Characters] [Negative Instructions] [Quality Requirements]
-  const prompt = `${styleReferenceSection}${style}. Scene: ${sceneDescription}${characterSection}${negativeInstructions} High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
+  const prompt = `${styleReferenceSection}${defaultStyle}. Scene: ${sceneDescription}${characterSection}${negativeInstructions} High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, Disney Pixar style, anime-inspired, child-appropriate, no scary elements, no dark shadows, no text, no words, no writing, no letters, no dialogue boxes, no UI elements`;
   
   return prompt;
 }

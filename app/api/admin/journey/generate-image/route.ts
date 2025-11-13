@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       journeyText,
       journeyTitle,
       model = 'dalle3',
-      style = 'fantasy adventure journey illustration, epic, dramatic lighting, cinematic',
+      style = 'Disney-style animation, anime-inspired character design, fantasy adventure journey illustration, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
       size = '1024x1024',
       quality = 'standard'
     } = body;

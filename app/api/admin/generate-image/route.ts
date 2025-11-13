@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       storyText, 
       storyTitle, 
       model = 'dalle3',
-      style = 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality',
+      style = 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
       size = '1024x1024',
       quality = 'standard'
     } = body;
@@ -148,8 +148,8 @@ export async function POST(request: NextRequest) {
       console.log('📝 No reference image found, generating without style reference');
     }
 
-    // Use story's visual style or fallback to Disney-style
-    const visualStyle = storyVisualStyle || style || 'Disney-style animation, polished and professional, expressive characters, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality';
+    // Use story's visual style or fallback to Disney/anime-style for children
+    const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
     
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;

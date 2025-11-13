@@ -227,6 +227,7 @@ export default function SimpleImageManager() {
           nodeId: nodeKey,
           storyText: node.text_md,
           storyTitle: selectedStoryData?.title || selectedStory,
+          model: 'stable-diffusion', // Use Stable Diffusion for better style consistency with img2img
           style: 'fantasy adventure book illustration',
         }),
       });
