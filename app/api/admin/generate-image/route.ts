@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
       style, // No hard-coded default - use story's visual_style or let createStoryImagePrompt use its default
       size = '1024x1024',
       quality = 'standard',
-      referenceImageNodeKey
+      referenceImageNodeKey,
+      useCustomPrompt = false // If true, use storyText directly as prompt without story context
     } = body;
 
     if (!storySlug || !nodeId || !storyText) {
@@ -26,7 +27,171 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
-    console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}`);
+    console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}, useCustomPrompt: ${useCustomPrompt}`);
+
+    // If using custom prompt, use it as scene description but still apply story's visual style
+    if (useCustomPrompt) {
+      console.log(`✏️ Using custom prompt with story style: ${storyText.substring(0, 200)}...`);
+      
+      // Get story ID and visual style for consistency
+      const { data: story, error: storyError } = await supabase
+        .from('stories')
+        .select('id, title')
+        .eq('slug', storySlug)
+        .single();
+
+      if (storyError || !story) {
+        console.error('❌ Story fetch error:', storyError);
+        return NextResponse.json(
+          { error: 'Story not found' },
+          { status: 404 }
+        );
+      }
+
+      // Get story's visual style for consistency
+      let storyVisualStyle = null;
+      try {
+        const { data: storyWithStyle } = await supabase
+          .from('stories')
+          .select('visual_style')
+          .eq('id', story.id)
+          .single();
+        storyVisualStyle = storyWithStyle?.visual_style;
+        console.log(`🎨 Custom prompt: Story visual_style: ${storyVisualStyle || 'NOT SET (will use default)'}`);
+      } catch (error) {
+        console.log('⚠️ Note: visual_style column not yet added to database');
+      }
+
+      // Get a reference image for style matching (but not for content)
+      let referenceImageUrl: string | null = null;
+      try {
+        // Get first image from story for style reference
+        const { data: firstNode } = await supabase
+          .from('story_nodes')
+          .select('image_url, node_key')
+          .eq('story_id', story.id)
+          .not('image_url', 'is', null)
+          .neq('node_key', nodeId) // Don't use current node
+          .order('sort_index', { ascending: true })
+          .limit(1)
+          .single();
+
+        if (firstNode && firstNode.image_url) {
+          referenceImageUrl = firstNode.image_url;
+          console.log(`🎨 Custom prompt: Using reference image from node ${firstNode.node_key} for style matching`);
+        }
+      } catch (error) {
+        console.log('⚠️ No reference image found for style matching');
+      }
+
+      // Use custom prompt as scene description, but apply story's visual style
+      const customSceneDescription = storyText.trim();
+      const visualStyle = storyVisualStyle || style || undefined;
+      
+      // Build prompt: Style + Custom Scene Description (no characters, no previous context)
+      let styleSection = '';
+      if (referenceImageUrl) {
+        styleSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): Match the exact same artistic style, color palette, lighting mood, and visual aesthetic as the reference image from this story. `;
+      } else if (visualStyle) {
+        styleSection = `STYLE REQUIREMENTS: ${visualStyle}. `;
+      } else {
+        styleSection = `STYLE REQUIREMENTS: Disney-style animation, polished and professional, vibrant colors, soft rounded shapes, family-friendly aesthetic, cinematic quality. `;
+      }
+
+      const childFriendlyRequirements = 'CRITICAL: All content must be child-appropriate and family-friendly. Use warm, bright lighting throughout.';
+      
+      const customPrompt = `${styleSection}
+
+IMPORTANT SCENE DESCRIPTION (READ CAREFULLY AND DEPICT ACCURATELY): ${customSceneDescription}
+
+${childFriendlyRequirements}
+
+QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, child-appropriate, no text, no words, no writing, no letters, no dialogue boxes, no UI elements.`;
+
+      console.log(`📝 Custom prompt built (${customPrompt.length} chars): ${customPrompt.substring(0, 300)}...`);
+
+      // Use img2img if we have a reference image for better style consistency
+      const useImg2Img = referenceImageUrl && model !== 'dalle3';
+      const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
+      
+      if (useImg2Img) {
+        console.log('🎨 Using img2img with reference image for style consistency');
+      }
+
+      // Generate image with custom prompt and style
+      const generatedImage = await generateImage(customPrompt, {
+        model: imageModel,
+        size: size as any,
+        quality: quality as any,
+        referenceImageUrl: useImg2Img ? (referenceImageUrl || undefined) : undefined,
+        strength: useImg2Img ? 0.6 : undefined, // Lower strength to allow more scene variation while keeping style
+      });
+
+      console.log('✅ Image generated from custom prompt:', generatedImage.url);
+
+      // Use Cloudinary if configured, otherwise use generated URL directly
+      let finalImageUrl = generatedImage.url;
+      let imageWidth = 1024;
+      let imageHeight = 1024;
+      let publicId = '';
+
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+        // Upload to Cloudinary
+        console.log('📤 Uploading to Cloudinary...');
+        const imageResponse = await fetch(generatedImage.url);
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        
+        publicId = generateStoryAssetId(storySlug, nodeId, 'image');
+        const uploadResult = await uploadImageToCloudinary(
+          imageBuffer,
+          `tts-books/${storySlug}`,
+          publicId,
+          {
+            width: 1024,
+            height: 1024,
+            quality: 'auto',
+          }
+        );
+
+        finalImageUrl = uploadResult.secure_url;
+        imageWidth = uploadResult.width;
+        imageHeight = uploadResult.height;
+        console.log('☁️ Uploaded to Cloudinary:', finalImageUrl);
+      } else {
+        console.log('⚠️ Cloudinary not configured, using generated URL directly');
+      }
+
+      // Update the story node with the new image URL
+      const { error: updateError } = await supabase
+        .from('story_nodes')
+        .update({ 
+          image_url: finalImageUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('story_id', story.id)
+        .eq('node_key', nodeId);
+
+      if (updateError) {
+        console.error('❌ Failed to update story node:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update story node with image URL' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        image: {
+          url: finalImageUrl,
+          public_id: publicId,
+          width: imageWidth,
+          height: imageHeight,
+          model: generatedImage.model,
+          cost: generatedImage.cost,
+          prompt: generatedImage.revised_prompt || customPrompt,
+        },
+      });
+    }
 
     // Get story ID and title (visual_style is optional)
     const { data: story, error: storyError } = await supabase

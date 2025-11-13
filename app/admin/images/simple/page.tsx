@@ -307,7 +307,8 @@ export default function SimpleImageManager() {
           nodeId: nodeKey,
           storyText: customPrompt, // Use custom prompt as story text
           storyTitle: selectedStoryData?.title || selectedStory,
-          style: '', // No style prefix, use prompt as-is
+          useCustomPrompt: true, // Flag to use custom prompt directly without story context
+          model: 'stable-diffusion', // Use stable-diffusion for custom prompts
         }),
       });
 
