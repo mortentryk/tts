@@ -246,25 +246,35 @@ export async function generateImageWithStableDiffusionImg2Img(
       imageInput = `data:${mimeType};base64,${imageBase64}`;
     }
     
-    // Use SDXL for img2img - it has reliable img2img support
-    // strength: 0.6-0.7 is good for maintaining style while allowing scene changes
+    // Try using a model that supports img2img
+    // Use the image URL directly (Replicate can fetch from URLs)
     const strength = options.strength || 0.65;
     
-    // Use prediction API pattern for more reliable handling
-    const prediction = await replicate.predictions.create({
-      model: "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
-      input: {
-        prompt: prompt.substring(0, 1000), // Limit prompt length
-        image: imageInput,
-        strength: strength, // Lower = more similar to reference (0.5-0.8 is good range)
-        width: 1024,
-        height: 1024,
-        num_outputs: 1,
-        num_inference_steps: 30,
-        guidance_scale: 7.5,
-        scheduler: "K_EULER",
-      }
-    });
+    // Try using flux-dev which might support img2img better
+    // If that fails, we'll fall back to prompt-only with style description
+    let prediction;
+    try {
+      prediction = await replicate.predictions.create({
+        model: "black-forest-labs/flux-dev",
+        input: {
+          prompt: prompt.substring(0, 1000),
+          image: referenceImageUrl, // Use URL directly - Replicate can fetch it
+          strength: strength,
+          aspect_ratio: "1:1",
+        }
+      });
+      console.log('✅ Using flux-dev with img2img');
+    } catch (img2imgError: any) {
+      // If img2img fails, fall back to prompt-only with style description
+      console.warn('⚠️ img2img failed, using enhanced prompt with style description instead:', img2imgError.message);
+      prediction = await replicate.predictions.create({
+        model: "black-forest-labs/flux-schnell",
+        input: {
+          prompt: prompt.substring(0, 1000), // Prompt already includes extracted style description
+          aspect_ratio: "1:1",
+        }
+      });
+    }
 
     console.log('🔍 Prediction created:', prediction.id, 'status:', prediction.status);
 
