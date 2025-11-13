@@ -136,29 +136,47 @@ export async function generateImageWithStableDiffusion(
     
     console.log('🎨 Generating image with Stable Diffusion:', prompt);
     
+    // Use a more reliable model - flux-schnell for faster generation
+    // Or use black-forest-labs/flux-dev for better quality
     const output = await replicate.run(
-      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+      "black-forest-labs/flux-dev",
       {
         input: {
           prompt: prompt.substring(0, 1000), // Limit prompt length
-          width: 1024,
-          height: 1024,
-          num_outputs: 1,
-          num_inference_steps: 30,
-          guidance_scale: 7.5,
-          scheduler: "K_EULER",
+          aspect_ratio: "1:1",
+          output_format: "png",
+          output_quality: 90,
         }
       }
     );
 
-    const imageUrl = Array.isArray(output) ? output[0] : output;
+    console.log('📦 Raw output from Replicate:', JSON.stringify(output, null, 2));
+    
+    // Handle different output formats
+    let imageUrl: string | null = null;
+    
+    if (typeof output === 'string') {
+      imageUrl = output;
+    } else if (Array.isArray(output)) {
+      // Find first string URL in array
+      imageUrl = output.find((item: any) => typeof item === 'string') || null;
+      // Or if array contains objects, look for url property
+      if (!imageUrl) {
+        const urlObj = output.find((item: any) => item && typeof item === 'object' && item.url);
+        imageUrl = urlObj?.url || null;
+      }
+    } else if (output && typeof output === 'object') {
+      // Check for common URL properties
+      imageUrl = (output as any).url || (output as any).output || (output as any)[0] || null;
+    }
     
     if (!imageUrl || typeof imageUrl !== 'string') {
-      throw new Error(`Invalid output from Stable Diffusion: ${JSON.stringify(output)}`);
+      console.error('❌ Unexpected output format:', output);
+      throw new Error(`Invalid output from Stable Diffusion. Got: ${JSON.stringify(output)}`);
     }
     
     return {
-      url: imageUrl as string,
+      url: imageUrl,
       model: 'stable-diffusion',
       size: '1024x1024',
       cost: 0.0023, // Replicate Stable Diffusion cost
@@ -213,27 +231,44 @@ export async function generateImageWithStableDiffusionImg2Img(
     // strength: 0.6-0.7 is good for maintaining style while allowing scene changes
     const strength = options.strength || 0.65;
     
+    // Use flux-dev which has better img2img support
     const output = await replicate.run(
-      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+      "black-forest-labs/flux-dev",
       {
         input: {
           prompt: prompt.substring(0, 1000), // Limit prompt length
           image: imageInput,
           strength: strength, // Lower = more similar to reference (0.5-0.8 is good range)
-          width: 1024,
-          height: 1024,
-          num_outputs: 1,
-          num_inference_steps: 30,
-          guidance_scale: 7.5,
-          scheduler: "K_EULER",
+          aspect_ratio: "1:1",
+          output_format: "png",
+          output_quality: 90,
         }
       }
     );
 
-    const imageUrl = Array.isArray(output) ? output[0] : output;
+    console.log('📦 Raw output from Replicate img2img:', JSON.stringify(output, null, 2));
+    
+    // Handle different output formats
+    let imageUrl: string | null = null;
+    
+    if (typeof output === 'string') {
+      imageUrl = output;
+    } else if (Array.isArray(output)) {
+      // Find first string URL in array
+      imageUrl = output.find((item: any) => typeof item === 'string') || null;
+      // Or if array contains objects, look for url property
+      if (!imageUrl) {
+        const urlObj = output.find((item: any) => item && typeof item === 'object' && item.url);
+        imageUrl = urlObj?.url || null;
+      }
+    } else if (output && typeof output === 'object') {
+      // Check for common URL properties
+      imageUrl = (output as any).url || (output as any).output || (output as any)[0] || null;
+    }
     
     if (!imageUrl || typeof imageUrl !== 'string') {
-      throw new Error(`Invalid output from Stable Diffusion img2img: ${JSON.stringify(output)}`);
+      console.error('❌ Unexpected output format:', output);
+      throw new Error(`Invalid output from Stable Diffusion img2img. Got: ${JSON.stringify(output)}`);
     }
     
     return {
