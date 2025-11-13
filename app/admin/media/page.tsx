@@ -943,13 +943,32 @@ export default function MediaManager() {
                             <td className="border border-gray-300 px-4 py-2">
                               <div className="flex space-x-2">
                                 {row.status === 'empty' && (
-                                  <button
-                                    onClick={() => generateImage(row.node_key)}
-                                    disabled={generating === row.node_key}
-                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-                                  >
-                                    {generating === row.node_key ? '⏳ Generating...' : '🎨 Make Image'}
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => generateImage(row.node_key)}
+                                      disabled={generating === row.node_key}
+                                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                      {generating === row.node_key ? '⏳ Generating...' : '🎨 Make Image'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setCustomPromptNode(row.node_key);
+                                        setCustomPrompt('');
+                                      }}
+                                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+                                    >
+                                      ✏️ Custom
+                                    </button>
+                                    <button
+                                      onClick={() => generateAudio(row.node_key)}
+                                      disabled={generatingAudio === row.node_key}
+                                      className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-400"
+                                      title={row.audio_url ? 'Audio already generated - click to regenerate' : 'Generate audio with ElevenLabs'}
+                                    >
+                                      {generatingAudio === row.node_key ? '⏳ Audio...' : row.audio_url ? '🔊 ✓' : '🔊 Audio'}
+                                    </button>
+                                  </>
                                 )}
                                 
                                 {row.status === 'ready' && (
