@@ -690,6 +690,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         const nodeData = await nodeResponse.json();
         console.log('✅ Story node loaded:', nodeData);
+        console.log('🎬 Node media data:', {
+          node_key: nodeData.node_key,
+          has_video_url: !!nodeData.video_url,
+          video_url: nodeData.video_url,
+          has_image_url: !!nodeData.image_url,
+          image_url: nodeData.image_url
+        });
         
         // Convert to the format expected by the component
         const story = {
@@ -708,6 +715,14 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             audio: nodeData.audio_url
           }
         };
+        
+        console.log('📦 Story object created:', {
+          node_key: nodeData.node_key,
+          has_video: !!story[nodeData.node_key].video,
+          video: story[nodeData.node_key].video,
+          has_image: !!story[nodeData.node_key].image,
+          image: story[nodeData.node_key].image
+        });
         
         setStory(story as Record<string, StoryNode>);
         setLoading(false);
@@ -806,24 +821,41 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         throw new Error('Node not found');
       }
       const nodeData = await nodeResponse.json();
+      console.log('🎬 Node data for navigation:', {
+        node_key: nodeData.node_key,
+        has_video_url: !!nodeData.video_url,
+        video_url: nodeData.video_url,
+        has_image_url: !!nodeData.image_url,
+        image_url: nodeData.image_url
+      });
       
       // Update the story with the new node
+      const newNode = {
+        id: nodeData.node_key,
+        text: nodeData.text_md,
+        choices: (nodeData.choices || []).map((choice: any) => ({
+          label: choice.label,
+          goto: choice.to_node_key,
+          match: choice.match
+        })),
+        check: nodeData.dice_check,
+        image: nodeData.image_url,
+        video: nodeData.video_url,
+        backgroundImage: undefined,
+        audio: nodeData.audio_url
+      };
+      
+      console.log('📦 New node object:', {
+        node_key: newNode.id,
+        has_video: !!newNode.video,
+        video: newNode.video,
+        has_image: !!newNode.image,
+        image: newNode.image
+      });
+      
       setStory(prevStory => ({
         ...prevStory,
-        [nodeData.node_key]: {
-          id: nodeData.node_key,
-          text: nodeData.text_md,
-          choices: (nodeData.choices || []).map((choice: any) => ({
-            label: choice.label,
-            goto: choice.to_node_key,
-            match: choice.match
-          })),
-          check: nodeData.dice_check,
-          image: nodeData.image_url,
-          video: nodeData.video_url,
-          backgroundImage: undefined,
-          audio: nodeData.audio_url
-        }
+        [nodeData.node_key]: newNode
       }));
       
       setCurrentId(id);
@@ -1340,41 +1372,64 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         {/* Main Content */}
         <div className="mb-4">
           {/* Scene Video (prioritize video over image) */}
-          {passage?.video && passage.video.includes('cloudinary.com') ? (
-            <div className="mb-4 sm:mb-6 flex justify-center">
-              <video 
-                src={passage.video}
-                autoPlay
-                muted
-                playsInline
-                loop
-                controls
-                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                onError={(e) => {
-                  console.error('Failed to load video:', passage.video);
-                  e.currentTarget.style.display = 'none';
-                }}
-                onLoadedData={() => {
-                  console.log('✅ Video loaded and playing:', passage.video);
-                }}
-              >
-                Din browser understøtter ikke video-tagget.
-              </video>
-            </div>
-          ) : passage?.image && passage.image.includes('cloudinary.com') ? (
-            /* Scene Image (fallback if no video) */
-            <div className="mb-4 sm:mb-6 flex justify-center">
-              <img 
-                src={passage.image} 
-                alt="Scenebillede"
-                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                onError={(e) => {
-                  console.error('Failed to load image:', passage.image);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
-          ) : null}
+          {(() => {
+            // Debug logging
+            if (passage) {
+              console.log('🎬 Passage media check:', {
+                hasVideo: !!passage.video,
+                videoUrl: passage.video,
+                hasImage: !!passage.image,
+                imageUrl: passage.image,
+                nodeId: passage.id
+              });
+            }
+            
+            // Check for video - prioritize video over image
+            if (passage?.video && typeof passage.video === 'string' && passage.video.trim() !== '') {
+              return (
+                <div className="mb-4 sm:mb-6 flex justify-center">
+                  <video 
+                    src={passage.video}
+                    autoPlay
+                    muted
+                    playsInline
+                    loop
+                    controls
+                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                    onError={(e) => {
+                      console.error('❌ Failed to load video:', passage.video);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    onLoadedData={() => {
+                      console.log('✅ Video loaded and playing:', passage.video);
+                    }}
+                  >
+                    Din browser understøtter ikke video-tagget.
+                  </video>
+                </div>
+              );
+            }
+            
+            // Fallback to image if no video
+            if (passage?.image && typeof passage.image === 'string' && passage.image.trim() !== '') {
+              return (
+                <div className="mb-4 sm:mb-6 flex justify-center">
+                  <img 
+                    src={passage.image} 
+                    alt="Scenebillede"
+                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                    onError={(e) => {
+                      console.error('Failed to load image:', passage.image);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              );
+            }
+            
+            // No media available
+            return null;
+          })()}
           
           {/* Background Audio removed - TTS handles audio playback via speakViaCloud function */}
           

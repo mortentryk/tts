@@ -11,12 +11,13 @@ const replicate = new Replicate({
 });
 
 export interface ImageGenerationOptions {
-  model?: 'dalle3' | 'stable-diffusion' | 'stable-diffusion-img2img';
+  model?: 'dalle3' | 'stable-diffusion' | 'stable-diffusion-img2img' | 'nano-banana';
   size?: '1024x1024' | '1024x1792' | '1792x1024';
   quality?: 'standard' | 'hd';
   style?: 'vivid' | 'natural';
   n?: number;
   referenceImageUrl?: string; // For img2img - reference image to match style
+  referenceImageUrls?: string[]; // For nano-banana - multiple reference images
   strength?: number; // For img2img - how much to follow reference (0-1, lower = more similar)
 }
 
@@ -424,6 +425,117 @@ export async function generateImageWithStableDiffusionImg2Img(
 }
 
 /**
+ * Generate an image using Nano Banana via Replicate
+ * Nano Banana understands Danish and can use multiple reference images
+ */
+export async function generateImageWithNanoBanana(
+  prompt: string,
+  options: ImageGenerationOptions = {}
+): Promise<GeneratedImage> {
+  try {
+    if (!process.env.REPLICATE_API_TOKEN) {
+      throw new Error('REPLICATE_API_TOKEN environment variable is not set');
+    }
+    
+    console.log('🍌 Generating image with Nano Banana:', prompt.substring(0, 200));
+    
+    // Prepare reference images if provided
+    const referenceImages = options.referenceImageUrls || (options.referenceImageUrl ? [options.referenceImageUrl] : []);
+    
+    if (referenceImages.length > 0) {
+      console.log(`🖼️ Using ${referenceImages.length} reference image(s)`);
+    }
+    
+    const predictionInput: any = {
+      prompt: prompt.trim().substring(0, 2000),
+    };
+    
+    // Add reference images if provided
+    if (referenceImages.length > 0) {
+      const imageDataUris: string[] = [];
+      for (const imageUrl of referenceImages) {
+        try {
+          console.log(`📥 Downloading reference image: ${imageUrl.substring(0, 60)}...`);
+          const imageResponse = await fetch(imageUrl);
+          if (!imageResponse.ok) {
+            console.warn(`⚠️ Failed to fetch reference image: ${imageResponse.statusText}`);
+            continue;
+          }
+          
+          const imageBuffer = await imageResponse.arrayBuffer();
+          const imageBase64 = Buffer.from(imageBuffer).toString('base64');
+          const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
+          imageDataUris.push(`data:${mimeType};base64,${imageBase64}`);
+          console.log(`✅ Reference image prepared: ${mimeType}`);
+        } catch (error) {
+          console.warn(`⚠️ Error processing reference image ${imageUrl}:`, error);
+        }
+      }
+      
+      if (imageDataUris.length > 0) {
+        // Try different parameter names - nano-banana might use 'image' or 'start_image'
+        predictionInput.image = imageDataUris[0];
+        if (imageDataUris.length > 1) {
+          predictionInput.images = imageDataUris;
+        }
+      }
+    }
+    
+    const prediction = await replicate.predictions.create({
+      model: "google/nano-banana",
+      input: predictionInput
+    });
+
+    console.log('🔍 Prediction created:', prediction.id);
+
+    // Wait for completion
+    let finalPrediction = prediction;
+    while (finalPrediction.status !== 'succeeded' && finalPrediction.status !== 'failed' && finalPrediction.status !== 'canceled') {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      finalPrediction = await replicate.predictions.get(prediction.id);
+      console.log('⏳ Prediction status:', finalPrediction.status);
+    }
+
+    if (finalPrediction.status === 'failed') {
+      throw new Error(`Replicate prediction failed: ${finalPrediction.error || 'Unknown error'}`);
+    }
+
+    if (finalPrediction.status === 'canceled') {
+      throw new Error('Replicate prediction was canceled');
+    }
+
+    const output = finalPrediction.output;
+    console.log('📦 Raw output from Replicate nano-banana:', JSON.stringify(output, null, 2));
+    
+    // Extract image URL
+    let imageUrl: string | null = null;
+    if (typeof output === 'string') {
+      imageUrl = output;
+    } else if (Array.isArray(output) && output.length > 0) {
+      imageUrl = typeof output[0] === 'string' ? output[0] : (output[0] as any)?.url || null;
+    } else if (output && typeof output === 'object') {
+      imageUrl = (output as any).url || (output as any).output || (output as any)[0] || null;
+    }
+    
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      console.error('❌ Unexpected output format:', output);
+      throw new Error(`Invalid output from Nano Banana: ${JSON.stringify(output)}`);
+    }
+    
+    return {
+      url: imageUrl,
+      model: 'nano-banana',
+      size: '1024x1024',
+      cost: 0.002,
+    };
+  } catch (error: any) {
+    console.error('❌ Nano Banana generation error:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    throw new Error(`Nano Banana generation failed: ${errorMessage}`);
+  }
+}
+
+/**
  * Generate an image using the specified model
  * Automatically falls back to Stable Diffusion if DALL-E 3 is rejected by safety system
  */
@@ -444,6 +556,8 @@ export async function generateImage(
           throw new Error('referenceImageUrl is required for stable-diffusion-img2img model');
         }
         return await generateImageWithStableDiffusionImg2Img(prompt, options.referenceImageUrl, options);
+    case 'nano-banana':
+        return await generateImageWithNanoBanana(prompt, options);
     default:
       throw new Error(`Unsupported model: ${model}`);
     }

@@ -79,6 +79,7 @@ export default function SimpleImageManager() {
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [selectedModel, setSelectedModel] = useState<'stable-diffusion' | 'nano-banana' | 'dalle3'>('nano-banana');
 
   // Check if user is logged in via server session
   useEffect(() => {
@@ -227,7 +228,7 @@ export default function SimpleImageManager() {
           nodeId: nodeKey,
           storyText: node.text_md,
           storyTitle: selectedStoryData?.title || selectedStory,
-          model: 'stable-diffusion', // Use Stable Diffusion for better style consistency with img2img
+          model: selectedModel,
           style: 'fantasy adventure book illustration',
         }),
       });
@@ -308,7 +309,7 @@ export default function SimpleImageManager() {
           storyText: customPrompt, // Use custom prompt as story text
           storyTitle: selectedStoryData?.title || selectedStory,
           useCustomPrompt: true, // Flag to use custom prompt directly without story context
-          model: 'stable-diffusion', // Use stable-diffusion for custom prompts
+          model: selectedModel,
         }),
       });
 
@@ -610,6 +611,29 @@ export default function SimpleImageManager() {
                   </div>
                 )}
               </div>
+
+              {/* Model Selection */}
+              {selectedStory && (
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                    🤖 Image Generation Model
+                  </h2>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value as 'stable-diffusion' | 'nano-banana' | 'dalle3')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 font-medium"
+                  >
+                    <option value="nano-banana">🍌 Nano Banana (Danish support, simple prompts)</option>
+                    <option value="stable-diffusion">🎨 Stable Diffusion (complex prompts, style consistency)</option>
+                    <option value="dalle3">✨ DALL-E 3 (high quality, OpenAI)</option>
+                  </select>
+                  <p className="text-sm text-gray-600 mt-2">
+                    {selectedModel === 'nano-banana' && 'Uses Danish text directly, automatically uses last 2 images as reference'}
+                    {selectedModel === 'stable-diffusion' && 'Uses complex prompts with character consistency and style matching'}
+                    {selectedModel === 'dalle3' && 'High quality images from OpenAI, but no reference image support'}
+                  </p>
+                </div>
+              )}
 
               {/* Image Spreadsheet */}
               {selectedStory && (

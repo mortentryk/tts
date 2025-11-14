@@ -29,25 +29,139 @@ export async function POST(request: NextRequest) {
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
     console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}, useCustomPrompt: ${useCustomPrompt}`);
 
+    // Get story ID first (needed for all paths)
+    const { data: story, error: storyError } = await supabase
+      .from('stories')
+      .select('id, title')
+      .eq('slug', storySlug)
+      .single();
+
+    if (storyError || !story) {
+      console.error('❌ Story fetch error:', storyError);
+      return NextResponse.json(
+        { error: 'Story not found' },
+        { status: 404 }
+      );
+    }
+
+    // NANO-BANANA: Simple approach like video generation - use Danish text directly, no complex prompts
+    if (model === 'nano-banana') {
+      console.log('🍌 Using Nano Banana with simple Danish prompt (no complex prompt building)');
+      
+      // Get the last couple of images as reference
+      let referenceImageUrls: string[] = [];
+      try {
+        const { data: currentNode } = await supabase
+          .from('story_nodes')
+          .select('sort_index')
+          .eq('story_id', story.id)
+          .eq('node_key', nodeId)
+          .single();
+
+        if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
+          // Get the last 2 images (previous nodes with images)
+          const { data: previousNodes } = await supabase
+            .from('story_nodes')
+            .select('image_url, sort_index')
+            .eq('story_id', story.id)
+            .lt('sort_index', currentNode.sort_index)
+            .not('image_url', 'is', null)
+            .order('sort_index', { ascending: false })
+            .limit(2);
+          
+          if (previousNodes && previousNodes.length > 0) {
+            referenceImageUrls = previousNodes
+              .map(node => node.image_url)
+              .filter((url): url is string => !!url);
+            console.log(`🖼️ Found ${referenceImageUrls.length} reference image(s) for nano-banana`);
+            referenceImageUrls.forEach((url, idx) => {
+              console.log(`   Reference ${idx + 1}: ${url.substring(0, 80)}...`);
+            });
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ Could not fetch reference images, continuing without them:', error);
+      }
+
+      // Use simple Danish prompt - just the story text (nano-banana understands Danish)
+      const simplePrompt = storyText.trim();
+      console.log(`📝 Using simple Danish prompt (${simplePrompt.length} chars): ${simplePrompt.substring(0, 200)}...`);
+
+      // Generate image with nano-banana
+      const generatedImage = await generateImage(simplePrompt, {
+        model: 'nano-banana',
+        size: size as any,
+        quality: quality as any,
+        referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+      });
+
+      console.log('✅ Image generated with nano-banana:', generatedImage.url);
+
+      // Upload to Cloudinary if configured
+      let finalImageUrl = generatedImage.url;
+      let imageWidth = 1024;
+      let imageHeight = 1024;
+      let publicId = '';
+
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+        console.log('📤 Uploading to Cloudinary...');
+        const imageResponse = await fetch(generatedImage.url);
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        
+        publicId = generateStoryAssetId(storySlug, nodeId, 'image');
+        const uploadResult = await uploadImageToCloudinary(
+          imageBuffer,
+          `tts-books/${storySlug}`,
+          publicId,
+          {
+            width: 1024,
+            height: 1024,
+            quality: 'auto',
+          }
+        );
+
+        finalImageUrl = uploadResult.secure_url;
+        imageWidth = uploadResult.width;
+        imageHeight = uploadResult.height;
+        console.log('☁️ Uploaded to Cloudinary:', finalImageUrl);
+      }
+
+      // Update the story node
+      const { error: updateError } = await supabase
+        .from('story_nodes')
+        .update({ 
+          image_url: finalImageUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('story_id', story.id)
+        .eq('node_key', nodeId);
+
+      if (updateError) {
+        console.error('❌ Failed to update story node:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update story node with image URL' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        image: {
+          url: finalImageUrl,
+          public_id: publicId,
+          width: imageWidth,
+          height: imageHeight,
+          model: generatedImage.model,
+          cost: generatedImage.cost,
+          prompt: simplePrompt,
+        },
+      });
+    }
+
     // If using custom prompt, use it as scene description but still apply story's visual style
     if (useCustomPrompt) {
       console.log(`✏️ Using custom prompt with story style: ${storyText.substring(0, 200)}...`);
       
-      // Get story ID and visual style for consistency
-      const { data: story, error: storyError } = await supabase
-        .from('stories')
-        .select('id, title')
-        .eq('slug', storySlug)
-        .single();
-
-      if (storyError || !story) {
-        console.error('❌ Story fetch error:', storyError);
-        return NextResponse.json(
-          { error: 'Story not found' },
-          { status: 404 }
-        );
-      }
-
       // Get story's visual style for consistency
       let storyVisualStyle = null;
       try {
@@ -196,21 +310,7 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       });
     }
 
-    // Get story ID and title (visual_style is optional)
-    const { data: story, error: storyError } = await supabase
-      .from('stories')
-      .select('id, title')
-      .eq('slug', storySlug)
-      .single();
-
-    if (storyError || !story) {
-      console.error('❌ Story fetch error:', storyError);
-      return NextResponse.json(
-        { error: 'Story not found' },
-        { status: 404 }
-      );
-    }
-    
+    // Story is already fetched at the beginning of the function
     console.log(`✅ DEBUG: Found story - ID: ${story.id}, Title: ${story.title}`);
     
     // Try to get visual_style if the column exists
