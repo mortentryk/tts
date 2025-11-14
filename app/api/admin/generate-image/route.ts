@@ -544,31 +544,42 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
     let imageModel: string;
     
     if (model === 'nano-banana') {
-      // Use Danish text with rich context - nano-banana understands Danish
-      // Include story title, previous nodes for continuity, and current scene
+      // Use Danish text with role-based prompt - nano-banana understands Danish
+      // Establish the role and context for better image generation
       let promptParts: string[] = [];
       
-      // Add story title for context
+      // Role and context setting
+      promptParts.push(`Du er en professionel børnebogsillustratør. Din opgave er at lave det næste billede til næste side i bogen.`);
+      
+      // Reference images context
+      if (referenceImageUrls.length > 0) {
+        promptParts.push(`Du har ${referenceImageUrls.length} referencebilleder fra tidligere sider. Brug disse til at matche den visuelle stil, farvepaletten, karakterernes udseende og den overordnede æstetik.`);
+      } else {
+        promptParts.push(`Dette er det første billede i bogen.`);
+      }
+      
+      // Story context
       if (story.title) {
-        promptParts.push(`Historien: ${story.title}`);
+        promptParts.push(`Historien handler om: ${story.title}`);
       }
       
-      // Add previous nodes for continuity (last 2-3 nodes)
+      // Previous scenes for continuity
       if (previousNodeText) {
-        const previousContext = previousNodeText.length > 800 
-          ? previousNodeText.substring(previousNodeText.length - 800) // Last 800 chars (most recent context)
+        const previousContext = previousNodeText.length > 600 
+          ? previousNodeText.substring(previousNodeText.length - 600) // Last 600 chars (most recent context)
           : previousNodeText;
-        promptParts.push(`Tidligere scener:\n${previousContext}`);
+        promptParts.push(`Tidligere scener i historien:\n${previousContext}`);
       }
       
-      // Add current scene
-      promptParts.push(`Nuværende scene:\n${storyText.trim()}`);
+      // Current scene - THIS is what to illustrate
+      promptParts.push(`Nuværende scene til illustration:\n${storyText.trim()}\n\nVigtigt: Dette skal være et NYT billede, der viser den nuværende scene, ikke en kopi af de tidligere billeder. Brug samme stil og karakterer, men vis det nye, der sker i historien.`);
       
       prompt = promptParts.join('\n\n');
       imageModel = 'nano-banana';
-      console.log(`📝 DEBUG: Using rich context prompt for nano-banana (${prompt.length} chars)`);
+      console.log(`📝 DEBUG: Using role-based prompt for nano-banana (${prompt.length} chars)`);
       console.log(`   Story title: ${story.title || 'none'}`);
       console.log(`   Previous nodes: ${previousNodesText.length} node(s)`);
+      console.log(`   Reference images: ${referenceImageUrls.length}`);
       console.log(`   Current scene: ${storyText.length} chars`);
       console.log(`   Preview: ${prompt.substring(0, 200)}...`);
     } else {
