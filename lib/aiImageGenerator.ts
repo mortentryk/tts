@@ -11,7 +11,7 @@ const replicate = new Replicate({
 });
 
 export interface ImageGenerationOptions {
-  model?: 'dalle3' | 'stable-diffusion';
+  model?: 'dalle3'; // Only DALL-E 3 is supported
   size?: '1024x1024' | '1024x1792' | '1792x1024';
   quality?: 'standard' | 'hd';
   style?: 'vivid' | 'natural';
@@ -65,61 +65,27 @@ export async function generateImageWithDALLE3(
 }
 
 /**
- * Generate an image using Stable Diffusion via Replicate
+ * @deprecated Stable Diffusion is no longer supported. Use DALL-E 3 instead.
+ * This function is kept for backwards compatibility but will not be used.
  */
 export async function generateImageWithStableDiffusion(
   prompt: string,
   options: ImageGenerationOptions = {}
 ): Promise<GeneratedImage> {
-  try {
-    console.log('🎨 Generating image with Stable Diffusion:', prompt);
-    
-    const output = await replicate.run(
-      "stability-ai/stable-diffusion:27b93a2413e7f36cd83da926f3656280b2931564ff050bf9575f1fdf9bcd747e",
-      {
-        input: {
-          prompt,
-          width: 1024,
-          height: 1024,
-          num_outputs: 1,
-          scheduler: "K_EULER",
-          num_inference_steps: 50,
-          guidance_scale: 7.5,
-        }
-      }
-    );
-
-    const imageUrl = Array.isArray(output) ? output[0] : output;
-    
-    return {
-      url: imageUrl as string,
-      model: 'stable-diffusion',
-      size: '1024x1024',
-      cost: 0.0023, // Replicate Stable Diffusion cost
-    };
-  } catch (error) {
-    console.error('❌ Stable Diffusion generation error:', error);
-    throw new Error(`Stable Diffusion generation failed: ${error}`);
-  }
+  // Redirect to DALL-E 3 instead
+  console.warn('⚠️ Stable Diffusion is deprecated. Using DALL-E 3 instead.');
+  return generateImageWithDALLE3(prompt, options);
 }
 
 /**
- * Generate an image using the specified model
+ * Generate an image using DALL-E 3 (OpenAI API)
  */
 export async function generateImage(
   prompt: string,
   options: ImageGenerationOptions = {}
 ): Promise<GeneratedImage> {
-  const model = options.model || 'dalle3';
-  
-  switch (model) {
-    case 'dalle3':
-      return generateImageWithDALLE3(prompt, options);
-    case 'stable-diffusion':
-      return generateImageWithStableDiffusion(prompt, options);
-    default:
-      throw new Error(`Unsupported model: ${model}`);
-  }
+  // Always use DALL-E 3 for image generation
+  return generateImageWithDALLE3(prompt, options);
 }
 
 /**
@@ -138,9 +104,65 @@ export async function generateMultipleImages(
 }
 
 /**
- * Create a story-specific image prompt with character consistency
+ * Analyze previous images to extract visual style and character appearance
  */
-export function createStoryImagePrompt(
+async function analyzePreviousImages(imageUrls: string[]): Promise<string> {
+  if (!imageUrls || imageUrls.length === 0) {
+    return '';
+  }
+
+  try {
+    console.log('🔍 Analyzing previous images for visual consistency...');
+    
+    // Use GPT-4 Vision to analyze the images
+    const imageAnalysisPromises = imageUrls.map(async (imageUrl) => {
+      try {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini', // Using mini for cost efficiency
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Analyze this story illustration image. Describe: 1) The art style (e.g., Disney, watercolor, digital painting), 2) Character appearances (clothing, features, colors), 3) Color palette and lighting, 4) Overall visual atmosphere. Be concise and focus on visual elements that should be consistent in the next scene.'
+                },
+                {
+                  type: 'image_url',
+                  image_url: { url: imageUrl }
+                }
+              ]
+            }
+          ],
+          max_tokens: 200
+        });
+
+        return response.choices[0]?.message?.content || '';
+      } catch (error) {
+        console.warn('⚠️ Failed to analyze image:', imageUrl, error);
+        return '';
+      }
+    });
+
+    const analyses = await Promise.all(imageAnalysisPromises);
+    const validAnalyses = analyses.filter(a => a.length > 0);
+    
+    if (validAnalyses.length > 0) {
+      const combinedAnalysis = validAnalyses.join('. ');
+      console.log('✅ Image analysis complete:', combinedAnalysis.substring(0, 100));
+      return `Maintain visual consistency with previous scenes: ${combinedAnalysis}. `;
+    }
+  } catch (error) {
+    console.warn('⚠️ Image analysis failed:', error);
+  }
+
+  return '';
+}
+
+/**
+ * Create a story-specific image prompt with character consistency and visual reference
+ */
+export async function createStoryImagePrompt(
   storyText: string,
   storyTitle: string,
   style: string = 'fantasy adventure book illustration',
@@ -151,8 +173,15 @@ export function createStoryImagePrompt(
     role?: string;
     emotion?: string;
     action?: string;
-  }>
-): string {
+  }>,
+  previousImageUrls?: string[]
+): Promise<string> {
+  // Analyze previous images for visual consistency
+  let visualConsistencyNote = '';
+  if (previousImageUrls && previousImageUrls.length > 0) {
+    visualConsistencyNote = await analyzePreviousImages(previousImageUrls);
+  }
+
   // Build character descriptions
   let characterDescriptions = '';
   if (characters && characters.length > 0) {
@@ -167,8 +196,7 @@ export function createStoryImagePrompt(
     characterDescriptions = `, featuring ${characterParts.join(', ')}`;
   }
   
-  // Use the full story text as the main description, but limit to reasonable length for AI processing
-  // Clean up the story text and use more of it for better context
+  // Clean up the story text
   const cleanStoryText = storyText
     .replace(/\*\*/g, '') // Remove markdown bold
     .replace(/\*/g, '') // Remove markdown italic
@@ -176,11 +204,11 @@ export function createStoryImagePrompt(
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert markdown links to plain text
     .trim();
   
-  // Use up to 500 characters of the story text for better context
-  const sceneDescription = cleanStoryText.substring(0, 500).trim();
+  // Use up to 400 characters of the story text (reduced to make room for visual consistency note)
+  const sceneDescription = cleanStoryText.substring(0, 400).trim();
   
-  // Create a comprehensive prompt with the actual story text
-  const prompt = `${style}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, book illustration style, cinematic lighting, no text, no words, no writing, no letters`;
+  // Create a comprehensive prompt with visual consistency and story text
+  const prompt = `${visualConsistencyNote}${style}: ${sceneDescription}${characterDescriptions}. Detailed, high quality, book illustration style, cinematic lighting, no text, no words, no writing, no letters`;
   
   return prompt;
 }

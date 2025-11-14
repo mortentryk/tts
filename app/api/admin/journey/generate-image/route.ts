@@ -54,11 +54,12 @@ export async function POST(request: NextRequest) {
     const visualStyle = storyData?.visual_style || style;
     
     // Create AI prompt for journey image
-    const prompt = createStoryImagePrompt(
+    const prompt = await createStoryImagePrompt(
       journeyText,
       journeyTitle || 'Journey',
       visualStyle,
-      [] // No character data for journeys
+      [], // No character data for journeys
+      [] // No previous images for journey
     );
     
     console.log('📝 Generated prompt:', prompt);

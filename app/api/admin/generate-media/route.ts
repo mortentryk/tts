@@ -92,8 +92,8 @@ export async function POST(request: NextRequest) {
         };
       }) || [];
 
-      // Create AI prompt
-      const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+      // Create AI prompt (no previous images for media generation)
+      const prompt = await createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters, []);
       
       // Generate image
       const generatedImage = await generateImage(prompt, {

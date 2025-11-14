@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎭 Found ${nodeCharacters.length} characters for this node`);
 
-    // Get previous nodes for context (up to 2 previous nodes)
+    // Get previous nodes for context (up to 2 previous nodes) - including images
     const currentNodeIndex = parseInt(nodeId) || 0;
     const previousNodeKeys = [];
     for (let i = Math.max(1, currentNodeIndex - 2); i < currentNodeIndex; i++) {
@@ -98,10 +98,12 @@ export async function POST(request: NextRequest) {
     }
 
     let previousContext = '';
+    let previousImageReferences: string[] = [];
+    
     if (previousNodeKeys.length > 0) {
       const { data: previousNodes } = await supabase
         .from('story_nodes')
-        .select('node_key, text_md')
+        .select('node_key, text_md, image_url')
         .eq('story_id', story.id)
         .in('node_key', previousNodeKeys)
         .order('sort_index', { ascending: true });
@@ -109,7 +111,17 @@ export async function POST(request: NextRequest) {
       if (previousNodes && previousNodes.length > 0) {
         const contextTexts = previousNodes.map(n => n.text_md.substring(0, 100)).join('. ');
         previousContext = `Previous scene: ${contextTexts}. Now: `;
+        
+        // Collect previous images for visual reference
+        previousImageReferences = previousNodes
+          .filter(n => n.image_url && n.image_url.includes('cloudinary.com'))
+          .map(n => n.image_url)
+          .slice(-2); // Use up to 2 most recent images
+        
         console.log(`📖 Using context from ${previousNodes.length} previous nodes`);
+        if (previousImageReferences.length > 0) {
+          console.log(`🖼️ Found ${previousImageReferences.length} previous images for visual reference`);
+        }
       }
     }
 
@@ -118,7 +130,13 @@ export async function POST(request: NextRequest) {
     
     // Create AI prompt from story text with character consistency and context
     const fullStoryText = previousContext + storyText;
-    const prompt = createStoryImagePrompt(fullStoryText, story.title || storyTitle || '', visualStyle, nodeCharacters);
+    const prompt = await createStoryImagePrompt(
+      fullStoryText, 
+      story.title || storyTitle || '', 
+      visualStyle, 
+      nodeCharacters,
+      previousImageReferences
+    );
     console.log('📝 Generated prompt:', prompt);
     console.log('🎨 Using visual style:', visualStyle);
 

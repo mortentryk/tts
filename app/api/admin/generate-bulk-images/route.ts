@@ -111,7 +111,29 @@ export async function POST(request: NextRequest) {
           }) || [];
 
         // Create AI prompt from story text with character consistency
-        const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+        // Get previous images for this node
+        const currentNodeIndex = parseInt(node.node_key) || 0;
+        const previousNodeKeys = [];
+        for (let i = Math.max(1, currentNodeIndex - 2); i < currentNodeIndex; i++) {
+          previousNodeKeys.push(i.toString());
+        }
+        
+        let previousImageUrls: string[] = [];
+        if (previousNodeKeys.length > 0) {
+          const { data: previousNodes } = await supabase
+            .from('story_nodes')
+            .select('image_url')
+            .eq('story_id', story.id)
+            .in('node_key', previousNodeKeys)
+            .order('sort_index', { ascending: true });
+          
+          previousImageUrls = (previousNodes || [])
+            .filter(n => n.image_url && n.image_url.includes('cloudinary.com'))
+            .map(n => n.image_url)
+            .slice(-2);
+        }
+        
+        const prompt = await createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters, previousImageUrls);
         
         // Generate image with AI
         const generatedImage = await generateImage(prompt, {
