@@ -77,7 +77,14 @@ function hashText(t: string): string {
 const audioCache = new Map<string, string>(); // key -> objectURL
 
 // Cloud TTS for web — OpenAI only
-async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string): Promise<void> {
+async function speakViaCloud(
+  text: string, 
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>, 
+  onComplete?: () => void, 
+  preGeneratedAudioUrl?: string,
+  nodeKey?: string,
+  storyId?: string
+): Promise<void> {
   if (!text || !text.trim()) return;
 
   // Stop any existing audio first
@@ -88,20 +95,35 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
   }
 
   // If we have pre-generated audio URL, use it directly
-  if (preGeneratedAudioUrl && preGeneratedAudioUrl.includes('cloudinary.com')) {
+  if (preGeneratedAudioUrl && (preGeneratedAudioUrl.includes('cloudinary.com') || preGeneratedAudioUrl.startsWith('http'))) {
     console.log('🎵 Using pre-generated audio from:', preGeneratedAudioUrl);
     const audio = new Audio(preGeneratedAudioUrl);
     audioRef.current = audio;
     
+    // Set up error handler before playing
+    audio.onerror = (e) => {
+      console.error('❌ Pre-generated audio playback error:', {
+        error: e,
+        url: preGeneratedAudioUrl,
+        code: audio.error?.code,
+        message: audio.error?.message
+      });
+      audioRef.current = null;
+      onComplete?.();
+    };
+    
     try {
       await audio.play();
+      console.log('✅ Pre-generated audio started playing');
       return new Promise<void>((resolve) => {
         audio.onended = () => {
+          console.log('✅ Pre-generated audio finished');
           audioRef.current = null;
           onComplete?.();
           resolve();
         };
         audio.onerror = () => {
+          console.error('❌ Pre-generated audio error during playback');
           audioRef.current = null;
           onComplete?.();
           resolve();
@@ -114,7 +136,7 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
         console.log('⚠️ Autoplay blocked (non-critical):', playError);
         return;
       }
-      console.log('⚠️ Failed to play pre-generated audio, falling back to TTS:', playError);
+      console.error('⚠️ Failed to play pre-generated audio, falling back to TTS:', playError);
       // Fall through to generate TTS
     }
   }
@@ -172,19 +194,41 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     }
   }
 
+  // Prepare request body with optional nodeKey and storyId for cached audio lookup
+  const requestBody: any = { text, provider: 'elevenlabs' };
+  if (nodeKey && storyId) {
+    requestBody.nodeKey = nodeKey;
+    requestBody.storyId = storyId;
+  }
+
   const res = await fetch(SERVER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, provider: 'elevenlabs' })
+    body: JSON.stringify(requestBody)
   });
 
   if (!res.ok) {
-    let msg = "";
+    let errorData: any = {};
     try { 
-      msg = await res.text(); 
+      const text = await res.text();
+      try {
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = { error: text };
+      }
     } catch {}
-    const e = new Error(`TTS failed (${res.status})${msg ? `: ${msg.slice(0,180)}` : ""}`);
+    
+    // For quota errors, fail silently - don't interrupt the user experience
+    if (res.status === 429 || errorData.code === "QUOTA_EXCEEDED") {
+      console.log("⚠️ TTS quota exceeded - continuing without voice narration");
+      return; // Silently return without throwing
+    }
+    
+    // For other errors, throw but with a user-friendly message
+    const errorMessage = errorData.error || "Voice narration is temporarily unavailable";
+    const e = new Error(errorMessage);
     (e as any).status = res.status;
+    (e as any).code = errorData.code;
     throw e;
   }
 
@@ -350,32 +394,48 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       isTTSRunningRef.current = true;
       setSpeaking(true);
       console.log('🎙️ Starting TTS, isTTSRunningRef set to true');
-      await speakViaCloud(text, audioRef, () => {
-        // Auto-start voice listening after TTS completes
-        if (passage?.choices && passage.choices.length > 0) {
-          console.log('TTS finished - starting voice listening for 10 seconds');
-          startVoiceListening(10000);
-        }
-        // Set speaking to false only after TTS actually completes
-        setSpeaking(false);
-        isTTSRunningRef.current = false;
-        lastTTSFinishTimeRef.current = Date.now();
-        console.log('🎙️ TTS completed, isTTSRunningRef set to false');
-      }, passage?.audio); // Pass pre-generated audio URL
+      await speakViaCloud(
+        text, 
+        audioRef, 
+        () => {
+          // Auto-start voice listening after TTS completes
+          if (passage?.choices && passage.choices.length > 0) {
+            console.log('TTS finished - starting voice listening for 10 seconds');
+            startVoiceListening(10000);
+          }
+          // Set speaking to false only after TTS actually completes
+          setSpeaking(false);
+          isTTSRunningRef.current = false;
+          lastTTSFinishTimeRef.current = Date.now();
+          console.log('🎙️ TTS completed, isTTSRunningRef set to false');
+        }, 
+        passage?.audio, // Pass pre-generated audio URL
+        passage?.id,    // Pass nodeKey for cached audio lookup
+        storyId         // Pass storyId for cached audio lookup
+      );
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
       setSpeaking(false);
       isTTSRunningRef.current = false;
       console.log('🎙️ TTS error, isTTSRunningRef set to false');
-      // Show a more user-friendly error message
+      
+      // Don't show alerts for quota errors - they're handled silently
+      if (e?.code === "QUOTA_EXCEEDED" || e?.status === 429) {
+        console.log("⚠️ TTS quota exceeded - silently continuing");
+        return;
+      }
+      
+      // Show a more user-friendly error message for other errors
       if (e?.message?.includes("API key not configured")) {
         alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
       } else if (e?.message?.includes("Incorrect API key")) {
         alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
-      } else {
-        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+      } else if (e?.message && !e.message.includes("TTS failed")) {
+        // Only show alert if it's a user-friendly message (not raw API errors)
+        alert(e.message);
       }
+      // Silently ignore other TTS errors to avoid interrupting the user experience
     }
   }, [passage?.choices, passage?.audio, startVoiceListening, speaking]);
 
@@ -930,7 +990,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
-      setSpeechError(`Speech recognition error: ${event.error}`);
+      
+      // Handle permission-related errors
+      if (event.error === 'not-allowed' || event.error === 'no-speech') {
+        setSpeechError(`Microphone permission denied. Please enable microphone access in your browser settings and try again.`);
+      } else {
+        setSpeechError(`Speech recognition error: ${event.error}`);
+      }
       setListening(false);
     };
 
@@ -1303,11 +1369,17 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
                 listening 
                   ? 'bg-blue-600 hover:bg-blue-700' 
+                  : speechError
+                  ? 'bg-orange-600 hover:bg-orange-700'
                   : 'bg-gray-600 hover:bg-gray-700'
               }`}
               onClick={() => listening ? stopVoiceListening() : startVoiceListening(10000)}
             >
-              {listening ? "🎤 Listening..." : "🎤 Voice Commands"}
+              {listening 
+                ? "🎤 Listening..." 
+                : speechError 
+                ? "🔄 Retry Voice Commands" 
+                : "🎤 Voice Commands"}
             </button>
             
             {speechError && (

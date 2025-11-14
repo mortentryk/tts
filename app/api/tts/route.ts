@@ -93,19 +93,50 @@ export async function POST(request: NextRequest) {
 
         // If hash matches and we have audio_url, return cached URL
         if (node?.text_hash === textHash && node?.audio_url) {
-          console.log(`✅ Using cached audio for node ${nodeKey}`);
+          console.log(`✅ Using cached audio for node ${nodeKey} from: ${node.audio_url}`);
           
           // Fetch the audio from Cloudinary and return it
-          const audioResponse = await fetch(node.audio_url);
-          if (audioResponse.ok) {
-            const audioBuffer = await audioResponse.arrayBuffer();
-            const response = new NextResponse(audioBuffer, {
-              status: 200,
-              headers: {
-                "Content-Type": "audio/mpeg",
-              },
-            });
-            return setCors(response, request);
+          try {
+            const audioResponse = await fetch(node.audio_url);
+            if (audioResponse.ok) {
+              const audioBuffer = await audioResponse.arrayBuffer();
+              console.log(`✅ Cached audio fetched successfully: ${audioBuffer.byteLength} bytes`);
+              const response = new NextResponse(audioBuffer, {
+                status: 200,
+                headers: {
+                  "Content-Type": "audio/mpeg",
+                },
+              });
+              return setCors(response, request);
+            } else {
+              console.error(`❌ Failed to fetch cached audio: ${audioResponse.status} ${audioResponse.statusText}`);
+              // Fall through to generate new audio
+            }
+          } catch (fetchError: any) {
+            console.error(`❌ Error fetching cached audio from ${node.audio_url}:`, fetchError);
+            // Fall through to generate new audio
+          }
+        } else if (node?.audio_url && node?.text_hash !== textHash) {
+          console.log(`⚠️ Audio exists for node ${nodeKey} but text hash mismatch - regenerating`);
+        } else if (node?.audio_url && !node?.text_hash) {
+          console.log(`⚠️ Audio exists for node ${nodeKey} but no text hash - will use cached audio if available`);
+          // Try to use existing audio even without hash match (for backward compatibility)
+          try {
+            const audioResponse = await fetch(node.audio_url);
+            if (audioResponse.ok) {
+              const audioBuffer = await audioResponse.arrayBuffer();
+              console.log(`✅ Using existing audio (no hash check): ${audioBuffer.byteLength} bytes`);
+              const response = new NextResponse(audioBuffer, {
+                status: 200,
+                headers: {
+                  "Content-Type": "audio/mpeg",
+                },
+              });
+              return setCors(response, request);
+            }
+          } catch (fetchError: any) {
+            console.error(`❌ Error fetching existing audio:`, fetchError);
+            // Fall through to generate new audio
           }
         }
       }
@@ -146,8 +177,57 @@ export async function POST(request: NextRequest) {
 
       if (!audioResponse.ok) {
         const txt = await audioResponse.text().catch(() => "");
-        console.error("ElevenLabs TTS error:", audioResponse.status, txt);
-        const errorResponse = NextResponse.json({ error: `ElevenLabs TTS error: ${txt}` }, { status: audioResponse.status });
+        
+        // Parse error response to check for quota exceeded
+        let errorMessage = "Voice narration is temporarily unavailable. Please try again later.";
+        let errorCode = "TTS_UNAVAILABLE";
+        let isQuotaError = false;
+        
+        try {
+          const errorData = JSON.parse(txt);
+          
+          // Log full error details to backend
+          console.error("❌ ElevenLabs TTS error:", {
+            status: audioResponse.status,
+            statusText: audioResponse.statusText,
+            errorData: errorData,
+            rawResponse: txt
+          });
+          
+          if (errorData?.detail?.status === "quota_exceeded" || txt.includes("quota_exceeded")) {
+            isQuotaError = true;
+            errorCode = "QUOTA_EXCEEDED";
+            errorMessage = "Voice narration is temporarily unavailable due to service limits. The story will continue without voice narration.";
+            
+            // Log detailed quota information to backend
+            console.error("🚨 QUOTA EXCEEDED - ElevenLabs API:", {
+              status: errorData?.detail?.status,
+              message: errorData?.detail?.message,
+              remaining: errorData?.detail?.remaining,
+              required: errorData?.detail?.required,
+              fullError: errorData
+            });
+          } else if (errorData?.detail?.message) {
+            // For other errors, log details but use generic user message
+            console.error("⚠️ ElevenLabs API error details:", {
+              message: errorData.detail.message,
+              status: errorData.detail.status,
+              fullError: errorData
+            });
+            errorMessage = "Voice narration is temporarily unavailable. Please try again later.";
+          }
+        } catch (e) {
+          // If parsing fails, log the raw response
+          console.error("⚠️ Failed to parse ElevenLabs error response:", {
+            rawText: txt,
+            parseError: e
+          });
+        }
+        
+        const errorResponse = NextResponse.json({ 
+          error: errorMessage,
+          code: errorCode
+        }, { status: isQuotaError ? 429 : audioResponse.status }); // Use 429 for quota errors, original status for others
         return setCors(errorResponse, request);
       }
 
