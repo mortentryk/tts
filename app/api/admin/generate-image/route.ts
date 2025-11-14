@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       nodeId, 
       storyText, 
       storyTitle, 
-      model = 'stable-diffusion', // Default to Stable Diffusion for better style consistency with img2img and reference images
+      model = 'nano-banana', // Default to Stable Diffusion for better style consistency with img2img and reference images
       style, // No hard-coded default - use story's visual_style or let createStoryImagePrompt use its default
       size = '1024x1024',
       quality = 'standard',
