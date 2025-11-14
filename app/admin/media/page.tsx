@@ -115,6 +115,11 @@ export default function MediaManager() {
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [customPromptReferenceImage, setCustomPromptReferenceImage] = useState<string>('');
+  const [customPromptReferenceType, setCustomPromptReferenceType] = useState<'node' | 'url' | 'upload'>('node');
+  const [customPromptReferenceUrl, setCustomPromptReferenceUrl] = useState<string>('');
+  const [customPromptReferenceFile, setCustomPromptReferenceFile] = useState<File | null>(null);
+  const [customPromptReferencePreview, setCustomPromptReferencePreview] = useState<string>('');
 
   // Check if user is logged in via server session
   useEffect(() => {
@@ -308,7 +313,7 @@ export default function MediaManager() {
           nodeId: nodeKey,
           storyText: node.text_md,
           storyTitle: selectedStoryData?.title || selectedStory,
-          model: 'stable-diffusion', // Use Stable Diffusion for better style consistency with img2img
+          model: 'nano-banana', // Use nano-banana for Danish support and reference images
           style: 'fantasy adventure book illustration',
           referenceImageNodeKey: referenceImageNodeKey || undefined,
         }),
@@ -574,17 +579,39 @@ export default function MediaManager() {
         return;
       }
 
+      // Determine reference image based on type
+      let referenceImageUrl: string | undefined = undefined;
+      let referenceImageNodeKey: string | undefined = undefined;
+
+      if (customPromptReferenceType === 'node' && customPromptReferenceImage) {
+        referenceImageNodeKey = customPromptReferenceImage;
+      } else if (customPromptReferenceType === 'url' && customPromptReferenceUrl) {
+        referenceImageUrl = customPromptReferenceUrl;
+      } else if (customPromptReferenceType === 'upload' && customPromptReferenceFile) {
+        // Convert file to data URL for now (or upload to Cloudinary)
+        // For now, we'll use the data URL directly
+        referenceImageUrl = customPromptReferencePreview;
+      }
+
+      const requestBody: any = {
+        storySlug: selectedStory,
+        nodeId: nodeKey,
+        storyText: customPrompt, // Use custom prompt as story text
+        storyTitle: selectedStoryData?.title || selectedStory,
+        useCustomPrompt: true, // Flag to use custom prompt directly without story context
+        model: 'nano-banana', // Use nano-banana for Danish support
+      };
+
+      if (referenceImageNodeKey) {
+        requestBody.referenceImageNodeKey = referenceImageNodeKey;
+      } else if (referenceImageUrl) {
+        requestBody.referenceImageUrl = referenceImageUrl;
+      }
+
       const response = await fetch('/api/admin/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storySlug: selectedStory,
-          nodeId: nodeKey,
-          storyText: customPrompt, // Use custom prompt as story text
-          storyTitle: selectedStoryData?.title || selectedStory,
-          useCustomPrompt: true, // Flag to use custom prompt directly without story context
-          model: 'stable-diffusion', // Use stable-diffusion for custom prompts
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -1105,6 +1132,28 @@ export default function MediaManager() {
                   💡 Tip: Be specific! Include lighting, mood, colors, and style.
                 </p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  🖼️ Reference Image (Optional):
+                </label>
+                <select
+                  value={customPromptReferenceImage}
+                  onChange={(e) => setCustomPromptReferenceImage(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                >
+                  <option value="">None - Generate without reference</option>
+                  {imageRows
+                    .filter(row => row.node_key !== customPromptNode && row.image_url)
+                    .map(row => (
+                      <option key={row.node_key} value={row.node_key}>
+                        Node {row.node_key} - {row.text.substring(0, 50)}...
+                      </option>
+                    ))}
+                </select>
+                <p className="mt-2 text-xs text-gray-600">
+                  💡 Select a previous node's image to maintain style consistency.
+                </p>
+              </div>
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setCustomPromptNode(null)}
@@ -1199,6 +1248,153 @@ export default function MediaManager() {
                   💡 Tip: Be specific! Include lighting, mood, colors, and style.
                 </p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  🖼️ Reference Image (Optional):
+                </label>
+                
+                {/* Reference Type Selector */}
+                <div className="flex space-x-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomPromptReferenceType('node');
+                      setCustomPromptReferenceUrl('');
+                      setCustomPromptReferenceFile(null);
+                      setCustomPromptReferencePreview('');
+                    }}
+                    className={`px-3 py-1 rounded text-sm ${
+                      customPromptReferenceType === 'node'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    📋 From Node
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomPromptReferenceType('url');
+                      setCustomPromptReferenceImage('');
+                      setCustomPromptReferenceFile(null);
+                      setCustomPromptReferencePreview('');
+                    }}
+                    className={`px-3 py-1 rounded text-sm ${
+                      customPromptReferenceType === 'url'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    🔗 From URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomPromptReferenceType('upload');
+                      setCustomPromptReferenceImage('');
+                      setCustomPromptReferenceUrl('');
+                      setCustomPromptReferencePreview('');
+                    }}
+                    className={`px-3 py-1 rounded text-sm ${
+                      customPromptReferenceType === 'upload'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    📤 Upload
+                  </button>
+                </div>
+
+                {/* Node Selection */}
+                {customPromptReferenceType === 'node' && (
+                  <>
+                    <select
+                      value={customPromptReferenceImage}
+                      onChange={(e) => setCustomPromptReferenceImage(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                    >
+                      <option value="">None - Generate without reference</option>
+                      {imageRows
+                        .filter(row => row.node_key !== customPromptNode && row.image_url)
+                        .map(row => (
+                          <option key={row.node_key} value={row.node_key}>
+                            Node {row.node_key} - {row.text.substring(0, 50)}...
+                          </option>
+                        ))}
+                    </select>
+                    <p className="mt-2 text-xs text-gray-600">
+                      💡 Select a previous node's image to maintain style consistency.
+                    </p>
+                  </>
+                )}
+
+                {/* URL Input */}
+                {customPromptReferenceType === 'url' && (
+                  <>
+                    <input
+                      type="url"
+                      value={customPromptReferenceUrl}
+                      onChange={(e) => {
+                        setCustomPromptReferenceUrl(e.target.value);
+                        if (e.target.value) {
+                          setCustomPromptReferencePreview(e.target.value);
+                        } else {
+                          setCustomPromptReferencePreview('');
+                        }
+                      }}
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                    />
+                    {customPromptReferencePreview && (
+                      <div className="mt-2">
+                        <img
+                          src={customPromptReferencePreview}
+                          alt="Reference preview"
+                          className="max-w-full h-32 object-contain border border-gray-300 rounded"
+                          onError={() => setCustomPromptReferencePreview('')}
+                        />
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-gray-600">
+                      💡 Paste a URL to an image you want to use as reference.
+                    </p>
+                  </>
+                )}
+
+                {/* File Upload */}
+                {customPromptReferenceType === 'upload' && (
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setCustomPromptReferenceFile(file);
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            setCustomPromptReferencePreview(event.target?.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                    />
+                    {customPromptReferencePreview && (
+                      <div className="mt-2">
+                        <img
+                          src={customPromptReferencePreview}
+                          alt="Reference preview"
+                          className="max-w-full h-32 object-contain border border-gray-300 rounded"
+                        />
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-gray-600">
+                      💡 Upload an image file to use as reference (JPG, PNG, etc.).
+                    </p>
+                  </>
+                )}
+              </div>
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setCustomPromptNode(null)}
@@ -1215,9 +1411,9 @@ export default function MediaManager() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+                      </div>
+            </div>
+        )}
 
       {/* Full Text Modal */}
       {expandedText && (

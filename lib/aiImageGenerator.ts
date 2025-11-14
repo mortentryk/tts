@@ -425,73 +425,61 @@ export async function generateImageWithStableDiffusionImg2Img(
 }
 
 /**
- * Generate an image using Nano Banana via Replicate
- * Nano Banana understands Danish and can use multiple reference images
+ * Generate an image using Nano Banana model via Replicate
+ * This model understands Danish and supports reference images
  */
 export async function generateImageWithNanoBanana(
   prompt: string,
   options: ImageGenerationOptions = {}
 ): Promise<GeneratedImage> {
   try {
+    // Check if API token is set
     if (!process.env.REPLICATE_API_TOKEN) {
       throw new Error('REPLICATE_API_TOKEN environment variable is not set');
     }
     
-    console.log('🍌 Generating image with Nano Banana:', prompt.substring(0, 200));
+    console.log('🎨 Generating image with Nano Banana:', prompt);
     
-    // Prepare reference images if provided
+    // Get reference images (use multiple if available, or single)
     const referenceImages = options.referenceImageUrls || (options.referenceImageUrl ? [options.referenceImageUrl] : []);
     
     if (referenceImages.length > 0) {
-      console.log(`🖼️ Using ${referenceImages.length} reference image(s)`);
+      console.log(`🖼️ Using ${referenceImages.length} reference image(s) for style consistency`);
+      referenceImages.forEach((url, idx) => {
+        console.log(`   Reference ${idx + 1}: ${url.substring(0, 80)}...`);
+      });
     }
     
-    const predictionInput: any = {
-      prompt: prompt.trim().substring(0, 2000),
+    // Use image_input as array of URLs (like bytedance/seedream-4 example)
+    // This allows the model to understand character consistency and style from multiple reference images
+    const input: any = {
+      prompt: prompt, // Use Danish text with context - model understands Danish
+      negative_prompt: "blurry, low quality, distorted",
     };
     
-    // Add reference images if provided
+    // Add reference images as array - model will use these to maintain:
+    // - Character appearance consistency (from character reference images)
+    // - Visual style consistency (from previous node images)
+    // - Scene continuity
     if (referenceImages.length > 0) {
-      const imageDataUris: string[] = [];
-      for (const imageUrl of referenceImages) {
-        try {
-          console.log(`📥 Downloading reference image: ${imageUrl.substring(0, 60)}...`);
-          const imageResponse = await fetch(imageUrl);
-          if (!imageResponse.ok) {
-            console.warn(`⚠️ Failed to fetch reference image: ${imageResponse.statusText}`);
-            continue;
-          }
-          
-          const imageBuffer = await imageResponse.arrayBuffer();
-          const imageBase64 = Buffer.from(imageBuffer).toString('base64');
-          const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
-          imageDataUris.push(`data:${mimeType};base64,${imageBase64}`);
-          console.log(`✅ Reference image prepared: ${mimeType}`);
-        } catch (error) {
-          console.warn(`⚠️ Error processing reference image ${imageUrl}:`, error);
-        }
-      }
-      
-      if (imageDataUris.length > 0) {
-        // Try different parameter names - nano-banana might use 'image' or 'start_image'
-        predictionInput.image = imageDataUris[0];
-        if (imageDataUris.length > 1) {
-          predictionInput.images = imageDataUris;
-        }
-      }
+      input.image_input = referenceImages; // Array of URLs - pass all reference images
+      console.log(`✅ Adding ${referenceImages.length} reference image(s) to image_input parameter`);
+      console.log(`   Model will use these to maintain character/style consistency with the story`);
     }
     
     const prediction = await replicate.predictions.create({
-      model: "google/nano-banana",
-      input: predictionInput
+      model: "google/nano-banana", // Fixed: correct model path from API response
+      input: input
     });
+    
+    console.log(`✅ Created nano-banana prediction${referenceImages.length > 0 ? ` with ${referenceImages.length} reference image(s)` : ''}`);
 
-    console.log('🔍 Prediction created:', prediction.id);
+    console.log('🔍 Prediction created:', prediction.id, 'status:', prediction.status);
 
-    // Wait for completion
+    // Wait for the prediction to complete
     let finalPrediction = prediction;
     while (finalPrediction.status !== 'succeeded' && finalPrediction.status !== 'failed' && finalPrediction.status !== 'canceled') {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Poll every 2 seconds
       finalPrediction = await replicate.predictions.get(prediction.id);
       console.log('⏳ Prediction status:', finalPrediction.status);
     }
@@ -505,28 +493,37 @@ export async function generateImageWithNanoBanana(
     }
 
     const output = finalPrediction.output;
-    console.log('📦 Raw output from Replicate nano-banana:', JSON.stringify(output, null, 2));
+    console.log('📦 Raw output from nano-banana:', JSON.stringify(output, null, 2));
     
-    // Extract image URL
+    // Handle different output formats
     let imageUrl: string | null = null;
+    
     if (typeof output === 'string') {
       imageUrl = output;
-    } else if (Array.isArray(output) && output.length > 0) {
-      imageUrl = typeof output[0] === 'string' ? output[0] : (output[0] as any)?.url || null;
+    } else if (Array.isArray(output)) {
+      imageUrl = output.find((item: any) => typeof item === 'string') || null;
+      if (!imageUrl && output.length > 0) {
+        const firstItem = output[0];
+        if (typeof firstItem === 'string') {
+          imageUrl = firstItem;
+        } else if (firstItem && typeof firstItem === 'object') {
+          imageUrl = firstItem.url || firstItem.output || null;
+        }
+      }
     } else if (output && typeof output === 'object') {
       imageUrl = (output as any).url || (output as any).output || (output as any)[0] || null;
     }
     
     if (!imageUrl || typeof imageUrl !== 'string') {
       console.error('❌ Unexpected output format:', output);
-      throw new Error(`Invalid output from Nano Banana: ${JSON.stringify(output)}`);
+      throw new Error(`Invalid output from nano-banana. Got: ${JSON.stringify(output)}`);
     }
     
     return {
       url: imageUrl,
       model: 'nano-banana',
       size: '1024x1024',
-      cost: 0.002,
+      cost: 0.0023, // Approximate cost
     };
   } catch (error: any) {
     console.error('❌ Nano Banana generation error:', error);

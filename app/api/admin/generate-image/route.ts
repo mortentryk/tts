@@ -11,11 +11,12 @@ export async function POST(request: NextRequest) {
       nodeId, 
       storyText, 
       storyTitle, 
-      model = 'nano-banana', // Default to Stable Diffusion for better style consistency with img2img and reference images
+      model = 'nano-banana', // Default to nano-banana for Danish support
       style, // No hard-coded default - use story's visual_style or let createStoryImagePrompt use its default
       size = '1024x1024',
       quality = 'standard',
       referenceImageNodeKey,
+      referenceImageUrl, // Direct URL to reference image (from custom prompt)
       useCustomPrompt = false // If true, use storyText directly as prompt without story context
     } = body;
 
@@ -29,139 +30,25 @@ export async function POST(request: NextRequest) {
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
     console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}, useCustomPrompt: ${useCustomPrompt}`);
 
-    // Get story ID first (needed for all paths)
-    const { data: story, error: storyError } = await supabase
-      .from('stories')
-      .select('id, title')
-      .eq('slug', storySlug)
-      .single();
-
-    if (storyError || !story) {
-      console.error('❌ Story fetch error:', storyError);
-      return NextResponse.json(
-        { error: 'Story not found' },
-        { status: 404 }
-      );
-    }
-
-    // NANO-BANANA: Simple approach like video generation - use Danish text directly, no complex prompts
-    if (model === 'nano-banana') {
-      console.log('🍌 Using Nano Banana with simple Danish prompt (no complex prompt building)');
-      
-      // Get the last couple of images as reference
-      let referenceImageUrls: string[] = [];
-      try {
-        const { data: currentNode } = await supabase
-          .from('story_nodes')
-          .select('sort_index')
-          .eq('story_id', story.id)
-          .eq('node_key', nodeId)
-          .single();
-
-        if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
-          // Get the last 2 images (previous nodes with images)
-          const { data: previousNodes } = await supabase
-            .from('story_nodes')
-            .select('image_url, sort_index')
-            .eq('story_id', story.id)
-            .lt('sort_index', currentNode.sort_index)
-            .not('image_url', 'is', null)
-            .order('sort_index', { ascending: false })
-            .limit(2);
-          
-          if (previousNodes && previousNodes.length > 0) {
-            referenceImageUrls = previousNodes
-              .map(node => node.image_url)
-              .filter((url): url is string => !!url);
-            console.log(`🖼️ Found ${referenceImageUrls.length} reference image(s) for nano-banana`);
-            referenceImageUrls.forEach((url, idx) => {
-              console.log(`   Reference ${idx + 1}: ${url.substring(0, 80)}...`);
-            });
-          }
-        }
-      } catch (error) {
-        console.log('⚠️ Could not fetch reference images, continuing without them:', error);
-      }
-
-      // Use simple Danish prompt - just the story text (nano-banana understands Danish)
-      const simplePrompt = storyText.trim();
-      console.log(`📝 Using simple Danish prompt (${simplePrompt.length} chars): ${simplePrompt.substring(0, 200)}...`);
-
-      // Generate image with nano-banana
-      const generatedImage = await generateImage(simplePrompt, {
-        model: 'nano-banana',
-        size: size as any,
-        quality: quality as any,
-        referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
-      });
-
-      console.log('✅ Image generated with nano-banana:', generatedImage.url);
-
-      // Upload to Cloudinary if configured
-      let finalImageUrl = generatedImage.url;
-      let imageWidth = 1024;
-      let imageHeight = 1024;
-      let publicId = '';
-
-      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
-        console.log('📤 Uploading to Cloudinary...');
-        const imageResponse = await fetch(generatedImage.url);
-        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-        
-        publicId = generateStoryAssetId(storySlug, nodeId, 'image');
-        const uploadResult = await uploadImageToCloudinary(
-          imageBuffer,
-          `tts-books/${storySlug}`,
-          publicId,
-          {
-            width: 1024,
-            height: 1024,
-            quality: 'auto',
-          }
-        );
-
-        finalImageUrl = uploadResult.secure_url;
-        imageWidth = uploadResult.width;
-        imageHeight = uploadResult.height;
-        console.log('☁️ Uploaded to Cloudinary:', finalImageUrl);
-      }
-
-      // Update the story node
-      const { error: updateError } = await supabase
-        .from('story_nodes')
-        .update({ 
-          image_url: finalImageUrl,
-          updated_at: new Date().toISOString()
-        })
-        .eq('story_id', story.id)
-        .eq('node_key', nodeId);
-
-      if (updateError) {
-        console.error('❌ Failed to update story node:', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update story node with image URL' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        image: {
-          url: finalImageUrl,
-          public_id: publicId,
-          width: imageWidth,
-          height: imageHeight,
-          model: generatedImage.model,
-          cost: generatedImage.cost,
-          prompt: simplePrompt,
-        },
-      });
-    }
-
     // If using custom prompt, use it as scene description but still apply story's visual style
     if (useCustomPrompt) {
       console.log(`✏️ Using custom prompt with story style: ${storyText.substring(0, 200)}...`);
       
+      // Get story ID and visual style for consistency
+      const { data: story, error: storyError } = await supabase
+        .from('stories')
+        .select('id, title')
+        .eq('slug', storySlug)
+        .single();
+
+      if (storyError || !story) {
+        console.error('❌ Story fetch error:', storyError);
+        return NextResponse.json(
+          { error: 'Story not found' },
+          { status: 404 }
+        );
+      }
+
       // Get story's visual style for consistency
       let storyVisualStyle = null;
       try {
@@ -176,27 +63,62 @@ export async function POST(request: NextRequest) {
         console.log('⚠️ Note: visual_style column not yet added to database');
       }
 
-      // Get a reference image for style matching (but not for content)
-      let referenceImageUrl: string | null = null;
-      try {
-        // Get first image from story for style reference
-        const { data: firstNode } = await supabase
-          .from('story_nodes')
-          .select('image_url, node_key')
-          .eq('story_id', story.id)
-          .not('image_url', 'is', null)
-          .neq('node_key', nodeId) // Don't use current node
-          .order('sort_index', { ascending: true })
-          .limit(1)
-          .single();
-
-        if (firstNode && firstNode.image_url) {
-          referenceImageUrl = firstNode.image_url;
-          console.log(`🎨 Custom prompt: Using reference image from node ${firstNode.node_key} for style matching`);
-        }
-      } catch (error) {
-        console.log('⚠️ No reference image found for style matching');
+      // Get a reference image for style matching
+      // Priority: 1) Direct URL from request, 2) Node key from request, 3) First image from story
+      let customReferenceImageUrl: string | null = null;
+      let referenceImageUrls: string[] = [];
+      
+      // If direct URL provided (from custom prompt URL/upload)
+      if (referenceImageUrl) {
+        customReferenceImageUrl = referenceImageUrl;
+        referenceImageUrls = [referenceImageUrl];
+        console.log(`🎨 Custom prompt: Using direct reference image URL`);
       }
+      // If node key provided (from custom prompt node selection)
+      else if (referenceImageNodeKey) {
+        try {
+          const { data: refNode } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key')
+            .eq('story_id', story.id)
+            .eq('node_key', referenceImageNodeKey)
+            .not('image_url', 'is', null)
+            .single();
+
+          if (refNode && refNode.image_url) {
+            customReferenceImageUrl = refNode.image_url;
+            referenceImageUrls = [refNode.image_url];
+            console.log(`🎨 Custom prompt: Using reference image from node ${referenceImageNodeKey}`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not find reference node ${referenceImageNodeKey}`);
+        }
+      }
+      // Fallback: Get first image from story for style reference
+      if (!customReferenceImageUrl) {
+        try {
+          const { data: firstNode } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key')
+            .eq('story_id', story.id)
+            .not('image_url', 'is', null)
+            .neq('node_key', nodeId) // Don't use current node
+            .order('sort_index', { ascending: true })
+            .limit(1)
+            .single();
+
+          if (firstNode && firstNode.image_url) {
+            customReferenceImageUrl = firstNode.image_url;
+            referenceImageUrls = [firstNode.image_url];
+            console.log(`🎨 Custom prompt: Using first image from story for style matching`);
+          }
+        } catch (error) {
+          console.log('⚠️ No reference image found for style matching');
+        }
+      }
+      
+      // Use the custom reference image URL for the rest of the function
+      const finalReferenceImageUrl = customReferenceImageUrl;
 
       // Use custom prompt as scene description, but apply story's visual style
       // IMPORTANT: Custom prompts are ENVIRONMENT-ONLY - no characters should be included
@@ -205,7 +127,7 @@ export async function POST(request: NextRequest) {
       
       // Build prompt: Style + Custom Scene Description (ENVIRONMENT ONLY - no characters, no previous context)
       let styleSection = '';
-      if (referenceImageUrl) {
+      if (finalReferenceImageUrl) {
         styleSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): Match the exact same artistic style, color palette, lighting mood, and visual aesthetic as the reference image from this story. `;
       } else if (visualStyle) {
         styleSection = `STYLE REQUIREMENTS: ${visualStyle}. `;
@@ -227,8 +149,9 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
 
       console.log(`📝 Custom prompt built (${customPrompt.length} chars): ${customPrompt.substring(0, 300)}...`);
 
-      // Use img2img if we have a reference image for better style consistency
-      const useImg2Img = referenceImageUrl && model !== 'dalle3';
+      // For nano-banana, use reference images array
+      // For other models, use img2img if we have a reference image
+      const useImg2Img = finalReferenceImageUrl && model !== 'dalle3' && model !== 'nano-banana';
       const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
       
       if (useImg2Img) {
@@ -236,13 +159,21 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       }
 
       // Generate image with custom prompt and style
-      const generatedImage = await generateImage(customPrompt, {
+      const generateOptions: any = {
         model: imageModel,
         size: size as any,
         quality: quality as any,
-        referenceImageUrl: useImg2Img ? (referenceImageUrl || undefined) : undefined,
-        strength: useImg2Img ? 0.6 : undefined, // Lower strength to allow more scene variation while keeping style
-      });
+      };
+
+      if (model === 'nano-banana' && referenceImageUrls.length > 0) {
+        generateOptions.referenceImageUrls = referenceImageUrls;
+        console.log(`🎨 Custom prompt: Using ${referenceImageUrls.length} reference image(s) with nano-banana`);
+      } else if (useImg2Img && finalReferenceImageUrl) {
+        generateOptions.referenceImageUrl = finalReferenceImageUrl;
+        generateOptions.strength = 0.6; // Lower strength to allow more scene variation while keeping style
+      }
+
+      const generatedImage = await generateImage(customPrompt, generateOptions);
 
       console.log('✅ Image generated from custom prompt:', generatedImage.url);
 
@@ -310,7 +241,21 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       });
     }
 
-    // Story is already fetched at the beginning of the function
+    // Get story ID and title (visual_style is optional)
+    const { data: story, error: storyError } = await supabase
+      .from('stories')
+      .select('id, title')
+      .eq('slug', storySlug)
+      .single();
+
+    if (storyError || !story) {
+      console.error('❌ Story fetch error:', storyError);
+      return NextResponse.json(
+        { error: 'Story not found' },
+        { status: 404 }
+      );
+    }
+    
     console.log(`✅ DEBUG: Found story - ID: ${story.id}, Title: ${story.title}`);
     
     // Try to get visual_style if the column exists
@@ -328,7 +273,7 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       console.log('⚠️ Note: visual_style column not yet added to database');
     }
 
-    // Get character assignments for this node
+    // Get character assignments for this node (including reference images)
     const { data: characterAssignments, error: assignmentsError } = await supabase
       .from('character_assignments')
       .select(`
@@ -338,7 +283,8 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
         characters (
           name,
           description,
-          appearance_prompt
+          appearance_prompt,
+          reference_image_url
         )
       `)
       .eq('story_id', story.id)
@@ -348,18 +294,28 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       console.warn('⚠️ Could not load character assignments:', assignmentsError);
     }
 
-    // Format character data for prompt
+    // Format character data for prompt and collect reference images
     const nodeCharacters = characterAssignments?.map(assignment => {
       const character = assignment.characters as any;
       return {
         name: character?.name || '',
         description: character?.description || '',
         appearancePrompt: character?.appearance_prompt || '',
+        referenceImageUrl: character?.reference_image_url || null,
         role: assignment.role,
         emotion: assignment.emotion,
         action: assignment.action,
       };
     }) || [];
+
+    // Collect character reference images
+    const characterReferenceImages = nodeCharacters
+      .filter(char => char.referenceImageUrl)
+      .map(char => char.referenceImageUrl!);
+    
+    if (characterReferenceImages.length > 0) {
+      console.log(`🎭 DEBUG: Found ${characterReferenceImages.length} character reference image(s)`);
+    }
 
     console.log(`🎭 DEBUG: Found ${nodeCharacters.length} characters for this node`);
     if (nodeCharacters.length > 0) {
@@ -383,8 +339,8 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       });
     }
 
-    // Get PREVIOUS node's text for context - use sort_index to find the immediate previous node
-    let previousNodeText = '';
+    // Get PREVIOUS nodes' text for context - get last 2-3 nodes for better continuity
+    let previousNodesText: string[] = [];
     let previousNodeKey: string | null = null;
     
     try {
@@ -397,21 +353,30 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
         .single();
 
       if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
-        // Get the immediate previous node (sort_index - 1)
-        const { data: previousNode } = await supabase
+        // Get the last 3 previous nodes (for better context)
+        const startIndex = Math.max(1, currentNode.sort_index - 3);
+        const { data: previousNodes, error: prevNodesError } = await supabase
           .from('story_nodes')
           .select('node_key, text_md, sort_index')
           .eq('story_id', story.id)
-          .eq('sort_index', currentNode.sort_index - 1)
-          .single();
+          .gte('sort_index', startIndex)
+          .lt('sort_index', currentNode.sort_index)
+          .order('sort_index', { ascending: true });
 
-        if (previousNode && previousNode.text_md) {
-          previousNodeText = previousNode.text_md;
-          previousNodeKey = previousNode.node_key;
-          console.log(`📖 DEBUG: Found previous node ${previousNodeKey} (sort_index: ${previousNode.sort_index})`);
-          console.log(`   Previous node text (${previousNodeText.length} chars): ${previousNodeText.substring(0, 150)}...`);
+        if (!prevNodesError && previousNodes && previousNodes.length > 0) {
+          previousNodesText = previousNodes
+            .filter(node => node.text_md)
+            .map(node => node.text_md!);
+          
+          if (previousNodes.length > 0) {
+            previousNodeKey = previousNodes[previousNodes.length - 1].node_key;
+            console.log(`📖 DEBUG: Found ${previousNodesText.length} previous node(s) for context`);
+            previousNodesText.forEach((text, idx) => {
+              console.log(`   Previous node ${idx + 1} (${text.length} chars): ${text.substring(0, 100)}...`);
+            });
+          }
         } else {
-          console.log(`⚠️ DEBUG: No previous node found at sort_index ${currentNode.sort_index - 1}`);
+          console.log(`⚠️ DEBUG: No previous nodes found`);
         }
       } else {
         console.log(`⚠️ DEBUG: Current node sort_index is ${currentNode?.sort_index || 'null'} (first node or no sort_index)`);
@@ -419,170 +384,120 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
     } catch (error) {
       console.log(`⚠️ DEBUG: Error finding previous node text:`, error);
     }
+    
+    // Combine previous nodes text for context
+    const previousNodeText = previousNodesText.length > 0 
+      ? previousNodesText.join('\n\n')
+      : '';
 
-    // Get the reference image - use PREVIOUS scene (or specified node, or first scene as fallback)
-    let referenceImageUrl: string | null = null;
+    // Get reference images - for nano-banana, get the last couple of images
+    let nodeReferenceImageUrl: string | null = null;
+    let referenceImageUrls: string[] = [];
     let extractedStyleDescription: string | undefined = undefined;
+    let finalReferenceImageUrl: string | null = null; // Declare outside try block
     
     console.log(`🔍 DEBUG: Starting reference image search for node ${nodeId} in story ${story.id} (${storySlug})`);
     
     try {
-      let referenceNode;
-      
-      // If a specific reference node is provided, use that
-      if (referenceImageNodeKey) {
-        console.log(`🔍 DEBUG: Looking for specified reference node: ${referenceImageNodeKey}`);
-        const { data: refNode, error: refError } = await supabase
+      // Get current node's sort_index
+      const { data: currentNode, error: currentNodeError } = await supabase
+        .from('story_nodes')
+        .select('sort_index, node_key, image_url')
+        .eq('story_id', story.id)
+        .eq('node_key', nodeId)
+        .single();
+
+      if (currentNodeError) {
+        console.log(`❌ DEBUG: Error finding current node: ${currentNodeError.message}`);
+      }
+
+      // For nano-banana, get the last couple of images (up to 2)
+      if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
+        console.log(`🔍 DEBUG: Current node sort_index is ${currentNode.sort_index}, searching for previous images...`);
+        
+        // Get the last 2 images before current node
+        const { data: previousNodes, error: prevNodesError } = await supabase
           .from('story_nodes')
           .select('image_url, node_key, sort_index')
           .eq('story_id', story.id)
-          .eq('node_key', referenceImageNodeKey)
+          .lt('sort_index', currentNode.sort_index)
           .not('image_url', 'is', null)
-          .single();
-        
-        if (refError) {
-          console.log(`⚠️ DEBUG: Error finding specified reference node: ${refError.message}`);
-        } else if (refNode) {
-          console.log(`🔍 DEBUG: Found specified reference node:`, {
-            node_key: refNode.node_key,
-            sort_index: refNode.sort_index,
-            has_image: !!refNode.image_url,
-            image_url_preview: refNode.image_url ? refNode.image_url.substring(0, 60) + '...' : 'null'
-          });
-        }
-        
-        if (refNode && refNode.image_url && refNode.node_key !== nodeId) {
-          referenceNode = refNode;
-          console.log(`✅ DEBUG: Using specified reference image from node ${referenceImageNodeKey}`);
-        }
-      }
-      
-      // If no specific reference, try to use PREVIOUS scene
-      if (!referenceNode) {
-        console.log(`🔍 DEBUG: No specified reference, looking for previous scene...`);
-        // Get current node's sort_index
-        const { data: currentNode, error: currentNodeError } = await supabase
-          .from('story_nodes')
-          .select('sort_index, node_key, image_url')
-          .eq('story_id', story.id)
-          .eq('node_key', nodeId)
-          .single();
+          .neq('node_key', nodeId)
+          .order('sort_index', { ascending: false })
+          .limit(2);
 
-        if (currentNodeError) {
-          console.log(`❌ DEBUG: Error finding current node: ${currentNodeError.message}`);
-        } else if (currentNode) {
-          console.log(`🔍 DEBUG: Current node found:`, {
-            node_key: currentNode.node_key,
-            sort_index: currentNode.sort_index,
-            has_image: !!currentNode.image_url
-          });
-        }
-
-        if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
-          console.log(`🔍 DEBUG: Current node sort_index is ${currentNode.sort_index}, searching for previous node with image...`);
+        if (!prevNodesError && previousNodes && previousNodes.length > 0) {
+          referenceImageUrls = previousNodes
+            .filter(node => node.image_url)
+            .map(node => node.image_url!)
+            .reverse(); // Reverse to get chronological order (oldest first)
           
-          // Get the immediate previous node (same one we got text from) - this ensures text and image match
-          const { data: prevNodeWithImage, error: prevNodesError } = await supabase
-            .from('story_nodes')
-            .select('image_url, node_key, sort_index, text_md')
-            .eq('story_id', story.id)
-            .eq('sort_index', currentNode.sort_index - 1)
-            .not('image_url', 'is', null)
-            .single();
-
-          if (prevNodesError) {
-            console.log(`❌ DEBUG: Error finding previous node with image: ${prevNodesError.message}`);
-            // Fallback: search for any previous node with image
-            const { data: fallbackNodes } = await supabase
-              .from('story_nodes')
-              .select('image_url, node_key, sort_index')
-              .eq('story_id', story.id)
-              .lt('sort_index', currentNode.sort_index)
-              .not('image_url', 'is', null)
-              .order('sort_index', { ascending: false })
-              .limit(1);
-            
-            if (fallbackNodes && fallbackNodes.length > 0 && fallbackNodes[0].image_url) {
-              referenceNode = fallbackNodes[0];
-              console.log(`✅ DEBUG: Using fallback previous scene (node ${referenceNode.node_key})`);
-            }
-          } else if (prevNodeWithImage && prevNodeWithImage.image_url) {
-            referenceNode = prevNodeWithImage;
-            console.log(`✅ DEBUG: Using previous scene as reference (node ${referenceNode.node_key}, sort_index ${referenceNode.sort_index})`);
-            console.log(`   Reference image URL: ${referenceNode.image_url.substring(0, 80)}...`);
-            // Verify this matches the previous node we got text from
-            if (previousNodeKey && referenceNode.node_key !== previousNodeKey) {
-              console.log(`⚠️ DEBUG: WARNING - Previous node for text (${previousNodeKey}) doesn't match previous node for image (${referenceNode.node_key})`);
-            }
-          } else {
-            console.log(`⚠️ DEBUG: Previous node found but has no image`);
+          if (referenceImageUrls.length > 0) {
+            nodeReferenceImageUrl = referenceImageUrls[referenceImageUrls.length - 1]; // Most recent
+            console.log(`✅ DEBUG: Found ${referenceImageUrls.length} previous node image(s)`);
+            referenceImageUrls.forEach((url, idx) => {
+              console.log(`   Previous image ${idx + 1}: ${url.substring(0, 80)}...`);
+            });
           }
         } else {
-          console.log(`⚠️ DEBUG: Current node sort_index is ${currentNode?.sort_index || 'null'} (must be > 1 to have previous nodes)`);
+          console.log(`⚠️ DEBUG: No previous images found`);
         }
       }
       
-      // If still no reference (first scene or no previous scene), fall back to first image
-      if (!referenceNode) {
-        console.log(`🔍 DEBUG: No previous scene found, falling back to first image...`);
+      // Add character reference images to the array
+      if (characterReferenceImages.length > 0) {
+        referenceImageUrls = [...characterReferenceImages, ...referenceImageUrls];
+        console.log(`✅ DEBUG: Added ${characterReferenceImages.length} character reference image(s)`);
+        console.log(`   Total reference images: ${referenceImageUrls.length}`);
+      }
+      
+      if (referenceImageUrls.length > 0) {
+        nodeReferenceImageUrl = referenceImageUrls[referenceImageUrls.length - 1]; // Most recent
+      }
+      
+      // If still no reference, try to get first image as fallback
+      if (referenceImageUrls.length === 0) {
+        console.log(`🔍 DEBUG: No previous images found, falling back to first image...`);
         const { data: firstNode, error: firstNodeError } = await supabase
           .from('story_nodes')
           .select('image_url, node_key, sort_index')
           .eq('story_id', story.id)
           .not('image_url', 'is', null)
+          .neq('node_key', nodeId)
           .order('sort_index', { ascending: true })
           .limit(1)
           .single();
 
-        if (firstNodeError) {
-          console.log(`❌ DEBUG: Error finding first node: ${firstNodeError.message}`);
-        } else if (firstNode) {
-          console.log(`🔍 DEBUG: First node found:`, {
-            node_key: firstNode.node_key,
-            sort_index: firstNode.sort_index,
-            is_current_node: firstNode.node_key === nodeId,
-            image_url_preview: firstNode.image_url ? firstNode.image_url.substring(0, 60) + '...' : 'null'
-          });
-        }
-
-        if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
-          referenceNode = firstNode;
+        if (!firstNodeError && firstNode && firstNode.image_url) {
+          nodeReferenceImageUrl = firstNode.image_url;
+          referenceImageUrls = [firstNode.image_url];
           console.log(`✅ DEBUG: Using first image as fallback reference (node ${firstNode.node_key})`);
-        } else {
-          console.log(`⚠️ DEBUG: Cannot use first node as reference (is current node or has no image)`);
         }
       }
 
-      if (referenceNode && referenceNode.image_url) {
-        referenceImageUrl = referenceNode.image_url;
-        console.log(`✅ DEBUG: Reference image selected:`, {
-          node_key: referenceNode.node_key,
-          sort_index: referenceNode.sort_index,
-          image_url: referenceImageUrl ? referenceImageUrl.substring(0, 80) + '...' : 'null'
-        });
+      // Use direct URL from request if provided, otherwise use node reference
+      finalReferenceImageUrl = referenceImageUrl || nodeReferenceImageUrl;
+      if (referenceImageUrl) {
+        // Add direct URL to reference images array if provided
+        referenceImageUrls = [referenceImageUrl, ...referenceImageUrls];
+      }
+
+      // For non-nano-banana models, still do style analysis if needed
+      if (model !== 'nano-banana' && finalReferenceImageUrl) {
+        const willUseImg2Img = finalReferenceImageUrl && model !== 'dalle3';
         
-        // Only analyze style with GPT-4 Vision if we're NOT using img2img
-        // img2img sees the image directly, so text description is redundant
-        const willUseImg2Img = referenceImageUrl && model !== 'dalle3';
-        
-        if (!willUseImg2Img && referenceImageUrl) {
+        if (!willUseImg2Img && finalReferenceImageUrl) {
           // Only for DALL-E 3 - it can't see images, needs text description
           try {
-            console.log(`🔍 DEBUG: Analyzing reference image style for DALL-E 3 (img2img would see image directly)...`);
-            extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+            console.log(`🔍 DEBUG: Analyzing reference image style for DALL-E 3...`);
+            extractedStyleDescription = await analyzeImageStyle(finalReferenceImageUrl);
             if (extractedStyleDescription) {
               console.log(`✅ DEBUG: Extracted style description (${extractedStyleDescription.length} chars): ${extractedStyleDescription.substring(0, 150)}...`);
-            } else {
-              console.log(`⚠️ DEBUG: Style analysis returned empty description`);
             }
           } catch (error) {
             console.warn(`⚠️ DEBUG: Failed to analyze reference image style:`, error);
           }
-        } else {
-          console.log(`⏭️ DEBUG: Skipping GPT-4 Vision analysis - using img2img which sees image directly`);
         }
-      } else {
-        console.log(`⚠️ DEBUG: No reference node found or reference node has no image_url`);
       }
     } catch (error) {
       // No reference image found, that's okay - we'll generate without reference
@@ -623,72 +538,133 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       previous_text_preview: previousNodeText ? previousNodeText.substring(0, 100) + '...' : '(none)'
     });
     
-    console.log(`🔧 DEBUG: Creating prompt with:`, {
-      story_title: story.title || storyTitle || '',
-      visual_style_length: visualStyle?.length || 0,
-      characters_count: nodeCharacters.length,
-      has_reference_image: !!referenceImageUrl,
-      has_extracted_style: !!extractedStyleDescription
-    });
+    // For nano-banana, use simplified prompt (just the Danish text)
+    // For other models, use the complex prompt builder
+    let prompt: string;
+    let imageModel: string;
     
-    const prompt = createStoryImagePrompt(
-      fullStoryText, 
-      story.title || storyTitle || '', 
-      visualStyle, 
-      nodeCharacters, 
-      referenceImageUrl || undefined,
-      extractedStyleDescription
-    );
+    if (model === 'nano-banana') {
+      // Use Danish text with rich context - nano-banana understands Danish
+      // Include story title, previous nodes for continuity, and current scene
+      let promptParts: string[] = [];
+      
+      // Add story title for context
+      if (story.title) {
+        promptParts.push(`Historien: ${story.title}`);
+      }
+      
+      // Add previous nodes for continuity (last 2-3 nodes)
+      if (previousNodeText) {
+        const previousContext = previousNodeText.length > 800 
+          ? previousNodeText.substring(previousNodeText.length - 800) // Last 800 chars (most recent context)
+          : previousNodeText;
+        promptParts.push(`Tidligere scener:\n${previousContext}`);
+      }
+      
+      // Add current scene
+      promptParts.push(`Nuværende scene:\n${storyText.trim()}`);
+      
+      prompt = promptParts.join('\n\n');
+      imageModel = 'nano-banana';
+      console.log(`📝 DEBUG: Using rich context prompt for nano-banana (${prompt.length} chars)`);
+      console.log(`   Story title: ${story.title || 'none'}`);
+      console.log(`   Previous nodes: ${previousNodesText.length} node(s)`);
+      console.log(`   Current scene: ${storyText.length} chars`);
+      console.log(`   Preview: ${prompt.substring(0, 200)}...`);
+    } else {
+      // Use complex prompt builder for other models
+      console.log(`🔧 DEBUG: Creating prompt with:`, {
+        story_title: story.title || storyTitle || '',
+        visual_style_length: visualStyle?.length || 0,
+        characters_count: nodeCharacters.length,
+        has_reference_image: !!finalReferenceImageUrl,
+        has_extracted_style: !!extractedStyleDescription
+      });
+      
+      prompt = createStoryImagePrompt(
+        fullStoryText, 
+        story.title || storyTitle || '', 
+        visualStyle, 
+        nodeCharacters, 
+        finalReferenceImageUrl || undefined,
+        extractedStyleDescription
+      );
+      
+      console.log(`📝 DEBUG: Generated prompt (${prompt.length} chars):`);
+      console.log(`   First 200 chars: ${prompt.substring(0, 200)}...`);
+      console.log(`   Last 200 chars: ...${prompt.substring(prompt.length - 200)}`);
+      
+      // Generate image with AI
+      // IMPORTANT: Use stable-diffusion with img2img when we have a reference image for MUCH better style consistency
+      // DALL-E 3 doesn't support img2img, so we automatically switch to stable-diffusion-img2img when we have a reference
+      const useImg2Img = finalReferenceImageUrl && model !== 'dalle3'; // Use img2img if we have reference and not forcing dalle3
+      const shouldUseStableDiffusionImg2Img = finalReferenceImageUrl && model === 'dalle3'; // Switch to SD img2img if we have reference but model is dalle3
+      imageModel = useImg2Img || shouldUseStableDiffusionImg2Img
+        ? 'stable-diffusion-img2img' 
+        : (model as any);
+      
+      console.log(`🔧 DEBUG: Model selection:`, {
+        requested_model: model,
+        has_reference_image: !!finalReferenceImageUrl,
+        use_img2img: useImg2Img || shouldUseStableDiffusionImg2Img,
+        final_model: imageModel,
+        will_use_reference_in_img2img: (useImg2Img || shouldUseStableDiffusionImg2Img) && !!finalReferenceImageUrl
+      });
+      
+      if (shouldUseStableDiffusionImg2Img) {
+        console.log('🔄 DEBUG: Auto-switching to stable-diffusion-img2img for better reference image support (DALL-E 3 doesn\'t support img2img)');
+      }
+    }
     
-    console.log(`📝 DEBUG: Generated prompt (${prompt.length} chars):`);
-    console.log(`   First 200 chars: ${prompt.substring(0, 200)}...`);
-    console.log(`   Last 200 chars: ...${prompt.substring(prompt.length - 200)}`);
-    
-    if (referenceImageUrl) {
-      console.log(`🖼️ DEBUG: Reference image URL: ${referenceImageUrl.substring(0, 80)}...`);
+    // Log reference image info
+    if (finalReferenceImageUrl) {
+      console.log(`🖼️ DEBUG: Reference image URL: ${finalReferenceImageUrl.substring(0, 80)}...`);
+    }
+    if (referenceImageUrls.length > 0) {
+      console.log(`🖼️ DEBUG: Reference image URLs (${referenceImageUrls.length}):`);
+      referenceImageUrls.forEach((url, idx) => {
+        console.log(`   ${idx + 1}: ${url.substring(0, 80)}...`);
+      });
     }
     if (extractedStyleDescription) {
       console.log(`🎭 DEBUG: Extracted style description (${extractedStyleDescription.length} chars): ${extractedStyleDescription.substring(0, 150)}...`);
-    }
-
-    // Generate image with AI
-    // IMPORTANT: Use stable-diffusion with img2img when we have a reference image for MUCH better style consistency
-    // DALL-E 3 doesn't support img2img, so we automatically switch to stable-diffusion-img2img when we have a reference
-    const useImg2Img = referenceImageUrl && model !== 'dalle3'; // Use img2img if we have reference and not forcing dalle3
-    const shouldUseStableDiffusionImg2Img = referenceImageUrl && model === 'dalle3'; // Switch to SD img2img if we have reference but model is dalle3
-    const imageModel = useImg2Img || shouldUseStableDiffusionImg2Img
-      ? 'stable-diffusion-img2img' 
-      : (model as any);
-    
-    console.log(`🔧 DEBUG: Model selection:`, {
-      requested_model: model,
-      has_reference_image: !!referenceImageUrl,
-      use_img2img: useImg2Img || shouldUseStableDiffusionImg2Img,
-      final_model: imageModel,
-      will_use_reference_in_img2img: (useImg2Img || shouldUseStableDiffusionImg2Img) && !!referenceImageUrl
-    });
-    
-    if (shouldUseStableDiffusionImg2Img) {
-      console.log('🔄 DEBUG: Auto-switching to stable-diffusion-img2img for better reference image support (DALL-E 3 doesn\'t support img2img)');
     }
     
     console.log(`🚀 DEBUG: Calling generateImage with:`, {
       model: imageModel,
       size,
       quality,
-      has_reference_url: !!(useImg2Img || shouldUseStableDiffusionImg2Img) && !!referenceImageUrl,
-      strength: 0.65
+      has_reference_url: !!finalReferenceImageUrl,
+      has_reference_urls: referenceImageUrls.length,
     });
     
-    const generatedImage = await generateImage(prompt, {
+    // Generate image with appropriate options based on model
+    const generateOptions: any = {
       model: imageModel,
       size: size as any,
       quality: quality as any,
-      referenceImageUrl: (useImg2Img || shouldUseStableDiffusionImg2Img) ? (referenceImageUrl || undefined) : undefined,
-      strength: 0.65, // Good balance: maintains style while allowing scene changes
-    });
+    };
     
-    if (useImg2Img || shouldUseStableDiffusionImg2Img) {
+    if (model === 'nano-banana') {
+      // For nano-banana, pass reference images
+      if (referenceImageUrls.length > 0) {
+        generateOptions.referenceImageUrls = referenceImageUrls;
+      } else if (finalReferenceImageUrl) {
+        generateOptions.referenceImageUrl = finalReferenceImageUrl;
+      }
+    } else {
+      // For other models, use img2img pattern
+      const useImg2Img = finalReferenceImageUrl && model !== 'dalle3';
+      const shouldUseStableDiffusionImg2Img = finalReferenceImageUrl && model === 'dalle3';
+      if (useImg2Img || shouldUseStableDiffusionImg2Img) {
+        generateOptions.referenceImageUrl = finalReferenceImageUrl;
+        generateOptions.strength = 0.65; // Good balance: maintains style while allowing scene changes
+      }
+    }
+    
+    const generatedImage = await generateImage(prompt, generateOptions);
+    
+    if (model !== 'nano-banana' && (generateOptions.referenceImageUrl || generateOptions.referenceImageUrls)) {
       console.log('✅ DEBUG: Used img2img mode for style consistency');
     }
 
