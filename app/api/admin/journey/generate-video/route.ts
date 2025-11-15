@@ -77,7 +77,6 @@ export async function POST(request: NextRequest) {
     const videoResponse = await fetch(generatedVideo.url);
     const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
     
-    const storyData = journey.stories as any;
     const publicId = `journey_${journeyId}_video_${Date.now()}`;
     const uploadResult = await uploadVideoToCloudinary(
       videoBuffer,
