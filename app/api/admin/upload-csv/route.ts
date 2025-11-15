@@ -174,12 +174,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Create node
+      // Create node - don't set image_url initially, let preservation logic handle it
       const node: any = {
         story_id: '', // Will be set after story creation
         node_key: nodeId,
         text_md: nodeText,
-        image_url: null, // Will be set based on image field
+        // Don't set image_url here - let preservation logic handle it
         tts_ssml: null,
         dice_check: null,
         sort_index: rowIndex // Use row position in CSV, not parsed node_key
@@ -494,10 +494,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert nodes (update existing, insert new)
-    console.log('📝 Upserting', deduplicatedNodes.length, 'nodes from CSV');
+    // Remove null/undefined values for media fields to prevent overwriting existing data
+    const nodesToUpsert = deduplicatedNodes.map(node => {
+      const cleanedNode: any = { ...node };
+      // Only include image_url if it's actually set (not null/undefined)
+      // This prevents overwriting existing images when CSV doesn't provide one
+      if (cleanedNode.image_url === null || cleanedNode.image_url === undefined) {
+        delete cleanedNode.image_url;
+      }
+      if (cleanedNode.video_url === null || cleanedNode.video_url === undefined) {
+        delete cleanedNode.video_url;
+      }
+      if (cleanedNode.audio_url === null || cleanedNode.audio_url === undefined) {
+        delete cleanedNode.audio_url;
+      }
+      return cleanedNode;
+    });
+    
+    console.log('📝 Upserting', nodesToUpsert.length, 'nodes from CSV');
     const { error: nodesError } = await supabaseAdmin
       .from('story_nodes')
-      .upsert(deduplicatedNodes, { 
+      .upsert(nodesToUpsert, { 
         onConflict: 'story_id,node_key',
         ignoreDuplicates: false 
       });
