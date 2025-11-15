@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
       size = '1024x1024',
       quality = 'standard',
       referenceImageNodeKey,
-      referenceImageUrl // Direct URL to reference image
+      referenceImageUrl, // Direct URL to reference image
+      useCustomPrompt = false // If true, use storyText as custom prompt but still use story context
     } = body;
 
     if (!storySlug || !nodeId || !storyText) {
@@ -27,7 +28,162 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
-    console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}`);
+    console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}, useCustomPrompt: ${useCustomPrompt}`);
+
+    // If using custom prompt, create minimal prompt with just style + custom text + reference images
+    if (useCustomPrompt) {
+      console.log(`✏️ Using custom prompt (minimal mode): ${storyText.substring(0, 200)}...`);
+      
+      // Get story ID and visual style
+      const { data: story, error: storyError } = await supabase
+        .from('stories')
+        .select('id, title')
+        .eq('slug', storySlug)
+        .single();
+
+      if (storyError || !story) {
+        console.error('❌ Story fetch error:', storyError);
+        return NextResponse.json(
+          { error: 'Story not found' },
+          { status: 404 }
+        );
+      }
+
+      // Get story's visual style
+      let storyVisualStyle = null;
+      try {
+        const { data: storyWithStyle } = await supabase
+          .from('stories')
+          .select('visual_style')
+          .eq('id', story.id)
+          .single();
+        storyVisualStyle = storyWithStyle?.visual_style;
+        console.log(`🎨 Custom prompt: Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+      } catch (error) {
+        console.log('⚠️ Note: visual_style column not yet added to database');
+      }
+
+      // Get reference image if provided
+      let requestReferenceImageUrl = referenceImageUrl;
+      if (referenceImageNodeKey && !requestReferenceImageUrl) {
+        try {
+          const { data: refNode } = await supabase
+            .from('story_nodes')
+            .select('image_url')
+            .eq('story_id', story.id)
+            .eq('node_key', referenceImageNodeKey)
+            .not('image_url', 'is', null)
+            .single();
+          if (refNode?.image_url) {
+            requestReferenceImageUrl = refNode.image_url;
+            console.log(`🎨 Custom prompt: Using reference image from node ${referenceImageNodeKey}`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not find reference node ${referenceImageNodeKey}`);
+        }
+      }
+
+      // Build minimal prompt: Style + Custom Text + Basic quality
+      const visualStyle = storyVisualStyle || style || undefined;
+      let promptParts: string[] = [];
+      
+      if (visualStyle) {
+        promptParts.push(`STYLE REQUIREMENTS: ${visualStyle}`);
+      }
+      
+      promptParts.push(storyText.trim());
+      
+      promptParts.push(`High quality illustration, no text, no words, no writing, no letters, no dialogue boxes, no UI elements.`);
+      
+      const prompt = promptParts.join('\n\n');
+      console.log(`📝 Custom prompt built (${prompt.length} chars): ${prompt.substring(0, 300)}...`);
+
+      // Determine model
+      const useImg2Img = requestReferenceImageUrl && model !== 'dalle3' && model !== 'nano-banana';
+      const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
+      
+      // Generate image with minimal prompt
+      const generateOptions: any = {
+        model: imageModel,
+        size: size as any,
+        quality: quality as any,
+      };
+
+      // Add reference images if provided
+      if (requestReferenceImageUrl) {
+        if (model === 'nano-banana') {
+          generateOptions.referenceImageUrls = [requestReferenceImageUrl];
+        } else if (useImg2Img) {
+          generateOptions.referenceImageUrl = requestReferenceImageUrl;
+          generateOptions.strength = 0.6;
+        }
+      }
+
+      const generatedImage = await generateImage(prompt, generateOptions);
+      console.log('✅ Image generated from custom prompt:', generatedImage.url);
+
+      // Upload to Cloudinary if configured
+      let finalImageUrl = generatedImage.url;
+      let imageWidth = 1024;
+      let imageHeight = 1024;
+      let publicId = '';
+
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+        console.log('📤 Uploading to Cloudinary...');
+        const imageResponse = await fetch(generatedImage.url);
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        
+        publicId = generateStoryAssetId(storySlug, nodeId, 'image');
+        const uploadResult = await uploadImageToCloudinary(
+          imageBuffer,
+          `tts-books/${storySlug}`,
+          publicId,
+          {
+            width: 1024,
+            height: 1024,
+            quality: 'auto',
+          }
+        );
+
+        finalImageUrl = uploadResult.secure_url;
+        imageWidth = uploadResult.width;
+        imageHeight = uploadResult.height;
+        console.log('☁️ Uploaded to Cloudinary:', finalImageUrl);
+      } else {
+        console.log('⚠️ Cloudinary not configured, using generated URL directly');
+      }
+
+      // Update the story node with the new image URL
+      const { error: updateError } = await supabase
+        .from('story_nodes')
+        .update({ 
+          image_url: finalImageUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('story_id', story.id)
+        .eq('node_key', nodeId);
+
+      if (updateError) {
+        console.error('❌ Failed to update story node:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update story node with image URL' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        image: {
+          url: finalImageUrl,
+          public_id: publicId,
+          width: imageWidth,
+          height: imageHeight,
+          model: generatedImage.model,
+          cost: generatedImage.cost,
+          prompt: generatedImage.revised_prompt || prompt,
+        },
+      });
+    }
 
     // Get story ID and title (visual_style is optional)
     const { data: story, error: storyError } = await supabase
@@ -263,11 +419,33 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Handle reference image from request (for custom prompts)
+      // Priority: 1) Direct URL, 2) Node key, 3) Previous node images
+      let requestReferenceImageUrl = referenceImageUrl;
+      if (referenceImageNodeKey && !requestReferenceImageUrl) {
+        try {
+          const { data: refNode } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key')
+            .eq('story_id', story.id)
+            .eq('node_key', referenceImageNodeKey)
+            .not('image_url', 'is', null)
+            .single();
+
+          if (refNode && refNode.image_url) {
+            requestReferenceImageUrl = refNode.image_url;
+            console.log(`🎨 Using reference image from node ${referenceImageNodeKey}`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not find reference node ${referenceImageNodeKey}`);
+        }
+      }
+
       // Use direct URL from request if provided, otherwise use node reference
-      finalReferenceImageUrl = referenceImageUrl || nodeReferenceImageUrl;
-      if (referenceImageUrl) {
-        // Add direct URL to reference images array if provided
-        referenceImageUrls = [referenceImageUrl, ...referenceImageUrls];
+      finalReferenceImageUrl = requestReferenceImageUrl || nodeReferenceImageUrl;
+      if (requestReferenceImageUrl) {
+        // Add direct URL to reference images array if provided (prioritize it)
+        referenceImageUrls = [requestReferenceImageUrl, ...referenceImageUrls];
       }
 
       // For non-nano-banana models, still do style analysis if needed
@@ -340,8 +518,12 @@ export async function POST(request: NextRequest) {
       promptParts.push(`Du er en professionel børnebogsillustratør. Din opgave er at lave det næste billede til næste side i bogen.`);
       
       // Visual style - CRITICAL for consistency
-      if (visualStyle) {
-        promptParts.push(`VISUEL STIL (SKAL FØLGES NOJAGTIGT): ${visualStyle}. Denne stil skal anvendes konsekvent i alle billeder.`);
+      // Always include visual style if it's set in the database (from Story Configuration Hub)
+      if (visualStyle && visualStyle.trim()) {
+        promptParts.push(`VISUEL STIL (SKAL FØLGES NOJAGTIGT): ${visualStyle.trim()}. Denne stil skal anvendes konsekvent i alle billeder.`);
+      } else if (storyVisualStyle && storyVisualStyle.trim()) {
+        // Fallback: use storyVisualStyle directly if visualStyle wasn't set but database has it
+        promptParts.push(`VISUEL STIL (SKAL FØLGES NOJAGTIGT): ${storyVisualStyle.trim()}. Denne stil skal anvendes konsekvent i alle billeder.`);
       }
       
       // Reference images context
