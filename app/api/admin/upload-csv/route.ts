@@ -369,34 +369,56 @@ export async function POST(request: NextRequest) {
     }
 
     // Get list of node_keys from CSV (using deduplicated nodes)
-    const csvNodeKeys = deduplicatedNodes.map(n => n.node_key);
+    // Normalize to strings for comparison to avoid type mismatch issues
+    const csvNodeKeys = new Set(deduplicatedNodes.map(n => String(n.node_key).trim()));
+
+    console.log(`📋 CSV contains ${csvNodeKeys.size} unique node keys`);
+    console.log(`📦 Database has ${existingNodes?.length || 0} existing nodes`);
 
     // Delete nodes that are NOT in the new CSV (like old END3)
     // Also delete any nodes with invalid node_keys (text fragments instead of IDs)
     if (existingNodes && existingNodes.length > 0) {
       const nodesToDelete = existingNodes
         .filter(n => {
+          const existingKey = String(n.node_key).trim();
+          
           // Delete if not in CSV
-          if (!csvNodeKeys.includes(n.node_key)) return true;
+          if (!csvNodeKeys.has(existingKey)) {
+            console.log(`🗑️ Marking for deletion: "${existingKey}" (not in CSV)`);
+            return true;
+          }
           
           // Delete if node_key looks like text content (invalid ID)
-          const key = String(n.node_key);
-          if (key.length > 50 || /[.!?]\s/.test(key)) {
-            console.warn(`🗑️ Deleting invalid node with text-like key: "${key.substring(0, 30)}..."`);
+          if (existingKey.length > 50 || /[.!?]\s/.test(existingKey)) {
+            console.warn(`🗑️ Deleting invalid node with text-like key: "${existingKey.substring(0, 30)}..."`);
             return true;
           }
           
           return false;
         })
-        .map(n => n.node_key);
+        .map(n => String(n.node_key).trim());
       
       if (nodesToDelete.length > 0) {
-        console.log('🗑️ Deleting removed/invalid nodes:', nodesToDelete.join(', '));
-        await supabaseAdmin
-          .from('story_nodes')
-          .delete()
-          .eq('story_id', storyId)
-          .in('node_key', nodesToDelete);
+        console.log(`🗑️ Deleting ${nodesToDelete.length} removed/invalid nodes:`, nodesToDelete.slice(0, 10).join(', '), nodesToDelete.length > 10 ? `... and ${nodesToDelete.length - 10} more` : '');
+        
+        // Delete in batches to avoid query size limits (PostgreSQL has a limit on IN clause size)
+        const batchSize = 100;
+        for (let i = 0; i < nodesToDelete.length; i += batchSize) {
+          const batch = nodesToDelete.slice(i, i + batchSize);
+          const { error: deleteError } = await supabaseAdmin
+            .from('story_nodes')
+            .delete()
+            .eq('story_id', storyId)
+            .in('node_key', batch);
+          
+          if (deleteError) {
+            console.error(`❌ Error deleting batch ${i / batchSize + 1}:`, deleteError);
+          } else {
+            console.log(`✅ Deleted batch ${i / batchSize + 1} (${batch.length} nodes)`);
+          }
+        }
+      } else {
+        console.log('✅ No nodes to delete - all existing nodes are in the CSV');
       }
     }
 
