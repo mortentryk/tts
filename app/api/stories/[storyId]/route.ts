@@ -166,9 +166,16 @@ export async function GET(
 
     console.log('✅ Story loaded:', story.title, 'with', nodes?.length || 0, 'nodes');
     
+    // Add cache-control headers to prevent stale data
     return NextResponse.json({
       ...story,
       nodes: nodes || []
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
 
   } catch (error: any) {

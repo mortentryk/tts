@@ -64,7 +64,13 @@ export async function GET() {
     );
 
     console.log('✅ Stories processed:', processedStories.length);
-    return NextResponse.json(processedStories);
+    return NextResponse.json(processedStories, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
 
   } catch (error: any) {
     console.error('❌ API error:', error);
