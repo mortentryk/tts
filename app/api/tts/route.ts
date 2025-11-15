@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import crypto from 'crypto';
 import { withRateLimit, getClientIP } from '@/lib/rateLimit';
 import { SITE_URL } from '@/lib/env';
+import { uploadAudioToCloudinary } from '@/lib/cloudinary';
 
 const ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
 
@@ -53,6 +54,95 @@ function setCors(response: NextResponse, request: NextRequest) {
 
 function generateTextHash(text: string): string {
   return crypto.createHash('md5').update(text).digest('hex');
+}
+
+// Helper function to save audio to Cloudinary and update database
+async function saveAudioToCloudinary(
+  audioBuffer: ArrayBuffer,
+  text: string,
+  nodeKey: string,
+  storyId: string
+): Promise<void> {
+  try {
+    // Get story to find slug and id
+    let { data: story, error: storyError } = await supabaseAdmin
+      .from('stories')
+      .select('id, slug')
+      .eq('slug', storyId)
+      .single();
+
+    // If not found by slug, try by id (UUID)
+    if (storyError || !story) {
+      const result = await supabaseAdmin
+        .from('stories')
+        .select('id, slug')
+        .eq('id', storyId)
+        .single();
+      
+      story = result.data;
+      storyError = result.error;
+    }
+
+    if (storyError || !story) {
+      console.warn('⚠️ Story not found, skipping Cloudinary save:', storyError);
+      return;
+    }
+
+    // Get the node to update (including text_md for hash comparison)
+    const { data: node, error: nodeError } = await supabaseAdmin
+      .from('story_nodes')
+      .select('id, text_md, audio_url, text_hash')
+      .eq('story_id', story.id)
+      .eq('node_key', nodeKey)
+      .single();
+
+    if (nodeError || !node) {
+      console.warn('⚠️ Node not found, skipping Cloudinary save:', nodeError);
+      return;
+    }
+
+    // Use node's text_md for hash comparison (to match database)
+    const nodeText = node.text_md || '';
+    const textHash = generateTextHash(nodeText);
+
+    // Check if audio is already up-to-date
+    if (node.text_hash === textHash && node.audio_url) {
+      console.log(`✅ Audio already up-to-date for node ${nodeKey}, skipping upload`);
+      return;
+    }
+
+    // Upload to Cloudinary
+    const storySlug = story.slug || 'general';
+    const cloudinaryFolder = `tts/${storySlug}/audio`;
+    const publicId = `node_${nodeKey}_${textHash.substring(0, 8)}`;
+
+    const uploadResult = await uploadAudioToCloudinary(
+      Buffer.from(audioBuffer),
+      cloudinaryFolder,
+      publicId
+    );
+
+    console.log(`✅ Audio uploaded to Cloudinary: ${uploadResult.secure_url}`);
+
+    // Update database with audio URL and text hash
+    const { error: updateError } = await supabaseAdmin
+      .from('story_nodes')
+      .update({
+        audio_url: uploadResult.secure_url,
+        text_hash: textHash,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', node.id);
+
+    if (updateError) {
+      console.error('❌ Failed to update node with audio URL:', updateError);
+    } else {
+      console.log(`✅ Database updated for node ${nodeKey}`);
+    }
+  } catch (error) {
+    // Don't fail the request if saving to Cloudinary fails
+    console.error('❌ Error saving audio to Cloudinary:', error);
+  }
 }
 
 // Split text into chunks at sentence boundaries, respecting ElevenLabs 5000 char limit
@@ -326,6 +416,11 @@ export async function POST(request: NextRequest) {
         console.log(`🔗 Concatenating ${audioBuffers.length} audio chunks...`);
         const combinedAudio = await concatenateAudioBuffers(audioBuffers);
         
+        // Save to Cloudinary if nodeKey and storyId are provided
+        if (nodeKey && storyId) {
+          await saveAudioToCloudinary(combinedAudio, clean, nodeKey, storyId);
+        }
+        
         const response = new NextResponse(combinedAudio, {
           status: 200,
           headers: {
@@ -365,6 +460,12 @@ export async function POST(request: NextRequest) {
       }
 
       const audioBuffer = await audioResponse.arrayBuffer();
+      
+      // Save to Cloudinary if nodeKey and storyId are provided
+      if (nodeKey && storyId) {
+        await saveAudioToCloudinary(audioBuffer, clean, nodeKey, storyId);
+      }
+      
       const response = new NextResponse(audioBuffer, {
         status: 200,
         headers: {

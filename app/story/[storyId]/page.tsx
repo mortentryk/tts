@@ -77,7 +77,7 @@ function hashText(t: string): string {
 const audioCache = new Map<string, string>(); // key -> objectURL
 
 // Cloud TTS for web — OpenAI only
-async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string, abortControllerRef?: React.MutableRefObject<AbortController | null>): Promise<void> {
+async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string, abortControllerRef?: React.MutableRefObject<AbortController | null>, nodeKey?: string, storyId?: string): Promise<void> {
   if (!text || !text.trim()) return;
 
   // Stop any existing audio first
@@ -269,7 +269,7 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     res = await fetch(SERVER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, provider: 'elevenlabs' }),
+      body: JSON.stringify({ text, provider: 'elevenlabs', nodeKey, storyId }),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -549,7 +549,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         lastTTSFinishTimeRef.current = Date.now();
         // Clear abort controller when TTS completes
         abortControllerRef.current = null;
-      }, passage?.audio, abortControllerRef); // Pass pre-generated audio URL and abort controller ref
+      }, passage?.audio, abortControllerRef, currentId, storyId); // Pass pre-generated audio URL, abort controller ref, nodeKey, and storyId
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
@@ -589,7 +589,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         alert(`TTS Fejl: ${e?.message || "Kunne ikke afspille stemme-fortælling. Prøv venligst igen."}`);
       }
     }
-  }, [passage?.choices, passage?.audio, startVoiceListening, speaking]);
+  }, [passage?.choices, passage?.audio, startVoiceListening, speaking, currentId, storyId]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -1512,7 +1512,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             {passage.choices.map((choice, i) => (
               <button
                 key={i}
-                className="w-full bg-dungeon-surface p-3 sm:p-3.5 rounded-lg border border-dungeon-accent text-center text-white hover:bg-dungeon-accent transition-colors text-sm sm:text-base"
+                className="w-full bg-dungeon-surface p-3 sm:p-3.5 rounded-lg border border-dungeon-accent text-center text-white hover:bg-dungeon-accent transition-colors text-sm sm:text-base break-words whitespace-normal"
                 onClick={() => handleChoice(choice)}
               >
                 {choice.label}
