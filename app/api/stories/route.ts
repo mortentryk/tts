@@ -31,15 +31,21 @@ export async function GET() {
 
     console.log(`✅ Found ${stories.length} published stories`);
 
-    // For each story, try to get the first node image if no cover image exists
+    // For each story, try to get the first node image if no cover image exists or if it's invalid
     const processedStories = await Promise.all(
       stories.map(async (story) => {
-        // If story already has a cover image, return it as is
-        if (story.cover_image_url) {
+        // Validate cover_image_url - must be a valid absolute URL (starts with http:// or https://)
+        const hasValidCoverImage = story.cover_image_url && 
+          typeof story.cover_image_url === 'string' &&
+          story.cover_image_url.trim() !== '' &&
+          (story.cover_image_url.startsWith('http://') || story.cover_image_url.startsWith('https://'));
+        
+        // If story already has a valid cover image, return it as is
+        if (hasValidCoverImage) {
           return story;
         }
 
-        // Otherwise, try to get the first node image
+        // Otherwise, try to get the first node image as fallback
         // Don't use .single() - it throws if no results found
         try {
           const { data: nodes, error: nodeError } = await supabase
@@ -52,7 +58,14 @@ export async function GET() {
 
           // Check if we got any results (don't assume .single() worked)
           if (!nodeError && nodes && nodes.length > 0 && nodes[0]?.image_url) {
-            story.cover_image_url = nodes[0].image_url;
+            const nodeImageUrl = nodes[0].image_url;
+            // Only use node image if it's a valid absolute URL
+            if (nodeImageUrl && (nodeImageUrl.startsWith('http://') || nodeImageUrl.startsWith('https://'))) {
+              story.cover_image_url = nodeImageUrl;
+              console.log(`✅ Using first node image as cover for story ${story.slug}`);
+            } else {
+              console.log(`⚠️ First node image for story ${story.slug} is not a valid URL: ${nodeImageUrl}`);
+            }
           }
         } catch (nodeError) {
           // If no node found or error, just continue without cover image
