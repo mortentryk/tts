@@ -551,6 +551,11 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
       // Role and context setting
       promptParts.push(`Du er en professionel børnebogsillustratør. Din opgave er at lave det næste billede til næste side i bogen.`);
       
+      // Visual style - CRITICAL for consistency
+      if (visualStyle) {
+        promptParts.push(`VISUEL STIL (SKAL FØLGES NOJAGTIGT): ${visualStyle}. Denne stil skal anvendes konsekvent i alle billeder.`);
+      }
+      
       // Reference images context
       if (referenceImageUrls.length > 0) {
         promptParts.push(`Du har ${referenceImageUrls.length} referencebilleder fra tidligere sider. Brug disse til at matche den visuelle stil, farvepaletten, karakterernes udseende og den overordnede æstetik.`);

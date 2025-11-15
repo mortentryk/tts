@@ -373,7 +373,11 @@ export async function POST(request: NextRequest) {
     const csvNodeKeys = new Set(deduplicatedNodes.map(n => String(n.node_key).trim()));
 
     console.log(`📋 CSV contains ${csvNodeKeys.size} unique node keys`);
+    console.log(`📋 Sample CSV keys:`, Array.from(csvNodeKeys).slice(0, 10).join(', '));
     console.log(`📦 Database has ${existingNodes?.length || 0} existing nodes`);
+    if (existingNodes && existingNodes.length > 0) {
+      console.log(`📦 Sample existing keys:`, existingNodes.slice(0, 10).map(n => String(n.node_key).trim()).join(', '));
+    }
 
     // Delete nodes that are NOT in the new CSV (like old END3)
     // Also delete any nodes with invalid node_keys (text fragments instead of IDs)
@@ -401,21 +405,88 @@ export async function POST(request: NextRequest) {
       if (nodesToDelete.length > 0) {
         console.log(`🗑️ Deleting ${nodesToDelete.length} removed/invalid nodes:`, nodesToDelete.slice(0, 10).join(', '), nodesToDelete.length > 10 ? `... and ${nodesToDelete.length - 10} more` : '');
         
+        // First, delete choices for these nodes (foreign key constraint)
+        console.log('🗑️ Deleting choices for nodes to be removed...');
+        const { error: choicesDeleteError } = await supabaseAdmin
+          .from('story_choices')
+          .delete()
+          .eq('story_id', storyId)
+          .in('from_node_key', nodesToDelete);
+        
+        if (choicesDeleteError) {
+          console.warn(`⚠️ Error deleting choices (may not exist):`, choicesDeleteError.message);
+        } else {
+          console.log('✅ Deleted choices for removed nodes');
+        }
+        
         // Delete in batches to avoid query size limits (PostgreSQL has a limit on IN clause size)
         const batchSize = 100;
+        let totalDeleted = 0;
         for (let i = 0; i < nodesToDelete.length; i += batchSize) {
           const batch = nodesToDelete.slice(i, i + batchSize);
-          const { error: deleteError } = await supabaseAdmin
+          const { data: deletedData, error: deleteError } = await supabaseAdmin
             .from('story_nodes')
             .delete()
             .eq('story_id', storyId)
-            .in('node_key', batch);
+            .in('node_key', batch)
+            .select(); // Select to get count of deleted rows
           
           if (deleteError) {
-            console.error(`❌ Error deleting batch ${i / batchSize + 1}:`, deleteError);
+            console.error(`❌ Error deleting batch ${Math.floor(i / batchSize) + 1}:`, deleteError);
+            console.error(`   Batch keys:`, batch.slice(0, 5).join(', '), '...');
           } else {
-            console.log(`✅ Deleted batch ${i / batchSize + 1} (${batch.length} nodes)`);
+            const deletedCount = deletedData?.length || 0;
+            totalDeleted += deletedCount;
+            console.log(`✅ Deleted batch ${Math.floor(i / batchSize) + 1} (${deletedCount} nodes deleted, ${batch.length} attempted)`);
           }
+        }
+        
+        console.log(`📊 Total deleted: ${totalDeleted} out of ${nodesToDelete.length} attempted`);
+        
+        // Verify deletion
+        const { data: remainingNodes, error: verifyError } = await supabaseAdmin
+          .from('story_nodes')
+          .select('node_key')
+          .eq('story_id', storyId)
+          .in('node_key', nodesToDelete);
+        
+        if (verifyError) {
+          console.warn(`⚠️ Could not verify deletion:`, verifyError.message);
+        } else if (remainingNodes && remainingNodes.length > 0) {
+          console.warn(`⚠️ ${remainingNodes.length} nodes still exist after deletion attempt:`, remainingNodes.map(n => n.node_key).slice(0, 5).join(', '));
+          
+          // Fallback: Delete remaining nodes individually (slower but more reliable)
+          console.log('🔄 Attempting individual deletion for remaining nodes...');
+          let individualDeleted = 0;
+          for (const nodeKey of remainingNodes.map(n => n.node_key)) {
+            const { error: individualError } = await supabaseAdmin
+              .from('story_nodes')
+              .delete()
+              .eq('story_id', storyId)
+              .eq('node_key', nodeKey);
+            
+            if (!individualError) {
+              individualDeleted++;
+            }
+          }
+          console.log(`✅ Individually deleted ${individualDeleted} out of ${remainingNodes.length} remaining nodes`);
+          
+          // If still failing, use nuclear option: Delete ALL nodes (they'll be reinserted from CSV)
+          if (individualDeleted < remainingNodes.length) {
+            console.log('⚠️ Some nodes still remain. Using nuclear option: Delete ALL nodes and reinsert from CSV...');
+            const { error: nuclearError } = await supabaseAdmin
+              .from('story_nodes')
+              .delete()
+              .eq('story_id', storyId);
+            
+            if (nuclearError) {
+              console.error(`❌ Nuclear deletion failed:`, nuclearError);
+            } else {
+              console.log('✅ All nodes deleted (will be reinserted from CSV)');
+            }
+          }
+        } else {
+          console.log('✅ Verification: All nodes successfully deleted');
         }
       } else {
         console.log('✅ No nodes to delete - all existing nodes are in the CSV');

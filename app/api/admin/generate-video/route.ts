@@ -32,6 +32,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
+    // Get story's visual style for consistency
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+      console.log(`🎨 Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+    } catch (error) {
+      console.log('⚠️ Note: visual_style column not yet added to database');
+    }
+
     const { data: node } = await supabase
       .from('story_nodes')
       .select('image_url, text_md')
@@ -48,8 +62,8 @@ export async function POST(request: NextRequest) {
 
     console.log('🖼️ Using existing image:', node.image_url);
 
-    // Generate video from the image
-    const generatedVideo = await generateVideoWithReplicate(node.text_md, node.image_url);
+    // Generate video from the image with visual style
+    const generatedVideo = await generateVideoWithReplicate(node.text_md, node.image_url, storyVisualStyle || undefined);
 
     console.log('✅ Video generated:', generatedVideo.url);
 

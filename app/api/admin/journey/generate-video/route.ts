@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
       .select(`
         *,
         stories (
-          slug
+          slug,
+          id
         )
       `)
       .eq('id', journeyId)
@@ -44,12 +45,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get story's visual style for consistency (if journey is linked to a story)
+    let storyVisualStyle = null;
+    const storyData = journey.stories as any;
+    if (storyData?.id) {
+      try {
+        const { data: storyWithStyle } = await supabase
+          .from('stories')
+          .select('visual_style')
+          .eq('id', storyData.id)
+          .single();
+        storyVisualStyle = storyWithStyle?.visual_style;
+        console.log(`🎨 Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+      } catch (error) {
+        console.log('⚠️ Note: visual_style column not yet added to database or story not found');
+      }
+    }
+
     console.log('🖼️ Using existing image:', journey.image_url);
 
-    // Generate video from the image
+    // Generate video from the image with visual style
     const generatedVideo = await generateVideoWithReplicate(
       journey.journey_text,
-      journey.image_url
+      journey.image_url,
+      storyVisualStyle || undefined
     );
 
     console.log('✅ Video generated:', generatedVideo.url);

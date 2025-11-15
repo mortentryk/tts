@@ -36,6 +36,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
+    // Get story's visual style for consistency
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+      console.log(`🎨 Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+    } catch (error) {
+      console.log('⚠️ Note: visual_style column not yet added to database');
+    }
+
     const { data: nodes, error: nodesError } = await supabase
       .from('story_nodes')
       .select('node_key, text_md, image_url, video_url, media_type')
@@ -188,7 +202,7 @@ export async function POST(request: NextRequest) {
             if (!imageUrl) {
               nodeResult.videoError = 'No image available for video generation';
             } else {
-              const generatedVideo = await generateVideoWithReplicate(node.text_md, imageUrl);
+              const generatedVideo = await generateVideoWithReplicate(node.text_md, imageUrl, storyVisualStyle || undefined);
 
               // Upload to Cloudinary
               const videoResponse = await fetch(generatedVideo.url);

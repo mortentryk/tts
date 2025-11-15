@@ -755,7 +755,8 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
  */
 export async function generateVideoWithReplicate(
   prompt: string,
-  imageUrl?: string
+  imageUrl?: string,
+  visualStyle?: string
 ): Promise<{ url: string; cost: number }> {
   try {
     console.log('🎬 Generating video with Replicate:', prompt);
@@ -777,6 +778,13 @@ export async function generateVideoWithReplicate(
       throw new Error('Video generation requires an existing image. Generate an image first, then convert it to video.');
     }
 
+    // Build video prompt with visual style
+    let videoPrompt = prompt;
+    if (visualStyle) {
+      videoPrompt = `${visualStyle}. ${prompt}`;
+      console.log('🎨 Including visual style in video prompt:', visualStyle);
+    }
+    
     // Use Kling v2.1 to animate an image
     console.log('🎬 Calling Replicate API with Kling v2.1, image:', imageUrl);
     
@@ -784,7 +792,7 @@ export async function generateVideoWithReplicate(
     const prediction = await replicate.predictions.create({
       model: "kwaivgi/kling-v2.1",
       input: {
-        prompt: prompt.substring(0, 200), // Use story context for video animation
+        prompt: videoPrompt.substring(0, 200), // Use story context + visual style for video animation
         start_image: imageUrl,
         aspect_ratio: "16:9",
         duration: 5, // 5 second video
