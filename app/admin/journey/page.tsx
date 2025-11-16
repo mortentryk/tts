@@ -8,6 +8,9 @@ interface Story {
   slug: string;
   title: string;
   is_published: boolean;
+  journey_order?: number | null;
+  landmark_type?: string | null;
+  in_journey?: boolean;
 }
 
 interface JourneySegment {
@@ -36,6 +39,18 @@ export default function JourneyTimelineManager() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingSegment, setEditingSegment] = useState<string | null>(null);
   const [expandedSegment, setExpandedSegment] = useState<string | null>(null);
+  const [showJourneyConfig, setShowJourneyConfig] = useState(false);
+  const [editingJourney, setEditingJourney] = useState<string | null>(null);
+  const [journeyData, setJourneyData] = useState<{
+    journey_order: number | null;
+    landmark_type: string;
+    in_journey: boolean;
+  }>({
+    journey_order: null,
+    landmark_type: '',
+    in_journey: false,
+  });
+  const [savingJourney, setSavingJourney] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -331,6 +346,67 @@ export default function JourneyTimelineManager() {
     }
   };
 
+  const handleEditJourney = (story: Story) => {
+    setEditingJourney(story.id);
+    setJourneyData({
+      journey_order: story.journey_order ?? null,
+      landmark_type: story.landmark_type || '',
+      in_journey: story.in_journey || false,
+    });
+  };
+
+  const handleCancelJourneyEdit = () => {
+    setEditingJourney(null);
+    setJourneyData({
+      journey_order: null,
+      landmark_type: '',
+      in_journey: false,
+    });
+  };
+
+  const handleSaveJourney = async (storyId: string) => {
+    setSavingJourney(true);
+    try {
+      const updates: any = {
+        in_journey: journeyData.in_journey,
+      };
+
+      // Only set journey_order if in_journey is true
+      if (journeyData.in_journey) {
+        updates.journey_order = journeyData.journey_order || null;
+        updates.landmark_type = journeyData.landmark_type || null;
+      } else {
+        // If removing from journey, clear the order and landmark
+        updates.journey_order = null;
+        updates.landmark_type = null;
+      }
+
+      const response = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(updates),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert('✅ Journey settings updated successfully!');
+        setEditingJourney(null);
+        loadStories(); // Reload to show updated data
+      } else {
+        alert(data.error || 'Failed to update journey settings');
+      }
+    } catch (error) {
+      console.error('❌ Journey update error:', error);
+      alert('Failed to update journey settings');
+    } finally {
+      setSavingJourney(false);
+    }
+  };
+
   const selectedStoryData = stories.find((s) => s.slug === selectedStory);
   const totalDuration = segments.reduce((sum, s) => sum + s.duration_seconds, 0);
 
@@ -349,6 +425,12 @@ export default function JourneyTimelineManager() {
                 className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
               >
                 ← Back
+            </button>
+            <button
+                onClick={() => setShowJourneyConfig(!showJourneyConfig)}
+                className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
+              >
+                {showJourneyConfig ? '❌ Hide' : '🗺️'} Journey Config
             </button>
             <button
                 onClick={async () => {
@@ -379,6 +461,145 @@ export default function JourneyTimelineManager() {
                 </div>
               ) : (
             <div className="space-y-6">
+              {/* Journey Configuration */}
+              {showJourneyConfig && (
+                <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-6">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                    🗺️ Configure Journey Stories
+                  </h2>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Set which stories appear in the Eventyrrejse. Stories need a journey_order to appear in the journey.
+                  </p>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Story</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">In Journey</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Landmark</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {stories.map((story) => (
+                          <tr key={story.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-4">
+                              <div className="text-sm font-medium text-gray-900">{story.title}</div>
+                              <div className="text-xs text-gray-500">{story.slug}</div>
+                            </td>
+                            <td className="px-4 py-4">
+                              {editingJourney === story.id ? (
+                                <input
+                                  type="checkbox"
+                                  checked={journeyData.in_journey}
+                                  onChange={(e) => setJourneyData({ ...journeyData, in_journey: e.target.checked })}
+                                  className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                                />
+                              ) : (
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                  story.in_journey && story.journey_order !== null
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {story.in_journey && story.journey_order !== null ? 'Yes' : 'No'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4">
+                              {editingJourney === story.id ? (
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={journeyData.journey_order || ''}
+                                  onChange={(e) => setJourneyData({ ...journeyData, journey_order: e.target.value ? parseInt(e.target.value) : null })}
+                                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
+                                  placeholder="Order"
+                                  disabled={!journeyData.in_journey}
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-900">
+                                  {story.journey_order ?? '—'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4">
+                              {editingJourney === story.id ? (
+                                <select
+                                  value={journeyData.landmark_type || ''}
+                                  onChange={(e) => setJourneyData({ ...journeyData, landmark_type: e.target.value })}
+                                  className="w-32 px-2 py-1 border border-gray-300 rounded text-sm text-gray-900"
+                                  disabled={!journeyData.in_journey}
+                                >
+                                  <option value="">Select...</option>
+                                  <option value="tree">🌳 Tree</option>
+                                  <option value="sea">🌊 Sea</option>
+                                  <option value="cave">🕳️ Cave</option>
+                                  <option value="castle">🏰 Castle</option>
+                                  <option value="forest">🌲 Forest</option>
+                                </select>
+                              ) : (
+                                <span className="text-sm text-gray-900">
+                                  {story.landmark_type ? (
+                                    <>
+                                      {story.landmark_type === 'tree' && '🌳'}
+                                      {story.landmark_type === 'sea' && '🌊'}
+                                      {story.landmark_type === 'cave' && '🕳️'}
+                                      {story.landmark_type === 'castle' && '🏰'}
+                                      {story.landmark_type === 'forest' && '🌲'}
+                                      {' '}
+                                      {story.landmark_type}
+                                    </>
+                                  ) : '—'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4">
+                              {editingJourney === story.id ? (
+                                <div className="flex space-x-2">
+                                  <button
+                                    onClick={() => handleSaveJourney(story.id)}
+                                    disabled={savingJourney}
+                                    className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-400"
+                                  >
+                                    {savingJourney ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    onClick={handleCancelJourneyEdit}
+                                    disabled={savingJourney}
+                                    className="px-3 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 disabled:bg-gray-400"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleEditJourney(story)}
+                                  className="px-3 py-1 bg-orange-600 text-white text-xs rounded hover:bg-orange-700"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded">
+                    <h3 className="text-sm font-semibold text-blue-800 mb-2">📝 Instructions:</h3>
+                    <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                      <li>Check "In Journey" to include a story in the Eventyrrejse</li>
+                      <li>Set the "Order" number (1, 2, 3, etc.) to control the sequence</li>
+                      <li>Choose a "Landmark" type to set the icon on the journey map</li>
+                      <li>Stories without a journey_order will NOT appear in the journey</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
               {/* Story Selection */}
                 <div>
                 <label className="block text-lg font-semibold text-gray-900 mb-3">Select Story</label>
