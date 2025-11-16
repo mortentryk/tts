@@ -538,17 +538,45 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     try {
       isTTSRunningRef.current = true;
       setSpeaking(true);
-      await speakViaCloud(text, audioRef, () => {
-        // Auto-start voice listening after TTS completes
+      await speakViaCloud(text, audioRef, async () => {
+        // After main text finishes, read buttons separately if they exist
         if (passage?.choices && passage.choices.length > 0) {
-          startVoiceListening(10000);
+          const choicesText = passage.choices
+            .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
+            .join(' ');
+          const buttonsText = `Valgmuligheder: ${choicesText} Hvad vælger du?`;
+          
+          // Read buttons separately after main text
+          try {
+            await speakViaCloud(buttonsText, audioRef, () => {
+              // Auto-start voice listening after buttons are read
+              startVoiceListening(10000);
+              // Set speaking to false only after buttons TTS actually completes
+              setSpeaking(false);
+              isTTSRunningRef.current = false;
+              lastTTSFinishTimeRef.current = Date.now();
+              // Clear abort controller when TTS completes
+              abortControllerRef.current = null;
+              onDone?.();
+            }, undefined, abortControllerRef, currentId, storyId);
+          } catch (buttonError) {
+            // If button reading fails, still start voice listening and complete
+            console.error('Failed to read buttons:', buttonError);
+            startVoiceListening(10000);
+            setSpeaking(false);
+            isTTSRunningRef.current = false;
+            lastTTSFinishTimeRef.current = Date.now();
+            abortControllerRef.current = null;
+            onDone?.();
+          }
+        } else {
+          // No choices, just complete normally
+          setSpeaking(false);
+          isTTSRunningRef.current = false;
+          lastTTSFinishTimeRef.current = Date.now();
+          abortControllerRef.current = null;
+          onDone?.();
         }
-        // Set speaking to false only after TTS actually completes
-        setSpeaking(false);
-        isTTSRunningRef.current = false;
-        lastTTSFinishTimeRef.current = Date.now();
-        // Clear abort controller when TTS completes
-        abortControllerRef.current = null;
       }, passage?.audio, abortControllerRef, currentId, storyId); // Pass pre-generated audio URL, abort controller ref, nodeKey, and storyId
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
@@ -932,17 +960,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const ttsCooldownRef = useRef(0);
   const COOL_DOWN_MS = 1000; // Reduced from 2500ms to 1000ms for better UX
 
-  // Build narration string including choices so buttons are read aloud
+  // Build narration string - main text only (buttons will be read separately)
   const getNarrationText = useCallback(() => {
     if (!passage?.text) return '';
-    let text = passage.text;
-    if (passage?.choices && passage.choices.length > 0) {
-      const choicesText = passage.choices
-        .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
-        .join(' ');
-      text = `${text} Valgmuligheder: ${choicesText} Hvad vælger du?`;
-    }
-    return text;
+    return passage.text;
   }, [passage]);
 
   const speakCloudThrottled = useCallback(async () => {
