@@ -187,13 +187,16 @@ export async function POST(request: NextRequest) {
 
       // Handle image field - check if it's an asset reference or full URL
       // Only update image if CSV explicitly provides a valid image value
-      if (row.image && row.image.trim()) {
-        if (isAssetReference(row.image)) {
+      // IMPORTANT: If image field is empty, null, or whitespace, leave node.image_url undefined
+      // This ensures existing images are preserved when CSV doesn't provide new ones
+      const imageValue = row.image ? String(row.image).trim() : '';
+      if (imageValue) {
+        if (isAssetReference(imageValue)) {
           // It's an asset reference like "image-1" - store as-is for later processing
-          node.image_url = row.image;
-        } else if (row.image.startsWith('http')) {
+          node.image_url = imageValue;
+        } else if (imageValue.startsWith('http')) {
           // It's a full URL - use directly
-          node.image_url = row.image;
+          node.image_url = imageValue;
         }
         // If image field exists but is invalid, leave undefined so existing image is preserved
       }
@@ -328,19 +331,24 @@ export async function POST(request: NextRequest) {
     );
 
     // Preserve media URLs for nodes that already exist (only if CSV doesn't specify new ones)
+    // This is critical: if CSV doesn't provide an image URL, keep the existing one
     nodes.forEach(node => {
       const existingMedia = existingMediaMap.get(node.node_key);
       if (existingMedia) {
         // Keep existing media unless CSV explicitly provides new URLs
-        if (!node.image_url && existingMedia.image_url) {
+        // Check for undefined, null, or empty string to ensure we preserve existing images
+        const hasImageUrl = node.image_url && String(node.image_url).trim() !== '';
+        if (!hasImageUrl && existingMedia.image_url && String(existingMedia.image_url).trim() !== '') {
           node.image_url = existingMedia.image_url;
-          console.log(`✅ Preserving image for node ${node.node_key}`);
+          console.log(`✅ Preserving image for node ${node.node_key}: ${existingMedia.image_url.substring(0, 60)}...`);
         }
-        if (!node.video_url && existingMedia.video_url) {
+        const hasVideoUrl = node.video_url && String(node.video_url).trim() !== '';
+        if (!hasVideoUrl && existingMedia.video_url && String(existingMedia.video_url).trim() !== '') {
           node.video_url = existingMedia.video_url;
           console.log(`✅ Preserving video for node ${node.node_key}`);
         }
-        if (!node.audio_url && existingMedia.audio_url) {
+        const hasAudioUrl = node.audio_url && String(node.audio_url).trim() !== '';
+        if (!hasAudioUrl && existingMedia.audio_url && String(existingMedia.audio_url).trim() !== '') {
           node.audio_url = existingMedia.audio_url;
           console.log(`✅ Preserving audio for node ${node.node_key}`);
         }
@@ -494,18 +502,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert nodes (update existing, insert new)
-    // Remove null/undefined values for media fields to prevent overwriting existing data
+    // Remove null/undefined/empty values for media fields to prevent overwriting existing data
     const nodesToUpsert = deduplicatedNodes.map(node => {
       const cleanedNode: any = { ...node };
-      // Only include image_url if it's actually set (not null/undefined)
+      // Only include image_url if it's actually set (not null/undefined/empty string)
       // This prevents overwriting existing images when CSV doesn't provide one
-      if (cleanedNode.image_url === null || cleanedNode.image_url === undefined) {
+      if (!cleanedNode.image_url || cleanedNode.image_url === null || cleanedNode.image_url === undefined || cleanedNode.image_url.trim() === '') {
         delete cleanedNode.image_url;
       }
-      if (cleanedNode.video_url === null || cleanedNode.video_url === undefined) {
+      if (!cleanedNode.video_url || cleanedNode.video_url === null || cleanedNode.video_url === undefined || cleanedNode.video_url.trim() === '') {
         delete cleanedNode.video_url;
       }
-      if (cleanedNode.audio_url === null || cleanedNode.audio_url === undefined) {
+      if (!cleanedNode.audio_url || cleanedNode.audio_url === null || cleanedNode.audio_url === undefined || cleanedNode.audio_url.trim() === '') {
         delete cleanedNode.audio_url;
       }
       return cleanedNode;
