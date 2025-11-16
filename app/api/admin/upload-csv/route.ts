@@ -507,13 +507,13 @@ export async function POST(request: NextRequest) {
       const cleanedNode: any = { ...node };
       // Only include image_url if it's actually set (not null/undefined/empty string)
       // This prevents overwriting existing images when CSV doesn't provide one
-      if (!cleanedNode.image_url || cleanedNode.image_url === null || cleanedNode.image_url === undefined || cleanedNode.image_url.trim() === '') {
+      if (!cleanedNode.image_url || cleanedNode.image_url === null || cleanedNode.image_url === undefined || (typeof cleanedNode.image_url === 'string' && cleanedNode.image_url.trim() === '')) {
         delete cleanedNode.image_url;
       }
-      if (!cleanedNode.video_url || cleanedNode.video_url === null || cleanedNode.video_url === undefined || cleanedNode.video_url.trim() === '') {
+      if (!cleanedNode.video_url || cleanedNode.video_url === null || cleanedNode.video_url === undefined || (typeof cleanedNode.video_url === 'string' && cleanedNode.video_url.trim() === '')) {
         delete cleanedNode.video_url;
       }
-      if (!cleanedNode.audio_url || cleanedNode.audio_url === null || cleanedNode.audio_url === undefined || cleanedNode.audio_url.trim() === '') {
+      if (!cleanedNode.audio_url || cleanedNode.audio_url === null || cleanedNode.audio_url === undefined || (typeof cleanedNode.audio_url === 'string' && cleanedNode.audio_url.trim() === '')) {
         delete cleanedNode.audio_url;
       }
       return cleanedNode;
