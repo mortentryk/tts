@@ -5,7 +5,7 @@
 'use client';
 
 import { createClient } from './supabaseClient';
-import type { User } from '@supabase/supabase-js';
+import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 export interface AuthUser {
   id: string;
@@ -118,7 +118,7 @@ export async function signOut() {
 export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
   const supabase = createClient();
   
-  const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+  const { data } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
     if (session?.user?.email) {
       const authUser: AuthUser = {
         id: session.user.id,
