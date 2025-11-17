@@ -2,7 +2,7 @@
  * Server-side authentication utilities
  * Gets user from Supabase Auth session
  */
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
@@ -19,7 +19,7 @@ export async function getServerUser() {
     const url = SUPABASE_URL || LEGACY_SUPABASE_URL;
     const key = SUPABASE_ANON_KEY || LEGACY_SUPABASE_ANON_KEY;
 
-    const supabase = createClient(url, key, {
+    const supabase = createServerClient(url, key, {
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;
