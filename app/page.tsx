@@ -373,12 +373,21 @@ export default function Home() {
             {/* Monthly Subscription */}
             {subscriptionPlans.find((p: any) => p.interval === 'month' && !p.is_lifetime) && (() => {
               const monthlyPlan = subscriptionPlans.find((p: any) => p.interval === 'month' && !p.is_lifetime);
+              const regularPrice = monthlyPlan.regular_price ? Number(monthlyPlan.regular_price) : null;
+              const offerPrice = Number(monthlyPlan.price); // Offer price from database
               return (
                 <div className="bg-gradient-to-br from-yellow-600 to-orange-600 p-8 rounded-lg border-2 border-yellow-400">
                   <div className="text-center">
                     <div className="text-sm font-bold mb-2 text-yellow-200">POPULÆRT</div>
                     <h3 className="text-2xl font-bold mb-4">Fuld Adgang</h3>
-                    <div className="text-4xl font-bold mb-2">${Number(monthlyPlan.price).toFixed(2)}</div>
+                    <div className="mb-2">
+                      <div className="text-4xl font-bold">{offerPrice.toFixed(0)} kr.</div>
+                      {regularPrice && regularPrice > offerPrice && (
+                        <div className="text-lg text-gray-200 line-through mt-1">
+                          {regularPrice.toFixed(0)} kr.
+                        </div>
+                      )}
+                    </div>
                     <div className="text-gray-100 mb-6">per måned</div>
                     <ul className="text-left space-y-3 mb-8">
                       <li>✅ Alle historier låst op</li>
