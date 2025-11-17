@@ -64,11 +64,16 @@ export async function POST(request: NextRequest) {
 
     console.log('🖼️ Using existing image:', journey.image_url);
 
-    // Generate video from the image with visual style
+    // Build video prompt with visual style (journeys use simpler prompts than story nodes)
+    let videoPrompt = journey.journey_text || '';
+    if (storyVisualStyle) {
+      videoPrompt = `${storyVisualStyle}. ${videoPrompt}`;
+    }
+
+    // Generate video from the image
     const generatedVideo = await generateVideoWithReplicate(
-      journey.journey_text,
-      journey.image_url,
-      storyVisualStyle || undefined
+      videoPrompt,
+      journey.image_url
     );
 
     console.log('✅ Video generated:', generatedVideo.url);

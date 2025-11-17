@@ -281,8 +281,49 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Generate video from image with visual style
-      const generatedVideo = await generateVideoWithReplicate(node.text_md, imageUrl, storyVisualStyle || undefined);
+      // Get character assignments for video (same as image for consistency)
+      const { data: characterAssignments } = await supabase
+        .from('character_assignments')
+        .select(`
+          role,
+          emotion,
+          action,
+          characters (
+            id,
+            name,
+            description,
+            appearance_prompt
+          )
+        `)
+        .eq('story_id', story.id)
+        .eq('node_key', nodeId);
+
+      const nodeCharacters = characterAssignments?.map(assignment => {
+        const character = assignment.characters as any;
+        return {
+          name: character?.name || '',
+          description: character?.description || '',
+          appearancePrompt: character?.appearance_prompt || '',
+          role: assignment.role,
+          emotion: assignment.emotion,
+          action: assignment.action,
+        };
+      }) || [];
+
+      // Use the same visual style as images
+      const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+
+      // Create the same structured prompt as images for consistency
+      const videoPrompt = createStoryImagePrompt(
+        node.text_md, 
+        story.title, 
+        visualStyle, 
+        nodeCharacters, 
+        imageUrl || undefined // Use the image as reference for style consistency
+      );
+
+      // Generate video from image using the same structured prompt as images
+      const generatedVideo = await generateVideoWithReplicate(videoPrompt, imageUrl);
 
       // Upload to Cloudinary
       const videoResponse = await fetch(generatedVideo.url);

@@ -202,7 +202,16 @@ export async function POST(request: NextRequest) {
             if (!imageUrl) {
               nodeResult.videoError = 'No image available for video generation';
             } else {
-              const generatedVideo = await generateVideoWithReplicate(node.text_md, imageUrl, storyVisualStyle || undefined);
+              // Use the same structured prompt as images for consistency
+              const videoPrompt = createStoryImagePrompt(
+                node.text_md, 
+                story.title, 
+                style, 
+                nodeCharacters,
+                imageUrl // Use the image as reference for style consistency
+              );
+              
+              const generatedVideo = await generateVideoWithReplicate(videoPrompt, imageUrl);
 
               // Upload to Cloudinary
               const videoResponse = await fetch(generatedVideo.url);

@@ -752,14 +752,15 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
 
 /**
  * Generate a video using Replicate
+ * @param prompt - Full structured prompt (should use createStoryImagePrompt for consistency with images)
+ * @param imageUrl - The image to animate
  */
 export async function generateVideoWithReplicate(
   prompt: string,
-  imageUrl?: string,
-  visualStyle?: string
+  imageUrl?: string
 ): Promise<{ url: string; cost: number }> {
   try {
-    console.log('🎬 Generating video with Replicate:', prompt);
+    console.log('🎬 Generating video with Replicate');
     
     // Check if API token is set
     if (!process.env.REPLICATE_API_TOKEN) {
@@ -778,21 +779,18 @@ export async function generateVideoWithReplicate(
       throw new Error('Video generation requires an existing image. Generate an image first, then convert it to video.');
     }
 
-    // Build video prompt with visual style
-    let videoPrompt = prompt;
-    if (visualStyle) {
-      videoPrompt = `${visualStyle}. ${prompt}`;
-      console.log('🎨 Including visual style in video prompt:', visualStyle);
-    }
+    // Use the full prompt (should already include visual style, characters, scene description from createStoryImagePrompt)
+    const videoPrompt = prompt;
     
-    // Use Kling v2.1 to animate an image
-    console.log('🎬 Calling Replicate API with Kling v2.1, image:', imageUrl);
+    // Use Kling v2.5 Turbo Pro to animate an image
+    console.log('🎬 Calling Replicate API with Kling v2.5 Turbo Pro, image:', imageUrl);
+    console.log('📝 Full video prompt length:', videoPrompt.length, 'characters');
     
     // Create and wait for the prediction
     const prediction = await replicate.predictions.create({
-      model: "kwaivgi/kling-v2.1",
+      model: "kwaivgi/kling-v2.5-turbo-pro",
       input: {
-        prompt: videoPrompt.substring(0, 200), // Use story context + visual style for video animation
+        prompt: videoPrompt, // Use full story context + visual style for video animation
         start_image: imageUrl,
         aspect_ratio: "16:9",
         duration: 5, // 5 second video

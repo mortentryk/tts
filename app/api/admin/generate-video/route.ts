@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
+import { generateVideoWithReplicate, createStoryImagePrompt } from '../../../../lib/aiImageGenerator';
 import { uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -62,8 +62,56 @@ export async function POST(request: NextRequest) {
 
     console.log('🖼️ Using existing image:', node.image_url);
 
-    // Generate video from the image with visual style
-    const generatedVideo = await generateVideoWithReplicate(node.text_md, node.image_url, storyVisualStyle || undefined);
+    // Get character assignments for video (same as image for consistency)
+    const { data: characterAssignments } = await supabase
+      .from('character_assignments')
+      .select(`
+        role,
+        emotion,
+        action,
+        characters (
+          id,
+          name,
+          description,
+          appearance_prompt
+        )
+      `)
+      .eq('story_id', story.id)
+      .eq('node_key', nodeId);
+
+    const nodeCharacters = characterAssignments?.map(assignment => {
+      const character = assignment.characters as any;
+      return {
+        name: character?.name || '',
+        description: character?.description || '',
+        appearancePrompt: character?.appearance_prompt || '',
+        role: assignment.role,
+        emotion: assignment.emotion,
+        action: assignment.action,
+      };
+    }) || [];
+
+    // Get story title
+    const { data: storyWithTitle } = await supabase
+      .from('stories')
+      .select('title')
+      .eq('id', story.id)
+      .single();
+
+    // Use the same visual style as images
+    const visualStyle = storyVisualStyle || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+
+    // Create the same structured prompt as images for consistency
+    const videoPrompt = createStoryImagePrompt(
+      node.text_md, 
+      storyWithTitle?.title || '', 
+      visualStyle, 
+      nodeCharacters, 
+      node.image_url // Use the image as reference for style consistency
+    );
+
+    // Generate video from the image using the same structured prompt as images
+    const generatedVideo = await generateVideoWithReplicate(videoPrompt, node.image_url);
 
     console.log('✅ Video generated:', generatedVideo.url);
 
@@ -120,7 +168,7 @@ export async function POST(request: NextRequest) {
         height: uploadResult.height,
         duration: 2.3, // ~14 frames at 6 FPS
         cost: generatedVideo.cost,
-        prompt: node.text_md,
+        prompt: videoPrompt,
       },
     });
 
