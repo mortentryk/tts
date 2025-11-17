@@ -131,7 +131,8 @@ export function onAuthStateChange(callback: (user: AuthUser | null) => void) {
     }
   });
   
-  return data;
+  // Return the subscription object so it can be unsubscribed
+  return data?.subscription;
 }
 
 /**
