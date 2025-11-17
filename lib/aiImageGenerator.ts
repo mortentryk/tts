@@ -749,10 +749,67 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
   return prompt;
 }
 
+/**
+ * Create a story-specific video prompt in Danish (similar to image prompt structure)
+ * This follows the same structure as the nano-banana image prompts for consistency
+ */
+export function createStoryVideoPrompt(
+  storyText: string,
+  storyTitle: string,
+  visualStyle: string,
+  previousNodeText?: string,
+  referenceImageUrls: string[] = []
+): string {
+  // Clean up the story text for better AI processing
+  let cleanStoryText = storyText
+    .replace(/\*\*/g, '') // Remove markdown bold
+    .replace(/\*/g, '') // Remove markdown italic
+    .replace(/#{1,6}\s/g, '') // Remove markdown headers
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert markdown links to plain text
+    .replace(/\n+/g, ' ') // Replace newlines with spaces
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+
+  // Build prompt parts in Danish
+  let promptParts: string[] = [];
+  
+  // Role and context setting
+  promptParts.push(`Du er en professionel børnebog videproducer. Din opgave er at lave billedet i bogen om til en video, så den følger bogen historie og at næste video passer.`);
+  
+  // Visual style - CRITICAL for consistency
+  if (visualStyle && visualStyle.trim()) {
+    promptParts.push(`VISUEL STIL (SKAL FØLGES NOJAGTIGT): ${visualStyle.trim()}. Denne stil skal anvendes konsekvent i alle videoer.`);
+  }
+  
+  // Reference images context
+  if (referenceImageUrls.length > 0) {
+    promptParts.push(`Du har ${referenceImageUrls.length} referencebilleder fra tidligere sider. Brug disse til at matche den visuelle stil, farvepaletten, karakterernes udseende og den overordnede æstetik.`);
+  } else {
+    promptParts.push(`Dette er den første video i bogen.`);
+  }
+  
+  // Story context
+  if (storyTitle) {
+    promptParts.push(`Historien handler om: ${storyTitle}`);
+  }
+  
+  // Previous scenes for continuity
+  if (previousNodeText) {
+    const previousContext = previousNodeText.length > 600 
+      ? previousNodeText.substring(previousNodeText.length - 600) // Last 600 chars (most recent context)
+      : previousNodeText;
+    promptParts.push(`Tidligere scener i historien: ${previousContext}`);
+  }
+  
+  // Current scene - THIS is what to animate
+  promptParts.push(`Nuværende scene til illustration: ${cleanStoryText.trim()}\n\nVigtigt: Dette skal være en NY video, der viser den nuværende scene, ikke en kopi af de tidligere videoer. Brug samme stil og karakterer, men vis det nye, der sker i historien.`);
+  
+  return promptParts.join('\n\n');
+}
 
 /**
  * Generate a video using Replicate
- * @param prompt - Full structured prompt (should use createStoryImagePrompt for consistency with images)
+ * @param prompt - Full structured prompt (should use createStoryVideoPrompt or createStoryImagePrompt for consistency with images)
  * @param imageUrl - The image to animate
  */
 export async function generateVideoWithReplicate(

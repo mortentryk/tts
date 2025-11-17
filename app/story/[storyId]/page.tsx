@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
+import { getUserEmail } from '@/lib/purchaseVerification';
 // import { loadStoryById } from '../../../lib/supabaseStoryManager';
 
 // Speech Recognition types
@@ -659,7 +660,14 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         // Load story metadata
         console.log('📡 Fetching story metadata from:', `/api/stories/${storyId}`);
-        const storyResponse = await fetch(`/api/stories/${storyId}`);
+        const userEmail = getUserEmail();
+        const headers: HeadersInit = {};
+        if (userEmail) {
+          headers['user-email'] = userEmail;
+        }
+        const storyResponse = await fetch(`/api/stories/${storyId}`, {
+          headers
+        });
         
         if (!storyResponse.ok) {
           let errorMessage = 'Story not found';
@@ -697,7 +705,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         // Load first node
         console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
-        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`);
+        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`, {
+          headers: userEmail ? { 'user-email': userEmail } : {}
+        });
         
         if (!nodeResponse.ok) {
           let errorMessage = 'Story content not found';
@@ -844,7 +854,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     try {
       // Load the new node from API
-      const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${id}`);
+      const userEmail = getUserEmail();
+      const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${id}`, {
+        headers: userEmail ? { 'user-email': userEmail } : {}
+      });
       if (!nodeResponse.ok) {
         throw new Error('Node not found');
       }

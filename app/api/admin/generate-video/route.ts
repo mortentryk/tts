@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateVideoWithReplicate, createStoryImagePrompt } from '../../../../lib/aiImageGenerator';
+import { generateVideoWithReplicate, createStoryVideoPrompt } from '../../../../lib/aiImageGenerator';
 import { uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     const { data: node } = await supabase
       .from('story_nodes')
-      .select('image_url, text_md')
+      .select('image_url, text_md, sort_index')
       .eq('story_id', story.id)
       .eq('node_key', nodeId)
       .single();
@@ -62,35 +62,6 @@ export async function POST(request: NextRequest) {
 
     console.log('🖼️ Using existing image:', node.image_url);
 
-    // Get character assignments for video (same as image for consistency)
-    const { data: characterAssignments } = await supabase
-      .from('character_assignments')
-      .select(`
-        role,
-        emotion,
-        action,
-        characters (
-          id,
-          name,
-          description,
-          appearance_prompt
-        )
-      `)
-      .eq('story_id', story.id)
-      .eq('node_key', nodeId);
-
-    const nodeCharacters = characterAssignments?.map(assignment => {
-      const character = assignment.characters as any;
-      return {
-        name: character?.name || '',
-        description: character?.description || '',
-        appearancePrompt: character?.appearance_prompt || '',
-        role: assignment.role,
-        emotion: assignment.emotion,
-        action: assignment.action,
-      };
-    }) || [];
-
     // Get story title
     const { data: storyWithTitle } = await supabase
       .from('stories')
@@ -98,16 +69,49 @@ export async function POST(request: NextRequest) {
       .eq('id', story.id)
       .single();
 
+    // Get previous node text for context (similar to image generation)
+    let previousNodeText = '';
+    let referenceImageUrls: string[] = [];
+    
+    if (node.sort_index && node.sort_index > 1) {
+      // Get the last 3 previous nodes (for better context)
+      const startIndex = Math.max(1, node.sort_index - 3);
+      const { data: previousNodes } = await supabase
+        .from('story_nodes')
+        .select('node_key, text_md, image_url, sort_index')
+        .eq('story_id', story.id)
+        .gte('sort_index', startIndex)
+        .lt('sort_index', node.sort_index)
+        .order('sort_index', { ascending: true });
+
+      if (previousNodes && previousNodes.length > 0) {
+        // Get previous node text
+        const previousNodesText = previousNodes
+          .filter(n => n.text_md)
+          .map(n => n.text_md!);
+        previousNodeText = previousNodesText.join('\n\n');
+        
+        // Get reference images from previous nodes (last 2 nodes with images)
+        referenceImageUrls = previousNodes
+          .filter(n => n.image_url)
+          .map(n => n.image_url!)
+          .slice(-2); // Get last 2 reference images
+        
+        console.log(`📖 Found ${previousNodesText.length} previous node(s) for context`);
+        console.log(`🖼️ Found ${referenceImageUrls.length} reference image(s)`);
+      }
+    }
+
     // Use the same visual style as images
     const visualStyle = storyVisualStyle || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
 
-    // Create the same structured prompt as images for consistency
-    const videoPrompt = createStoryImagePrompt(
+    // Create Danish video prompt (similar to image prompt structure)
+    const videoPrompt = createStoryVideoPrompt(
       node.text_md, 
       storyWithTitle?.title || '', 
-      visualStyle, 
-      nodeCharacters, 
-      node.image_url // Use the image as reference for style consistency
+      visualStyle,
+      previousNodeText || undefined,
+      referenceImageUrls
     );
 
     // Generate video from the image using the same structured prompt as images

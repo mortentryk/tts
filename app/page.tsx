@@ -74,6 +74,16 @@ export default function Home() {
       const response = await fetch('/api/stories');
       if (response.ok) {
         const data = await response.json();
+        console.log('📦 Stories loaded from API:', data);
+        // Debug: Log pricing info for each story
+        data.forEach((story: any) => {
+          console.log(`📖 Story: ${story.title}`, {
+            is_free: story.is_free,
+            price: story.price,
+            stripe_price_id: story.stripe_price_id,
+            willShowAsPaid: !story.is_free && (story.price ?? 0) > 0
+          });
+        });
         setStories(data);
       } else {
         throw new Error('Supabase not available');
@@ -168,8 +178,19 @@ export default function Home() {
     );
   }
 
-  const freeStories = stories.filter(s => s.is_free || (s.price ?? 0) === 0);
-  const paidStories = stories.filter(s => !s.is_free && (s.price ?? 0) > 0);
+  // Filter stories: a story is free if is_free is explicitly true OR price is 0
+  // A story is paid if is_free is explicitly false AND price > 0
+  // Note: is_free defaults to true in database, so must be explicitly set to false
+  const freeStories = stories.filter(s => s.is_free === true || (s.price ?? 0) === 0);
+  const paidStories = stories.filter(s => s.is_free === false && (s.price ?? 0) > 0);
+  
+  console.log('💰 Story filtering:', {
+    total: stories.length,
+    free: freeStories.length,
+    paid: paidStories.length,
+    freeStories: freeStories.map(s => ({ title: s.title, is_free: s.is_free, price: s.price })),
+    paidStories: paidStories.map(s => ({ title: s.title, is_free: s.is_free, price: s.price }))
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900 text-white">
