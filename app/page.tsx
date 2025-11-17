@@ -48,7 +48,7 @@ export default function Home() {
     loadSubscriptionPlans();
 
     // Listen to auth state changes
-    const { data: { subscription } } = onAuthStateChange(async (authUser) => {
+    const subscription = onAuthStateChange(async (authUser) => {
       if (authUser) {
         setUserEmailState(authUser.email);
         setUserId(authUser.id);
@@ -66,7 +66,9 @@ export default function Home() {
     });
 
     return () => {
-      subscription.unsubscribe();
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, []);
 
