@@ -59,15 +59,6 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      // Build query
-      let query = supabaseAdmin
-        .from('stories')
-        .update({
-          price: bulkPrice,
-          is_free: false,
-          updated_at: new Date().toISOString(),
-        });
-
       // If updating stripe_price_id, first clear it from all stories
       if (bulkStripePriceId) {
         await supabaseAdmin
@@ -76,9 +67,21 @@ export async function PUT(request: NextRequest) {
           .eq('stripe_price_id', bulkStripePriceId);
       }
 
+      // Build update data
+      const updateData: any = {
+        price: bulkPrice,
+        is_free: false,
+        updated_at: new Date().toISOString(),
+      };
+
       if (bulkStripePriceId) {
-        query = query.update({ stripe_price_id: bulkStripePriceId });
+        updateData.stripe_price_id = bulkStripePriceId;
       }
+
+      // Build query
+      let query = supabaseAdmin
+        .from('stories')
+        .update(updateData);
 
       if (onlyPublished) {
         query = query.eq('is_published', true);
