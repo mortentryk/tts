@@ -13,10 +13,10 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const redirectTo = searchParams.get('redirect') || '/';
+  const redirectTo = searchParams.get('redirect') || '/library';
 
   useEffect(() => {
-    // Check if already authenticated
+    // Check if already authenticated - redirect to library
     isAuthenticated().then((auth) => {
       if (auth) {
         router.push(redirectTo);

@@ -254,18 +254,26 @@ export default function Home() {
             <InstallPWAButton />
             
             {userId ? (
-              <button
-                onClick={() => {
-                  import('@/lib/authClient').then(({ signOut }) => {
-                    signOut().then(() => {
-                      router.push('/');
+              <>
+                <button
+                  onClick={() => router.push('/library')}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-4 rounded-lg font-semibold transition-colors"
+                >
+                  📚 Min Bibliotek
+                </button>
+                <button
+                  onClick={() => {
+                    import('@/lib/authClient').then(({ signOut }) => {
+                      signOut().then(() => {
+                        router.push('/');
+                      });
                     });
-                  });
-                }}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-4 rounded-lg font-semibold transition-colors"
-              >
-                Log ud
-              </button>
+                  }}
+                  className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-4 rounded-lg font-semibold transition-colors"
+                >
+                  Log ud
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => router.push('/login')}
@@ -303,56 +311,25 @@ export default function Home() {
         </div>
       </section>
 
-      {/* My Library Section - Show purchased books for logged in users */}
-      {userId && (userPurchases.purchasedStories.length > 0 || userPurchases.hasActiveSubscription) && (
+      {/* My Library Section - Link to library page for logged in users */}
+      {userId && (
         <section className="py-12 px-4 bg-gradient-to-b from-yellow-900/20 to-transparent">
-          <div className="max-w-6xl mx-auto">
-            <h2 className="text-3xl font-bold mb-4 text-center">📚 Min Bibliotek</h2>
-            <p className="text-center text-gray-300 mb-8">
+          <div className="max-w-6xl mx-auto text-center">
+            <h2 className="text-3xl font-bold mb-4">📚 Min Bibliotek</h2>
+            <p className="text-gray-300 mb-6">
               {userPurchases.hasActiveSubscription 
                 ? 'Du har fuld adgang til alle historier med dit abonnement!' 
-                : 'Dine købte historier'}
+                : userPurchases.purchasedStories.length > 0
+                ? `Du har ${userPurchases.purchasedStories.length} købte historier`
+                : 'Se dine købte historier og profil'}
             </p>
-            
-            {userPurchases.hasActiveSubscription ? (
-              <div className="text-center mb-8">
-                <div className="inline-block bg-green-600/20 border border-green-500/50 rounded-lg px-6 py-4">
-                  <p className="text-green-300 font-semibold">
-                    ✅ Aktivt Abonnement
-                    {userPurchases.subscriptionPeriodEnd && (
-                      <span className="text-sm text-gray-400 ml-2">
-                        (til {new Date(userPurchases.subscriptionPeriodEnd).toLocaleDateString('da-DK')})
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    Du har adgang til alle historier i biblioteket
-                  </p>
-                </div>
-              </div>
-            ) : null}
-
-            {userPurchases.purchasedStories.length > 0 && (
-              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                {stories
-                  .filter(story => userPurchases.purchasedStories.includes(story.id))
-                  .map((story) => (
-                    <StoryCard
-                      key={story.id}
-                      story={story}
-                      hasAccess={true}
-                      userEmail={userEmail}
-                      onSelect={(story) => router.push(`/story/${story.slug || story.id}`)}
-                    />
-                  ))}
-              </div>
-            )}
-
-            {userPurchases.hasActiveSubscription && !userPurchases.purchasedStories.length && (
-              <div className="text-center text-gray-400">
-                <p>Alle historier er tilgængelige for dig! Scroll ned for at se dem.</p>
-              </div>
-            )}
+            <button
+              onClick={() => router.push('/library')}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors inline-flex items-center gap-2"
+            >
+              <span>📚</span>
+              <span>Gå til Bibliotek</span>
+            </button>
           </div>
         </section>
       )}
@@ -414,7 +391,7 @@ export default function Home() {
             <div className="bg-white/10 backdrop-blur-sm p-8 rounded-lg border-2 border-yellow-500">
               <div className="text-center">
                 <h3 className="text-2xl font-bold mb-4">Enkelt Historier</h3>
-                <div className="text-4xl font-bold mb-2">$2.99</div>
+                <div className="text-4xl font-bold mb-2">19 kr.</div>
                 <div className="text-gray-300 mb-6">per historie</div>
                 <ul className="text-left space-y-3 mb-8">
                   <li>✅ Livstidsadgang</li>
@@ -484,7 +461,7 @@ export default function Home() {
                   <div className="text-center">
                     <div className="text-sm font-bold mb-2 text-purple-200">BEDSTE VÆRDI</div>
                     <h3 className="text-2xl font-bold mb-4">Livstidsadgang</h3>
-                    <div className="text-4xl font-bold mb-2">${Number(lifetimePlan.price).toFixed(2)}</div>
+                    <div className="text-4xl font-bold mb-2">{Number(lifetimePlan.price).toFixed(0)} kr.</div>
                     <div className="text-gray-100 mb-6">engangsbetaling</div>
                     <ul className="text-left space-y-3 mb-8">
                       <li>✅ Alle historier låst op for evigt</li>
@@ -626,7 +603,7 @@ function StoryCard({ story, hasAccess, userEmail, onSelect }: StoryCardProps) {
 
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm text-gray-400">
-            {story.is_free ? '🆓 GRATIS' : `$${Number(story.price || 0).toFixed(2)}`}
+            {story.is_free ? '🆓 GRATIS' : `${Number(story.price || 0).toFixed(0)} kr.`}
           </span>
           <span className="px-3 py-1 rounded-full text-xs bg-yellow-900 text-yellow-300">
             MEDIUM
