@@ -7,6 +7,7 @@ import PurchaseButton from '../components/PurchaseButton';
 import EmailCaptureDialog from '../components/EmailCaptureDialog';
 import InstallPWAButton from '../components/InstallPWAButton';
 import { getUserEmail, getUserPurchases, setUserEmail } from '@/lib/purchaseVerification';
+import { getCurrentUser, onAuthStateChange } from '@/lib/authClient';
 import type { SupabaseStory } from '@/lib/supabaseStoryManager';
 
 // Extended story type for UI with additional fields
@@ -20,6 +21,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [showJourney, setShowJourney] = useState(false);
   const [userEmail, setUserEmailState] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [userPurchases, setUserPurchases] = useState({
     purchasedStories: [] as string[],
     hasActiveSubscription: false,
@@ -44,6 +46,28 @@ export default function Home() {
     loadStories();
     loadUserData();
     loadSubscriptionPlans();
+
+    // Listen to auth state changes
+    const { data: { subscription } } = onAuthStateChange(async (authUser) => {
+      if (authUser) {
+        setUserEmailState(authUser.email);
+        setUserId(authUser.id);
+        const purchases = await getUserPurchases(authUser.email, authUser.id);
+        setUserPurchases(purchases);
+      } else {
+        setUserEmailState(null);
+        setUserId(null);
+        setUserPurchases({
+          purchasedStories: [],
+          hasActiveSubscription: false,
+          subscriptionPeriodEnd: null,
+        });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const loadSubscriptionPlans = async () => {
@@ -59,12 +83,24 @@ export default function Home() {
   };
 
   const loadUserData = async () => {
-    const email = getUserEmail();
-    setUserEmailState(email);
-
-    if (email) {
-      const purchases = await getUserPurchases(email);
+    // Try to get authenticated user first
+    const authUser = await getCurrentUser();
+    
+    if (authUser) {
+      setUserEmailState(authUser.email);
+      setUserId(authUser.id);
+      const purchases = await getUserPurchases(authUser.email, authUser.id);
       setUserPurchases(purchases);
+    } else {
+      // Fallback to legacy localStorage email
+      const email = getUserEmail();
+      setUserEmailState(email);
+      setUserId(null);
+
+      if (email) {
+        const purchases = await getUserPurchases(email);
+        setUserPurchases(purchases);
+      }
     }
   };
 
@@ -214,6 +250,28 @@ export default function Home() {
             </button>
             
             <InstallPWAButton />
+            
+            {userId ? (
+              <button
+                onClick={() => {
+                  import('@/lib/authClient').then(({ signOut }) => {
+                    signOut().then(() => {
+                      router.push('/');
+                    });
+                  });
+                }}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-4 rounded-lg font-semibold transition-colors"
+              >
+                Log ud
+              </button>
+            ) : (
+              <button
+                onClick={() => router.push('/login')}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-lg font-semibold transition-colors"
+              >
+                Log ind
+              </button>
+            )}
             
             {userPurchases.hasActiveSubscription && (
               <div className="bg-green-600 px-6 py-4 rounded-lg font-semibold">

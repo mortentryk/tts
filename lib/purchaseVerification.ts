@@ -7,27 +7,44 @@ import type { SupabaseStory } from './supabaseStoryManager';
  * 1. Story is free (is_free = true)
  * 2. User has purchased the story individually
  * 3. User has an active subscription
+ * 
+ * @param userEmail - User email (for backward compatibility) or null
+ * @param userId - User ID from Supabase Auth (preferred)
  */
 export async function canUserAccessStory(
   userEmail: string | null,
-  story: Pick<SupabaseStory, 'id' | 'is_free'> & { is_free?: boolean }
+  story: Pick<SupabaseStory, 'id' | 'is_free'> & { is_free?: boolean },
+  userId?: string | null
 ): Promise<{ hasAccess: boolean; reason: 'free' | 'purchased' | 'subscription' | 'none' }> {
   // If story is free, grant access
   if (story.is_free) {
     return { hasAccess: true, reason: 'free' };
   }
 
-  // If no user email, deny access
-  if (!userEmail) {
+  // If no user identifier, deny access
+  if (!userEmail && !userId) {
     return { hasAccess: false, reason: 'none' };
   }
 
-  // Get or create user
-  const { data: user } = await supabaseAdmin
-    .from('users')
-    .select('id, subscription_status, subscription_period_end')
-    .eq('email', userEmail)
-    .single();
+  // Get user - prefer userId (from auth) over email (legacy)
+  let user;
+  if (userId) {
+    // Use auth_user_id to find the user record
+    const { data } = await supabaseAdmin
+      .from('users')
+      .select('id, subscription_status, subscription_period_end')
+      .eq('auth_user_id', userId)
+      .single();
+    user = data;
+  } else if (userEmail) {
+    // Fallback to email lookup (legacy)
+    const { data } = await supabaseAdmin
+      .from('users')
+      .select('id, subscription_status, subscription_period_end')
+      .eq('email', userEmail)
+      .single();
+    user = data;
+  }
 
   if (!user) {
     return { hasAccess: false, reason: 'none' };
@@ -79,9 +96,12 @@ export async function canUserAccessStory(
 
 /**
  * Get user's purchased stories and subscription status
+ * 
+ * @param userEmail - User email (for backward compatibility) or null
+ * @param userId - User ID from Supabase Auth (preferred)
  */
-export async function getUserPurchases(userEmail: string | null) {
-  if (!userEmail) {
+export async function getUserPurchases(userEmail: string | null, userId?: string | null) {
+  if (!userEmail && !userId) {
     return {
       purchasedStories: [],
       hasActiveSubscription: false,
@@ -89,11 +109,25 @@ export async function getUserPurchases(userEmail: string | null) {
     };
   }
 
-  const { data: user } = await supabaseAdmin
-    .from('users')
-    .select('id, subscription_status, subscription_period_end')
-    .eq('email', userEmail)
-    .single();
+  // Get user - prefer userId (from auth) over email (legacy)
+  let user;
+  if (userId) {
+    // Use auth_user_id to find the user record
+    const { data } = await supabaseAdmin
+      .from('users')
+      .select('id, subscription_status, subscription_period_end')
+      .eq('auth_user_id', userId)
+      .single();
+    user = data;
+  } else if (userEmail) {
+    // Fallback to email lookup (legacy)
+    const { data } = await supabaseAdmin
+      .from('users')
+      .select('id, subscription_status, subscription_period_end')
+      .eq('email', userEmail)
+      .single();
+    user = data;
+  }
 
   if (!user) {
     return {
@@ -145,8 +179,8 @@ export async function getUserPurchases(userEmail: string | null) {
 }
 
 /**
- * Get user's email from token/localStorage
- * This is a simple implementation - in production, use JWT or similar
+ * Get user's email from token/localStorage (LEGACY - for backward compatibility)
+ * @deprecated Use getCurrentUser from @/lib/authClient instead
  */
 export function getUserEmail(): string | null {
   if (typeof window === 'undefined') return null;
@@ -164,7 +198,8 @@ export function getUserEmail(): string | null {
 }
 
 /**
- * Set user email in localStorage
+ * Set user email in localStorage (LEGACY - for backward compatibility)
+ * @deprecated This is only used for guest checkout flow
  */
 export function setUserEmail(email: string): void {
   if (typeof window === 'undefined') return;
