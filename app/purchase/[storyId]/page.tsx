@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
 export default function PurchasePage() {
@@ -12,24 +12,27 @@ export default function PurchasePage() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadStory();
-  }, []);
-
-  const loadStory = async () => {
+  const loadStory = useCallback(async () => {
     try {
-      const response = await fetch(`/api/stories/${params.storyId}`);
+      // Use purchase-specific endpoint that works with IDs and doesn't require published status
+      const response = await fetch(`/api/stories/${params.storyId}/purchase`);
       if (!response.ok) {
-        throw new Error('Historie ikke fundet');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Historie ikke fundet');
       }
       const data = await response.json();
       setStory(data);
-    } catch (error) {
-      setError('Historie ikke fundet');
+    } catch (error: any) {
+      console.error('Error loading story for purchase:', error);
+      setError(error.message || 'Historie ikke fundet');
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.storyId]);
+
+  useEffect(() => {
+    loadStory();
+  }, [loadStory]);
 
   const handlePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,7 +112,7 @@ export default function PurchasePage() {
 
           <div className="mb-6">
             <p className="text-4xl font-bold text-yellow-500">
-              ${Number(story.price).toFixed(2)}
+              {Number(story.price).toFixed(0)} kr.
             </p>
             <p className="text-gray-400 text-sm mt-1">Engangsbetaling</p>
           </div>
@@ -150,7 +153,7 @@ export default function PurchasePage() {
               disabled={processing || !email}
               className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 rounded-lg transition-colors"
             >
-              {processing ? 'Behandler...' : `Køb for $${Number(story.price).toFixed(2)}`}
+              {processing ? 'Behandler...' : `Køb for ${Number(story.price).toFixed(0)} kr.`}
             </button>
           </form>
 

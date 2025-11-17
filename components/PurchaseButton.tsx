@@ -73,7 +73,7 @@ export default function PurchaseButton({ story, hasAccess, userEmail }: Purchase
         ) : (story.is_free ?? false) ? (
           '▶️ Spil Gratis'
         ) : (
-          `🔒 Køb for $${Number(story.price ?? 0).toFixed(2)}`
+          `🔒 Køb for ${Number(story.price ?? 0).toFixed(0)} kr.`
         )}
       </button>
 
