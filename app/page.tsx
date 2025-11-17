@@ -303,6 +303,60 @@ export default function Home() {
         </div>
       </section>
 
+      {/* My Library Section - Show purchased books for logged in users */}
+      {userId && (userPurchases.purchasedStories.length > 0 || userPurchases.hasActiveSubscription) && (
+        <section className="py-12 px-4 bg-gradient-to-b from-yellow-900/20 to-transparent">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-4 text-center">📚 Min Bibliotek</h2>
+            <p className="text-center text-gray-300 mb-8">
+              {userPurchases.hasActiveSubscription 
+                ? 'Du har fuld adgang til alle historier med dit abonnement!' 
+                : 'Dine købte historier'}
+            </p>
+            
+            {userPurchases.hasActiveSubscription ? (
+              <div className="text-center mb-8">
+                <div className="inline-block bg-green-600/20 border border-green-500/50 rounded-lg px-6 py-4">
+                  <p className="text-green-300 font-semibold">
+                    ✅ Aktivt Abonnement
+                    {userPurchases.subscriptionPeriodEnd && (
+                      <span className="text-sm text-gray-400 ml-2">
+                        (til {new Date(userPurchases.subscriptionPeriodEnd).toLocaleDateString('da-DK')})
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Du har adgang til alle historier i biblioteket
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            {userPurchases.purchasedStories.length > 0 && (
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {stories
+                  .filter(story => userPurchases.purchasedStories.includes(story.id))
+                  .map((story) => (
+                    <StoryCard
+                      key={story.id}
+                      story={story}
+                      hasAccess={true}
+                      userEmail={userEmail}
+                      onSelect={(story) => router.push(`/story/${story.slug || story.id}`)}
+                    />
+                  ))}
+              </div>
+            )}
+
+            {userPurchases.hasActiveSubscription && !userPurchases.purchasedStories.length && (
+              <div className="text-center text-gray-400">
+                <p>Alle historier er tilgængelige for dig! Scroll ned for at se dem.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Free Stories Section */}
       {freeStories.length > 0 && (
         <section className="py-12 px-4 bg-black/30">
