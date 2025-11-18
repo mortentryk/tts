@@ -25,7 +25,10 @@
       "maxDuration": 300
     },
     "app/api/admin/generate-audio/**": {
-      "maxDuration": 60
+      "maxDuration": 300
+    },
+    "app/api/admin/journey/generate-audio/**": {
+      "maxDuration": 300
     },
     "app/api/tts/**": {
       "maxDuration": 60

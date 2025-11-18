@@ -426,7 +426,17 @@ export default function MediaManager() {
         }),
       });
 
-      const data = await response.json();
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      let data;
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Handle non-JSON responses (e.g., timeout errors)
+        const text = await response.text();
+        throw new Error(text || `Server error: ${response.status} ${response.statusText}`);
+      }
 
       if (response.ok) {
         alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
@@ -438,11 +448,16 @@ export default function MediaManager() {
             : row
         ));
       } else {
-        alert(`❌ Failed to generate audio: ${data.error}`);
+        alert(`❌ Failed to generate audio: ${data.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Generate audio error:', error);
-      alert('❌ Failed to generate audio');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('504') || errorMessage.includes('timeout')) {
+        alert('❌ Request timed out. The audio generation may still be processing. Please try again in a moment.');
+      } else {
+        alert(`❌ Failed to generate audio: ${errorMessage}`);
+      }
     } finally {
       setGeneratingAudio(null);
     }
