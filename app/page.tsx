@@ -244,13 +244,6 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12 items-center">
-            <button
-              onClick={() => setShowJourney(true)}
-              className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-10 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
-            >
-              🗺️ Start Eventyrrejse
-            </button>
-            
             <InstallPWAButton />
             
             {userId ? (
@@ -381,6 +374,20 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      {/* Journey Section */}
+      <section className="py-12 px-4 bg-black/30">
+        <div className="max-w-6xl mx-auto text-center">
+          <h2 className="text-3xl font-bold mb-4">🗺️ Start Eventyrrejse</h2>
+          <p className="text-gray-300 mb-8">Udforsk alle historier i en interaktiv rejse</p>
+          <button
+            onClick={() => setShowJourney(true)}
+            className="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-10 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
+          >
+            🗺️ Start Eventyrrejse
+          </button>
+        </div>
+      </section>
 
       {/* Pricing Section */}
       <section className="py-16 px-4 bg-black/30">
