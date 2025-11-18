@@ -455,6 +455,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listeningSessionRef = useRef<number>(0);
   const voiceMatchedRef = useRef<boolean>(false);
+  const [showControls, setShowControls] = useState(false);
   
   const router = useRouter();
   const passage = story[currentId];
@@ -815,6 +816,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       localStorage.setItem("svt_autoread_v1", autoRead ? "1" : "0");
     } catch {}
   }, [autoRead]);
+
+  // Auto-open controls when speaking starts
+  useEffect(() => {
+    if (speaking && !showControls) {
+      setShowControls(true);
+    }
+  }, [speaking, showControls]);
 
   // --- Dice / checks ---
   const rolledForPassageRef = useRef<string | null>(null);
@@ -1556,105 +1564,123 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         )}
       </div>
 
-      <div className="border-t border-dungeon-border p-3 space-y-3">
-        {/* TTS Controls */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
-          <button 
-            className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors text-sm sm:text-base ${
-              speaking ? 'bg-green-700' : ''
-            }`}
-            onClick={speakCloudThrottled}
-            disabled={speaking}
-          >
-            {speaking ? "🎙️ Afspiller..." : "🎙️ Læs Historie"}
-          </button>
-
-          <button 
-            className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
-            onClick={stopSpeak}
-            disabled={!speaking}
-          >
-            ⏹️ Stop
-          </button>
-        </div>
-
-        {/* Auto Read Toggle */}
-        <div className="flex gap-2 sm:gap-2.5">
+      <div className="border-t border-dungeon-border p-3">
+        {/* Collapsible Controls Dropdown */}
+        <div className="space-y-3">
+          {/* Toggle Button */}
           <button
-            className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
-              autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
-            }`}
-            onClick={handleAutoReadToggle}
-            aria-pressed={autoRead}
-            aria-label={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
-            title={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
+            onClick={() => setShowControls(!showControls)}
+            className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-center font-semibold text-white transition-colors flex items-center justify-center gap-2"
+            aria-expanded={showControls}
           >
-            {autoRead ? '🔁 Auto-læs: Til' : '🔁 Auto-læs: Fra'}
+            <span className="text-lg">{showControls ? '▼' : '▲'}</span>
+            <span>Kontroller</span>
           </button>
-        </div>
 
-        {/* Voice Commands */}
-        <div className="space-y-2">
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
-            <button 
-              className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
-                listening 
-                  ? 'bg-blue-600 hover:bg-blue-700' 
-                  : 'bg-gray-600 hover:bg-gray-700'
-              }`}
-              onClick={() => listening ? stopVoiceListening() : startVoiceListening(10000)}
-            >
-              {listening ? "🎤 Lytter..." : "🎤 Stemningskommandoer"}
-            </button>
-            
-            {speechError && (
-              <div className="flex-1 bg-red-800 p-3 rounded-lg text-center text-sm">
-                {speechError}
+          {/* Controls Panel - Always visible when speaking, otherwise toggleable */}
+          {(showControls || speaking) && (
+            <div className="space-y-3">
+              {/* TTS Controls */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+                <button 
+                  className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors text-sm sm:text-base ${
+                    speaking ? 'bg-green-700' : ''
+                  }`}
+                  onClick={speakCloudThrottled}
+                  disabled={speaking}
+                >
+                  {speaking ? "🎙️ Afspiller..." : "🎙️ Læs Historie"}
+                </button>
+
+                <button 
+                  className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  onClick={stopSpeak}
+                  disabled={!speaking}
+                >
+                  ⏹️ Stop
+                </button>
               </div>
-            )}
-          </div>
-          
-          {/* Speech Recognition Display */}
-          {listening && (
-            <div className="bg-blue-900 p-3 rounded-lg text-center">
-              <div className="text-sm text-blue-200 mb-1">🎤 Lytter efter stemmekommandoer...</div>
-              <div className="text-lg font-mono text-white">
-                {lastTranscript || "Sig en del af knapteksten..."}
+
+              {/* Auto Read Toggle */}
+              <div className="flex gap-2 sm:gap-2.5">
+                <button
+                  className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
+                    autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
+                  }`}
+                  onClick={handleAutoReadToggle}
+                  aria-pressed={autoRead}
+                  aria-label={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
+                  title={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
+                >
+                  {autoRead ? '🔁 Auto-læs: Til' : '🔁 Auto-læs: Fra'}
+                </button>
               </div>
-              <div className="text-xs text-blue-300 mt-1">
-                Tilgængelige kommandoer:
-              </div>
-              <div className="text-xs text-blue-200 mt-1 space-y-1">
-                <div className="text-left mb-2">
-                  <span className="text-blue-400">•</span> <strong>Retninger:</strong> venstre, højre, frem, gå
+
+              {/* Voice Commands */}
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+                  <button 
+                    className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
+                      listening 
+                        ? 'bg-blue-600 hover:bg-blue-700' 
+                        : 'bg-gray-600 hover:bg-gray-700'
+                    }`}
+                    onClick={() => listening ? stopVoiceListening() : startVoiceListening(10000)}
+                  >
+                    {listening ? "🎤 Lytter..." : "🎤 Stemningskommandoer"}
+                  </button>
+                  
+                  {speechError && (
+                    <div className="flex-1 bg-red-800 p-3 rounded-lg text-center text-sm">
+                      {speechError}
+                    </div>
+                  )}
                 </div>
-                <div className="text-left mb-2">
-                  <span className="text-blue-400">•</span> <strong>Tal:</strong> 1, 2, 3... eller en, to, tre, første, anden...
-                </div>
-                {showDiceRollButton && (
-                  <div className="text-left mb-2">
-                    <span className="text-blue-400">•</span> <strong>Terning:</strong> roll, kast, terning, dice
+                
+                {/* Speech Recognition Display */}
+                {listening && (
+                  <div className="bg-blue-900 p-3 rounded-lg text-center">
+                    <div className="text-sm text-blue-200 mb-1">🎤 Lytter efter stemmekommandoer...</div>
+                    <div className="text-lg font-mono text-white">
+                      {lastTranscript || "Sig en del af knapteksten..."}
+                    </div>
+                    <div className="text-xs text-blue-300 mt-1">
+                      Tilgængelige kommandoer:
+                    </div>
+                    <div className="text-xs text-blue-200 mt-1 space-y-1">
+                      <div className="text-left mb-2">
+                        <span className="text-blue-400">•</span> <strong>Retninger:</strong> venstre, højre, frem, gå
+                      </div>
+                      <div className="text-left mb-2">
+                        <span className="text-blue-400">•</span> <strong>Tal:</strong> 1, 2, 3... eller en, to, tre, første, anden...
+                      </div>
+                      {showDiceRollButton && (
+                        <div className="text-left mb-2">
+                          <span className="text-blue-400">•</span> <strong>Terning:</strong> roll, kast, terning, dice
+                        </div>
+                      )}
+                      {passage?.choices?.map((choice, index) => (
+                        <div key={index} className="text-left">
+                          <span className="text-blue-400">•</span> "{choice.label}" 
+                          <span className="text-blue-500 ml-1">(eller sig: {choice.label.toLowerCase().split(' ').filter(w => w.length > 2).slice(0, 2).join(', ')})</span>
+                        </div>
+                      )) || <div>Ingen valg tilgængelige</div>}
+                    </div>
                   </div>
                 )}
-                {passage?.choices?.map((choice, index) => (
-                  <div key={index} className="text-left">
-                    <span className="text-blue-400">•</span> "{choice.label}" 
-                    <span className="text-blue-500 ml-1">(eller sig: {choice.label.toLowerCase().split(' ').filter(w => w.length > 2).slice(0, 2).join(', ')})</span>
-                  </div>
-                )) || <div>Ingen valg tilgængelige</div>}
+              </div>
+
+              {/* Game Controls */}
+              <div className="flex gap-2.5">
+                <button
+                  className="flex-1 bg-dungeon-accent p-3 rounded-lg text-center font-semibold text-white hover:bg-dungeon-accent-active transition-colors"
+                  onClick={resetGame}
+                >
+                  Start Forfra
+                </button>
               </div>
             </div>
           )}
-        </div>
-
-        {/* Game Controls */}
-        <div className="flex gap-2.5">
-          <button
-            className="flex-1 bg-dungeon-accent p-3 rounded-lg text-center font-semibold text-white hover:bg-dungeon-accent-active transition-colors"
-            onClick={resetGame}
-          >
-            Start Forfra
-          </button>
         </div>
       </div>
     </div>
