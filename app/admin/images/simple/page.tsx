@@ -409,7 +409,10 @@ export default function SimpleImageManager() {
       }
 
       if (response.ok) {
-        alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
+        const characters = data.audio?.characters ?? 0;
+        const cost = data.audio?.cost ?? 0;
+        const cached = data.audio?.cached ?? false;
+        alert(`✅ Audio generated!\n${characters} characters\nCost: $${cost.toFixed(4)}\nCached: ${cached ? 'Yes' : 'No'}`);
         
         // Update the row to show audio is available
         setImageRows(prev => prev.map(row => 

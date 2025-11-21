@@ -66,11 +66,18 @@ export async function POST(request: NextRequest) {
     // Check if audio is already up-to-date
     if (node.audio_url && node.text_hash === currentHash) {
       console.log(`✅ Audio already up-to-date for node ${nodeId}`);
+      // Calculate cost and characters for consistency with new generation
+      const characterCount = text.length;
+      const costPerChar = 0.00022; // Approximate for Creator plan
+      const estimatedCost = characterCount * costPerChar;
+      
       return NextResponse.json({
         audio: {
           url: node.audio_url,
           cached: true,
-          message: 'Audio already exists and text unchanged'
+          message: 'Audio already exists and text unchanged',
+          cost: estimatedCost,
+          characters: characterCount
         }
       });
     }
