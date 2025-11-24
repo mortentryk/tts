@@ -120,11 +120,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Other statuses
+    // Other statuses (processing, requires_capture, etc.)
     return NextResponse.json({
       status: paymentIntent.status,
       paymentIntentId: paymentIntent.id,
-      requiresAction: paymentIntent.status === 'requires_action',
       clientSecret: paymentIntent.client_secret,
     });
   } catch (error: any) {
