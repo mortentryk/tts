@@ -210,20 +210,9 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
       // Store the audio element in the ref
       audioRef.current = audio;
       
-      // Clear the ref when audio ends or errors
-      audio.onended = () => { 
-        audioRef.current = null;
-        onComplete?.(); // Call completion callback
-      };
-      
-      audio.onerror = () => {
-        audioRef.current = null;
-        onComplete?.(); // Call completion callback even on error
-      };
-      
       try { 
         await audio.play();
-        // Wait for audio to finish playing
+        // Wait for audio to finish playing - ONLY set handlers here to avoid duplicates
         return new Promise<void>((resolve) => {
           audio.onended = () => {
             audioRef.current = null;
@@ -540,10 +529,27 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     try {
       isTTSRunningRef.current = true;
       setSpeaking(true);
+      
+      // Capture passage state at TTS start to prevent stale closure issues
+      const passageIdAtStart = currentId;
+      const choicesAtStart = passage?.choices ? [...passage.choices] : null;
+      const audioUrlAtStart = passage?.audio;
+      
       await speakViaCloud(text, audioRef, async () => {
+        // Validate passage hasn't changed during TTS playback
+        if (currentId !== passageIdAtStart) {
+          console.warn('⚠️ Passage changed during TTS, skipping button reading');
+          setSpeaking(false);
+          isTTSRunningRef.current = false;
+          lastTTSFinishTimeRef.current = Date.now();
+          abortControllerRef.current = null;
+          onDone?.();
+          return;
+        }
+        
         // After main text finishes, read buttons separately if they exist
-        if (passage?.choices && passage.choices.length > 0) {
-          const choicesText = passage.choices
+        if (choicesAtStart && choicesAtStart.length > 0) {
+          const choicesText = choicesAtStart
             .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
             .join(' ');
           const buttonsText = `Valgmuligheder: ${choicesText} Hvad vælger du?`;
@@ -551,6 +557,17 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           // Read buttons separately after main text
           try {
             await speakViaCloud(buttonsText, audioRef, () => {
+              // Validate passage still hasn't changed during button TTS
+              if (currentId !== passageIdAtStart) {
+                console.warn('⚠️ Passage changed during button TTS');
+                setSpeaking(false);
+                isTTSRunningRef.current = false;
+                lastTTSFinishTimeRef.current = Date.now();
+                abortControllerRef.current = null;
+                onDone?.();
+                return;
+              }
+              
               // Auto-start voice listening after buttons are read
               startVoiceListening(10000);
               // Set speaking to false only after buttons TTS actually completes
@@ -560,7 +577,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               // Clear abort controller when TTS completes
               abortControllerRef.current = null;
               onDone?.();
-            }, undefined, abortControllerRef, currentId, storyId);
+            }, undefined, abortControllerRef, passageIdAtStart, storyId);
           } catch (buttonError) {
             // If button reading fails, still start voice listening and complete
             console.error('Failed to read buttons:', buttonError);
@@ -579,7 +596,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           abortControllerRef.current = null;
           onDone?.();
         }
-      }, passage?.audio, abortControllerRef, currentId, storyId); // Pass pre-generated audio URL, abort controller ref, nodeKey, and storyId
+      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId); // Pass pre-generated audio URL, abort controller ref, nodeKey, and storyId
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
