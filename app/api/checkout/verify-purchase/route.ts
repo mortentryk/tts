@@ -1,14 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyCheckoutSession } from '@/lib/stripe';
+import { verifyCheckoutSession, stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    const { sessionId } = await request.json();
+    const { sessionId, paymentIntentId } = await request.json();
 
+    // Handle payment_intent (from one-click purchases)
+    if (paymentIntentId) {
+      if (!stripe) {
+        return NextResponse.json(
+          { error: 'Stripe is not configured' },
+          { status: 500 }
+        );
+      }
+
+      // Retrieve payment intent from Stripe
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+      if (paymentIntent.status !== 'succeeded') {
+        return NextResponse.json(
+          { error: 'Payment not completed' },
+          { status: 400 }
+        );
+      }
+
+      const { type, storyId, userEmail } = paymentIntent.metadata || {};
+
+      // Get user
+      let { data: user } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('email', userEmail)
+        .single();
+
+      if (!user && userEmail) {
+        const { data: newUser } = await supabaseAdmin
+          .from('users')
+          .insert({ email: userEmail })
+          .select()
+          .single();
+        
+        if (newUser) {
+          user = newUser;
+        }
+      }
+
+      if (!user) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+
+      // Verify purchase was recorded (webhook should have done this)
+      if (type === 'one-time' && storyId) {
+        const { data: purchase } = await supabaseAdmin
+          .from('purchases')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('story_id', storyId)
+          .single();
+
+        if (!purchase) {
+          // Record purchase if webhook hasn't processed it yet
+          await supabaseAdmin.from('purchases').upsert({
+            user_id: user.id,
+            story_id: storyId,
+            stripe_session_id: paymentIntentId,
+            stripe_checkout_session_id: paymentIntentId,
+            amount_paid: paymentIntent.amount / 100,
+          });
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        type,
+        email: userEmail,
+      });
+    }
+
+    // Handle session_id (from regular checkout)
     if (!sessionId) {
       return NextResponse.json(
-        { error: 'Session ID is required' },
+        { error: 'Session ID or Payment Intent ID is required' },
         { status: 400 }
       );
     }

@@ -71,28 +71,105 @@ export default function PurchasePage() {
     setProcessing(true);
 
     try {
-      // Create checkout session
-      const response = await fetch('/api/checkout/create-session', {
+      // Try one-click purchase first (if user has saved payment method)
+      const oneClickResponse = await fetch('/api/checkout/one-click', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          type: 'one-time',
           userEmail: trimmedEmail,
           storyId: story.id,
         }),
       });
 
-      const data = await response.json();
+      const oneClickData = await oneClickResponse.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Kunne ikke oprette betalingssession');
+      // If one-click succeeded immediately
+      if (oneClickData.success) {
+        router.push(`/success?payment_intent=${oneClickData.paymentIntentId}`);
+        return;
       }
 
-      // Redirect to Stripe checkout
-      if (data.url) {
-        window.location.href = data.url;
+      // If requires 3D Secure action
+      if (oneClickData.requiresAction && oneClickData.clientSecret) {
+        // Load Stripe.js
+        const stripeModule = await import('@stripe/stripe-js');
+        const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+        
+        if (!stripePublishableKey) {
+          throw new Error('Stripe publishable key not configured');
+        }
+
+        const stripe = await stripeModule.loadStripe(stripePublishableKey);
+        if (!stripe) {
+          throw new Error('Failed to load Stripe');
+        }
+
+        // Handle 3D Secure authentication
+        const { error: confirmError } = await stripe.confirmCardPayment(
+          oneClickData.clientSecret
+        );
+
+        if (confirmError) {
+          throw new Error(confirmError.message || '3D Secure authentication failed');
+        }
+
+        // Payment succeeded after 3D Secure
+        router.push(`/success?payment_intent=${oneClickData.paymentIntentId}`);
+        return;
+      }
+
+      // If no saved payment method, use regular checkout
+      if (oneClickData.useCheckout) {
+        const response = await fetch('/api/checkout/create-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'one-time',
+            userEmail: trimmedEmail,
+            storyId: story.id,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Kunne ikke oprette betalingssession');
+        }
+
+        // Redirect to Stripe checkout
+        if (data.url) {
+          window.location.href = data.url;
+        }
+        return;
+      }
+
+      // If one-click returned an error, fall back to checkout
+      if (!oneClickResponse.ok) {
+        const response = await fetch('/api/checkout/create-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'one-time',
+            userEmail: trimmedEmail,
+            storyId: story.id,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Kunne ikke oprette betalingssession');
+        }
+
+        if (data.url) {
+          window.location.href = data.url;
+        }
       }
     } catch (error: any) {
       setError(error.message || 'Kunne ikke starte betaling');

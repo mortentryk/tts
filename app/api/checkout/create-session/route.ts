@@ -70,9 +70,13 @@ export async function POST(request: NextRequest) {
       if (plan.is_lifetime || type === 'lifetime') {
         // Create one-time checkout session for lifetime access with proper metadata
         const stripe = (await import('@/lib/stripe')).stripe;
+        const { getOrCreateCustomer } = await import('@/lib/stripe');
         if (!stripe) {
           throw new Error('Stripe is not configured');
         }
+        
+        // Get or create customer to save payment methods
+        const customer = await getOrCreateCustomer(userEmail);
         
         // Normalize URL by adding https:// if protocol is missing
         let siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').trim();
@@ -80,7 +84,7 @@ export async function POST(request: NextRequest) {
           siteUrl = `https://${siteUrl}`;
         }
         session = await stripe.checkout.sessions.create({
-          customer_email: userEmail,
+          customer: customer.id, // Use customer ID to save payment methods
           payment_method_types: ['card'],
           line_items: [
             {
@@ -95,6 +99,10 @@ export async function POST(request: NextRequest) {
             type: 'lifetime',
             planId: planId,
             isLifetime: 'true',
+          },
+          // Save payment method for future one-click purchases
+          payment_intent_data: {
+            setup_future_usage: 'off_session',
           },
         });
       } else {

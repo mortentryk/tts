@@ -16,9 +16,45 @@ function SuccessContent() {
 
   const verifyPurchase = async () => {
     const sessionId = searchParams.get('session_id');
+    const paymentIntentId = searchParams.get('payment_intent');
 
+    // Handle payment_intent (from one-click purchases)
+    if (paymentIntentId) {
+      try {
+        // For one-click purchases, the webhook handles the purchase recording
+        // We just need to verify it succeeded
+        const response = await fetch('/api/checkout/verify-purchase', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ paymentIntentId }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Bekræftelse mislykkedes');
+        }
+
+        // Store user email for future access
+        if (data.email) {
+          setUserEmail(data.email);
+        }
+
+        setVerifying(false);
+        return;
+      } catch (error: any) {
+        console.error('Verification error:', error);
+        setError(error.message || 'Kunne ikke bekræfte køb');
+        setVerifying(false);
+        return;
+      }
+    }
+
+    // Handle session_id (from regular checkout)
     if (!sessionId) {
-      setError('Ingen sessions-ID fundet');
+      setError('Ingen sessions-ID eller payment intent fundet');
       setVerifying(false);
       return;
     }

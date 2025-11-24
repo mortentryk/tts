@@ -50,8 +50,11 @@ export async function createCheckoutSession({
 
   const siteUrl = normalizeUrl(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
 
+  // Get or create customer to save payment methods
+  const customer = await getOrCreateCustomer(userEmail);
+
   const session = await stripe.checkout.sessions.create({
-    customer_email: userEmail,
+    customer: customer.id, // Use customer ID to save payment methods
     payment_method_types: ['card'],
     line_items: [
       {
@@ -66,6 +69,10 @@ export async function createCheckoutSession({
       storyId: storyId || '',
       storyTitle: storyTitle || '',
       type: storyId ? 'one-time' : 'lifetime',
+    },
+    // Save payment method for future one-click purchases
+    payment_intent_data: {
+      setup_future_usage: 'off_session',
     },
   });
 
@@ -85,8 +92,11 @@ export async function createSubscriptionSession({
 
   const siteUrl = normalizeUrl(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
 
+  // Get or create customer to save payment methods
+  const customer = await getOrCreateCustomer(userEmail);
+
   const session = await stripe.checkout.sessions.create({
-    customer_email: userEmail,
+    customer: customer.id, // Use customer ID to save payment methods
     payment_method_types: ['card'],
     line_items: [
       {
