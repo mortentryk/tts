@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateImage, createStoryImagePrompt } from '../../../../lib/aiImageGenerator';
+import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../../../lib/aiImageGenerator';
 import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       nodeId, 
       mediaType = 'auto', // 'image', 'video', 'both', 'auto'
       model = 'dalle3',
-      style = 'fantasy adventure book illustration',
+      style = 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
       size = '1024x1024',
       quality = 'standard'
     } = body;
@@ -35,6 +35,20 @@ export async function POST(request: NextRequest) {
 
     if (storyError || !story) {
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
+    }
+
+    // Get story's visual style for consistency
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+      console.log(`🎨 Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+    } catch (error) {
+      console.log('⚠️ Note: visual_style column not yet added to database');
     }
 
     const { data: node, error: nodeError } = await supabase
@@ -92,15 +106,134 @@ export async function POST(request: NextRequest) {
         };
       }) || [];
 
+      // Get PREVIOUS scene as reference (or first scene as fallback)
+      let referenceImageUrl: string | null = null;
+      let extractedStyleDescription: string | undefined = undefined;
+      
+      try {
+        // Get current node's sort_index
+        const { data: currentNode } = await supabase
+          .from('story_nodes')
+          .select('sort_index')
+          .eq('story_id', story.id)
+          .eq('node_key', nodeId)
+          .single();
+
+        if (currentNode && currentNode.sort_index && currentNode.sort_index > 1) {
+          // Get all previous nodes with images, ordered by sort_index descending
+          // This finds the most recent previous scene with an image
+          const { data: previousNodes } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key, sort_index')
+            .eq('story_id', story.id)
+            .lt('sort_index', currentNode.sort_index)
+            .not('image_url', 'is', null)
+            .order('sort_index', { ascending: false })
+            .limit(1);
+
+          if (previousNodes && previousNodes.length > 0 && previousNodes[0].image_url) {
+            referenceImageUrl = previousNodes[0].image_url;
+            console.log(`🎨 Using previous scene as reference (node ${previousNodes[0].node_key}, sort_index ${previousNodes[0].sort_index})`);
+            
+            // Only analyze style with GPT-4 Vision if we're NOT using img2img
+            // img2img sees the image directly, so text description is redundant
+            const willUseImg2Img = referenceImageUrl && model !== 'dalle3';
+            
+            if (!willUseImg2Img && referenceImageUrl) {
+              // Only for DALL-E 3 - it can't see images, needs text description
+              try {
+                console.log('🔍 Analyzing reference image style for DALL-E 3 (img2img would see image directly)...');
+                extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+                if (extractedStyleDescription) {
+                  console.log('✅ Extracted style description from previous scene');
+                }
+              } catch (error) {
+                console.warn('⚠️ Failed to analyze previous scene style:', error);
+              }
+            } else {
+              console.log('⏭️ Skipping GPT-4 Vision analysis - using img2img which sees image directly');
+            }
+          }
+        }
+        
+        // If no previous scene, fall back to first scene
+        if (!referenceImageUrl) {
+          const { data: firstNode } = await supabase
+            .from('story_nodes')
+            .select('image_url, node_key')
+            .eq('story_id', story.id)
+            .not('image_url', 'is', null)
+            .order('sort_index', { ascending: true })
+            .limit(1)
+            .single();
+
+          if (firstNode && firstNode.image_url && firstNode.node_key !== nodeId) {
+            referenceImageUrl = firstNode.image_url;
+            console.log(`🎨 Using first scene as fallback reference (node ${firstNode.node_key})`);
+          }
+        }
+      } catch (error) {
+        // No reference image found, that's okay - we'll generate without reference
+        console.log('📝 No reference image found, generating without style reference');
+      }
+      
+      // Get story visual style
+      let storyVisualStyle = null;
+      try {
+        const { data: storyWithStyle } = await supabase
+          .from('stories')
+          .select('visual_style')
+          .eq('id', story.id)
+          .single();
+        storyVisualStyle = storyWithStyle?.visual_style;
+      } catch (error) {
+        console.log('Note: visual_style column not yet added to database');
+      }
+      
+      // Use story's visual style or fallback
+      const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+
       // Create AI prompt
-      const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+      const prompt = createStoryImagePrompt(
+        node.text_md, 
+        story.title, 
+        visualStyle, 
+        nodeCharacters, 
+        referenceImageUrl || undefined,
+        extractedStyleDescription
+      );
+      
+      if (referenceImageUrl) {
+        console.log('🖼️ Using previous scene image for style consistency:', referenceImageUrl);
+      }
+      if (extractedStyleDescription) {
+        console.log('🎭 Using extracted style description for precise matching');
+      }
       
       // Generate image
+      // IMPORTANT: Use stable-diffusion with img2img when we have a reference image for MUCH better style consistency
+      // DALL-E 3 doesn't support img2img, so we automatically switch to stable-diffusion-img2img when we have a reference
+      const useImg2Img = referenceImageUrl && model !== 'dalle3';
+      const shouldUseStableDiffusionImg2Img = referenceImageUrl && model === 'dalle3';
+      const imageModel = useImg2Img || shouldUseStableDiffusionImg2Img
+        ? 'stable-diffusion-img2img' 
+        : (model as any);
+      
+      if (shouldUseStableDiffusionImg2Img) {
+        console.log('🔄 Auto-switching to stable-diffusion-img2img for better reference image support (DALL-E 3 doesn\'t support img2img)');
+      }
+      
       const generatedImage = await generateImage(prompt, {
-        model: model as any,
+        model: imageModel,
         size: size as any,
         quality: quality as any,
+        referenceImageUrl: (useImg2Img || shouldUseStableDiffusionImg2Img) ? (referenceImageUrl || undefined) : undefined,
+        strength: 0.65, // Good balance: maintains style while allowing scene changes
       });
+      
+      if (useImg2Img || shouldUseStableDiffusionImg2Img) {
+        console.log('🔄 Using img2img mode for style consistency');
+      }
 
       // Upload to Cloudinary
       const imageResponse = await fetch(generatedImage.url);
@@ -148,14 +281,58 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Generate video from image
-      const generatedVideo = await generateVideoWithReplicate(node.text_md, imageUrl);
+      // Get character assignments for video (same as image for consistency)
+      const { data: characterAssignments } = await supabase
+        .from('character_assignments')
+        .select(`
+          role,
+          emotion,
+          action,
+          characters (
+            id,
+            name,
+            description,
+            appearance_prompt
+          )
+        `)
+        .eq('story_id', story.id)
+        .eq('node_key', nodeId);
+
+      const nodeCharacters = characterAssignments?.map(assignment => {
+        const character = assignment.characters as any;
+        return {
+          name: character?.name || '',
+          description: character?.description || '',
+          appearancePrompt: character?.appearance_prompt || '',
+          role: assignment.role,
+          emotion: assignment.emotion,
+          action: assignment.action,
+        };
+      }) || [];
+
+      // Use the same visual style as images
+      const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+
+      // Create the same structured prompt as images for consistency
+      const videoPrompt = createStoryImagePrompt(
+        node.text_md, 
+        story.title, 
+        visualStyle, 
+        nodeCharacters, 
+        imageUrl || undefined // Use the image as reference for style consistency
+      );
+
+      // Generate video from image using the same structured prompt as images
+      const generatedVideo = await generateVideoWithReplicate(videoPrompt, imageUrl);
 
       // Upload to Cloudinary
       const videoResponse = await fetch(generatedVideo.url);
       const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
       
-      const videoPublicId = generateStoryAssetId(storySlug, nodeId, 'video');
+      // Generate public ID - extract just the filename part since we pass folder separately
+      const fullPublicId = generateStoryAssetId(storySlug, nodeId, 'video');
+      // Remove the folder prefix since we'll pass it separately
+      const videoPublicId = fullPublicId.replace(`tts-books/${storySlug}/`, '');
       const videoUploadResult = await uploadVideoToCloudinary(
         videoBuffer,
         `tts-books/${storySlug}`,

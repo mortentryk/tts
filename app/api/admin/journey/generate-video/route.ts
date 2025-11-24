@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
       .select(`
         *,
         stories (
-          slug
+          slug,
+          id
         )
       `)
       .eq('id', journeyId)
@@ -44,11 +45,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get story's visual style for consistency (if journey is linked to a story)
+    let storyVisualStyle = null;
+    const storyData = journey.stories as any;
+    if (storyData?.id) {
+      try {
+        const { data: storyWithStyle } = await supabase
+          .from('stories')
+          .select('visual_style')
+          .eq('id', storyData.id)
+          .single();
+        storyVisualStyle = storyWithStyle?.visual_style;
+        console.log(`🎨 Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+      } catch (error) {
+        console.log('⚠️ Note: visual_style column not yet added to database or story not found');
+      }
+    }
+
     console.log('🖼️ Using existing image:', journey.image_url);
+
+    // Build video prompt with visual style (journeys use simpler prompts than story nodes)
+    let videoPrompt = journey.journey_text || '';
+    if (storyVisualStyle) {
+      videoPrompt = `${storyVisualStyle}. ${videoPrompt}`;
+    }
 
     // Generate video from the image
     const generatedVideo = await generateVideoWithReplicate(
-      journey.journey_text,
+      videoPrompt,
       journey.image_url
     );
 
@@ -58,7 +82,6 @@ export async function POST(request: NextRequest) {
     const videoResponse = await fetch(generatedVideo.url);
     const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
     
-    const storyData = journey.stories as any;
     const publicId = `journey_${journeyId}_video_${Date.now()}`;
     const uploadResult = await uploadVideoToCloudinary(
       videoBuffer,

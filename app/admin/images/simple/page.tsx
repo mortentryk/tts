@@ -48,6 +48,20 @@ interface CharacterAssignment {
   action?: string;
 }
 
+// Helper function to truncate text at word boundaries
+const truncateText = (text: string, maxLength: number = 150): string => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  const truncated = text.substring(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  const lastNewline = truncated.lastIndexOf('\n');
+  const lastBreak = Math.max(lastSpace, lastNewline);
+  if (lastBreak > maxLength * 0.7) { // Only use break if it's not too early
+    return truncated.substring(0, lastBreak) + '...';
+  }
+  return truncated + '...';
+};
+
 export default function SimpleImageManager() {
   const router = useRouter();
   const [stories, setStories] = useState<Story[]>([]);
@@ -213,6 +227,7 @@ export default function SimpleImageManager() {
           nodeId: nodeKey,
           storyText: node.text_md,
           storyTitle: selectedStoryData?.title || selectedStory,
+          model: 'nano-banana', // Use nano-banana for Danish support and reference images
           style: 'fantasy adventure book illustration',
         }),
       });
@@ -292,7 +307,8 @@ export default function SimpleImageManager() {
           nodeId: nodeKey,
           storyText: customPrompt, // Use custom prompt as story text
           storyTitle: selectedStoryData?.title || selectedStory,
-          style: '', // No style prefix, use prompt as-is
+          useCustomPrompt: true, // Flag to use custom prompt directly without story context
+          model: 'nano-banana', // Use nano-banana for Danish support
         }),
       });
 
@@ -380,10 +396,23 @@ export default function SimpleImageManager() {
         }),
       });
 
-      const data = await response.json();
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      let data;
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Handle non-JSON responses (e.g., timeout errors)
+        const text = await response.text();
+        throw new Error(text || `Server error: ${response.status} ${response.statusText}`);
+      }
 
       if (response.ok) {
-        alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
+        const characters = data.audio?.characters ?? 0;
+        const cost = data.audio?.cost ?? 0;
+        const cached = data.audio?.cached ?? false;
+        alert(`✅ Audio generated!\n${characters} characters\nCost: $${cost.toFixed(4)}\nCached: ${cached ? 'Yes' : 'No'}`);
         
         // Update the row to show audio is available
         setImageRows(prev => prev.map(row => 
@@ -392,11 +421,16 @@ export default function SimpleImageManager() {
             : row
         ));
       } else {
-        alert(`❌ Failed to generate audio: ${data.error}`);
+        alert(`❌ Failed to generate audio: ${data.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Generate audio error:', error);
-      alert('❌ Failed to generate audio');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('504') || errorMessage.includes('timeout')) {
+        alert('❌ Request timed out. The audio generation may still be processing. Please try again in a moment.');
+      } else {
+        alert(`❌ Failed to generate audio: ${errorMessage}`);
+      }
     } finally {
       setGeneratingAudio(null);
     }
@@ -627,15 +661,17 @@ export default function SimpleImageManager() {
                               {row.node_key}
                             </td>
                             <td className="border border-gray-300 px-4 py-2 max-w-md">
-                              <div className="text-sm text-gray-900 font-medium">
-                                {row.text.substring(0, 100)}...
+                              <div className="text-sm text-gray-900 font-medium whitespace-pre-wrap line-clamp-3">
+                                {truncateText(row.text, 200)}
                               </div>
-                              <button
-                                onClick={() => setExpandedText(row.node_key)}
-                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                              >
-                                📖 Read full text
-                              </button>
+                              {row.text.length > 200 && (
+                                <button
+                                  onClick={() => setExpandedText(row.node_key)}
+                                  className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  📖 Read full text
+                                </button>
+                              )}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {(() => {
@@ -821,13 +857,32 @@ export default function SimpleImageManager() {
                             <td className="border border-gray-300 px-4 py-2">
                               <div className="flex space-x-2">
                                 {row.status === 'empty' && (
-                                  <button
-                                    onClick={() => generateImage(row.node_key)}
-                                    disabled={generating === row.node_key}
-                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-                                  >
-                                    {generating === row.node_key ? '⏳ Generating...' : '🎨 Make Image'}
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => generateImage(row.node_key)}
+                                      disabled={generating === row.node_key}
+                                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                      {generating === row.node_key ? '⏳ Generating...' : '🎨 Make Image'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setCustomPromptNode(row.node_key);
+                                        setCustomPrompt('');
+                                      }}
+                                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+                                    >
+                                      ✏️ Custom
+                                    </button>
+                                    <button
+                                      onClick={() => generateAudio(row.node_key)}
+                                      disabled={generatingAudio === row.node_key}
+                                      className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-400"
+                                      title={row.audio_url ? 'Audio already generated - click to regenerate' : 'Generate audio with ElevenLabs'}
+                                    >
+                                      {generatingAudio === row.node_key ? '⏳ Audio...' : row.audio_url ? '🔊 ✓' : '🔊 Audio'}
+                                    </button>
+                                  </>
                                 )}
                                 
                                 {row.status === 'ready' && (

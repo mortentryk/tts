@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       storySlug, 
       mediaType = 'image', // 'image', 'video', 'both'
       model = 'dalle3',
-      style = 'fantasy adventure book illustration',
+      style = 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
       size = '1024x1024',
       quality = 'standard',
       replaceExisting = false
@@ -34,6 +34,20 @@ export async function POST(request: NextRequest) {
 
     if (storyError || !story) {
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
+    }
+
+    // Get story's visual style for consistency
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+      console.log(`🎨 Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+    } catch (error) {
+      console.log('⚠️ Note: visual_style column not yet added to database');
     }
 
     const { data: nodes, error: nodesError } = await supabase
@@ -67,6 +81,27 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('story_id', story.id);
+
+    // Get the first image from the story to use as style reference for all subsequent images
+    let referenceImageUrl: string | null = null;
+    try {
+      const { data: firstNode } = await supabase
+        .from('story_nodes')
+        .select('image_url, node_key')
+        .eq('story_id', story.id)
+        .not('image_url', 'is', null)
+        .order('sort_index', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (firstNode && firstNode.image_url) {
+        referenceImageUrl = firstNode.image_url;
+        console.log(`🎨 Found reference image from first scene (node ${firstNode.node_key}) - will use for style consistency`);
+      }
+    } catch (error) {
+      // No first image found yet, that's okay - first image will be generated without reference
+      console.log('📝 No reference image found yet - first image will set the style');
+    }
 
     // Process each node
     for (const node of nodes) {
@@ -113,7 +148,23 @@ export async function POST(request: NextRequest) {
 
         // Generate image if needed
         if (nodeMediaType === 'image' || nodeMediaType === 'both') {
-          const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+          // Use reference image only if it's not the first node (first node sets the style)
+          const useReferenceImage = referenceImageUrl && node.node_key !== nodes[0]?.node_key;
+          
+          // Convert null to undefined for the function parameter
+          const referenceImageUrlForPrompt: string | undefined = referenceImageUrl ?? undefined;
+          
+          const prompt = createStoryImagePrompt(
+            node.text_md, 
+            story.title, 
+            style, 
+            nodeCharacters,
+            useReferenceImage ? referenceImageUrlForPrompt : undefined
+          );
+          
+          if (useReferenceImage) {
+            console.log(`🖼️ Using reference image for style consistency on node ${node.node_key}`);
+          }
           const generatedImage = await generateImage(prompt, {
             model: model as any,
             size: size as any,
@@ -151,13 +202,25 @@ export async function POST(request: NextRequest) {
             if (!imageUrl) {
               nodeResult.videoError = 'No image available for video generation';
             } else {
-              const generatedVideo = await generateVideoWithReplicate(node.text_md, imageUrl);
+              // Use the same structured prompt as images for consistency
+              const videoPrompt = createStoryImagePrompt(
+                node.text_md, 
+                story.title, 
+                style, 
+                nodeCharacters,
+                imageUrl // Use the image as reference for style consistency
+              );
+              
+              const generatedVideo = await generateVideoWithReplicate(videoPrompt, imageUrl);
 
               // Upload to Cloudinary
               const videoResponse = await fetch(generatedVideo.url);
               const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
               
-              const videoPublicId = generateStoryAssetId(storySlug, node.node_key, 'video');
+              // Generate public ID - extract just the filename part since we pass folder separately
+              const fullPublicId = generateStoryAssetId(storySlug, node.node_key, 'video');
+              // Remove the folder prefix since we'll pass it separately
+              const videoPublicId = fullPublicId.replace(`tts-books/${storySlug}/`, '');
               const videoUploadResult = await uploadVideoToCloudinary(
                 videoBuffer,
                 `tts-books/${storySlug}`,

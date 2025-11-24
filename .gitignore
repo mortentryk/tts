@@ -19,6 +19,14 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
+# PWA generated files
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/worker-*.js
+public/worker-*.js.map
+
 # IDE
 .vscode/
 .idea/
@@ -26,3 +34,6 @@ next-env.d.ts
 # OS
 .DS_Store
 Thumbs.db
+add-metadata-to-csv.py
+update-author.py
+add-linebreaks-to-csv.py

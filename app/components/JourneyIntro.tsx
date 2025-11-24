@@ -7,9 +7,9 @@ interface Story {
   id: string;
   slug: string;
   title: string;
-  description: string;
-  journey_order: number;
-  landmark_type: string;
+  description?: string;
+  journey_order?: number | null;
+  landmark_type?: string;
   thumbnail?: string;
 }
 
@@ -44,8 +44,8 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
 
   // Get journey stories sorted by order
   const journeyStories = stories
-    .filter(story => story.journey_order !== null)
-    .sort((a, b) => a.journey_order - b.journey_order);
+    .filter(story => story.journey_order !== null && story.journey_order !== undefined)
+    .sort((a, b) => (a.journey_order ?? 0) - (b.journey_order ?? 0));
 
   const currentStory = journeyStories[currentStoryIndex];
 
@@ -172,12 +172,12 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
     return (
       <div className="fixed inset-0 z-50 bg-dungeon-bg flex items-center justify-center">
         <div className="text-center text-white">
-          <h1 className="text-2xl font-bold mb-4">No Stories Available</h1>
+          <h1 className="text-2xl font-bold mb-4">Ingen Historier Tilgængelige</h1>
           <button
             onClick={onExit}
             className="bg-dungeon-accent hover:bg-dungeon-accent-active text-white px-6 py-3 rounded-lg transition-colors"
           >
-            Go Back
+            Gå Tilbage
           </button>
         </div>
       </div>
@@ -233,7 +233,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
               <div className="bg-black bg-opacity-70 backdrop-blur-sm rounded-2xl p-8 border border-yellow-400 border-opacity-50">
                 {/* Segment counter */}
                 <div className="text-yellow-400 text-sm font-semibold mb-2">
-                  Segment {currentSegmentIndex + 1} of {journeySegments.length}
+                  Segment {currentSegmentIndex + 1} af {journeySegments.length}
                 </div>
                 <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
                   {currentSegment.journey_title}
@@ -256,43 +256,6 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
             </div>
           </div>
         </div>
-      ) : isVideoPlaying ? (
-        /* Default background with map animation */
-        <VideoBackground useAIGeneratedMap={true}>
-          {/* Video Content Overlay */}
-          <div className="absolute inset-0 flex items-center justify-center z-10">
-            <div className="text-center text-white max-w-4xl mx-auto px-6">
-              {/* Story Title Overlay */}
-              <div className="bg-black bg-opacity-60 backdrop-blur-sm rounded-2xl p-8 border border-yellow-400 border-opacity-30">
-                <div className="text-8xl mb-6">
-                  {currentStory.landmark_type === 'tree' && '🌳'}
-                  {currentStory.landmark_type === 'sea' && '🌊'}
-                  {currentStory.landmark_type === 'cave' && '🕳️'}
-                  {currentStory.landmark_type === 'castle' && '🏰'}
-                  {currentStory.landmark_type === 'forest' && '🌲'}
-                  {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '📍'}
-                </div>
-                <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
-                  {currentStory.title}
-                </h1>
-                <p className="text-2xl text-yellow-200 opacity-90 mb-8 animate-fade-in">
-                  {currentStory.description}
-                </p>
-                
-                {/* Video Progress Timer */}
-                <div className="w-full bg-white bg-opacity-20 rounded-full h-3 mb-4">
-                  <div 
-                    className="bg-yellow-400 h-3 rounded-full transition-all duration-5000 ease-linear"
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                <p className="text-white text-lg opacity-80">
-                  🚶‍♂️ Following the magical path to your destination...
-                </p>
-              </div>
-            </div>
-          </div>
-        </VideoBackground>
       ) : null}
 
 
@@ -321,7 +284,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                 {currentStory.landmark_type === 'cave' && '🕳️'}
                 {currentStory.landmark_type === 'castle' && '🏰'}
                 {currentStory.landmark_type === 'forest' && '🌲'}
-                {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type) && '⚔️'}
+                {(!currentStory.landmark_type || !['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type)) && '⚔️'}
               </div>
 
               {/* Quest Title */}
@@ -346,7 +309,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
 
               {/* Quest Question */}
               <p className="text-white text-2xl font-semibold mb-6">
-                Will you accept this quest?
+                Vil du acceptere denne opgave?
               </p>
 
               {/* Action Buttons */}
@@ -355,13 +318,13 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
                   onClick={handleQuestAccept}
                   className="w-full bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all duration-300 transform hover:scale-105 shadow-lg"
                 >
-                  ✅ Yes, I'll take this quest!
+                  ✅ Ja, jeg tager denne opgave!
                 </button>
                 <button
                   onClick={handleQuestDecline}
                   className="w-full bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg text-lg font-semibold transition-colors border-2 border-gray-500"
                 >
-                  ❌ No, show me another quest
+                  ❌ Nej, vis mig en anden opgave
                 </button>
               </div>
             </div>
@@ -375,7 +338,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
           onClick={handleSkip}
           className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm hover:bg-opacity-70 transition-colors"
         >
-          Exit
+          Afslut
         </button>
       </div>
     </div>

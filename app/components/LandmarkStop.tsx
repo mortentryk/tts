@@ -5,8 +5,8 @@ import React from 'react';
 interface Story {
   id: string;
   title: string;
-  description: string;
-  landmark_type: string;
+  description?: string;
+  landmark_type?: string;
   thumbnail?: string;
 }
 
@@ -25,24 +25,24 @@ export default function LandmarkStop({
   onExit, 
   isAnimating 
 }: LandmarkStopProps) {
-  const getLandmarkDescription = (landmarkType: string) => {
+  const getLandmarkDescription = (landmarkType?: string) => {
     switch (landmarkType) {
       case 'tree':
-        return 'A magical tree stands before you, its branches reaching toward the sky...';
+        return 'Et magisk træ står foran dig, dets grene når mod himlen...';
       case 'sea':
-        return 'The ocean waves crash against the shore, and you hear a distant song...';
+        return 'Havets bølger slår mod kysten, og du hører en fjern sang...';
       case 'cave':
-        return 'A dark cave entrance beckons, mysterious sounds echoing from within...';
+        return 'En mørk huleåbning lokker, mystiske lyde ekkoer indefra...';
       case 'castle':
-        return 'A magnificent castle rises before you, its towers reaching for the clouds...';
+        return 'Et storslået slot rejser sig foran dig, dets tårne når mod skyerne...';
       case 'forest':
-        return 'An enchanted forest spreads before you, filled with ancient trees...';
+        return 'En fortryllende skov breder sig foran dig, fyldt med ældgamle træer...';
       default:
-        return 'An interesting landmark catches your attention...';
+        return 'Et interessant landmærke fanger din opmærksomhed...';
     }
   };
 
-  const getLandmarkEmoji = (landmarkType: string) => {
+  const getLandmarkEmoji = (landmarkType?: string) => {
     switch (landmarkType) {
       case 'tree':
         return '🌳';
@@ -89,7 +89,7 @@ export default function LandmarkStop({
           </p>
           {story.thumbnail && (
             <div className="w-full h-32 bg-dungeon-accent rounded mb-3 flex items-center justify-center">
-              <span className="text-dungeon-text">📖 Story Image</span>
+              <span className="text-dungeon-text">📖 Historiebillede</span>
             </div>
           )}
           <div className="flex items-center justify-between text-xs text-dungeon-text">
@@ -106,28 +106,28 @@ export default function LandmarkStop({
             onClick={onExplore}
             className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors transform hover:scale-105"
           >
-            🎯 Explore This Story
+            🎯 Udforsk Denne Historie
           </button>
           
           <button
             onClick={onContinue}
             className="w-full bg-dungeon-accent hover:bg-dungeon-accent-active text-white px-6 py-3 rounded-lg transition-colors"
           >
-            🗺️ Continue Journey
+            🗺️ Fortsæt Rejse
           </button>
           
           <button
             onClick={onExit}
             className="w-full bg-dungeon-surface hover:bg-dungeon-accent text-white px-6 py-3 rounded-lg border border-dungeon-border transition-colors"
           >
-            📋 Browse All Stories
+            📋 Gennemse Alle Historier
           </button>
         </div>
 
         {/* Progress Indicator */}
         <div className="mt-6 text-center">
           <div className="text-xs text-dungeon-text mb-2">
-            Your Adventure Progress
+            Din Eventyrfremgang
           </div>
           <div className="w-full bg-dungeon-bg rounded-full h-2">
             <div 

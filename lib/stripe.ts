@@ -4,6 +4,17 @@ if (!process.env.STRIPE_SECRET_KEY) {
   console.warn('STRIPE_SECRET_KEY is not set - Stripe functionality will be disabled');
 }
 
+/**
+ * Normalize a URL by adding https:// if protocol is missing
+ */
+function normalizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed.match(/^https?:\/\//)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
 export const stripe = process.env.STRIPE_SECRET_KEY 
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
       apiVersion: '2025-09-30.clover',
@@ -37,10 +48,13 @@ export async function createCheckoutSession({
     throw new Error('Stripe is not configured');
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const siteUrl = normalizeUrl(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
+
+  // Get or create customer to save payment methods
+  const customer = await getOrCreateCustomer(userEmail);
 
   const session = await stripe.checkout.sessions.create({
-    customer_email: userEmail,
+    customer: customer.id, // Use customer ID to save payment methods
     payment_method_types: ['card'],
     line_items: [
       {
@@ -52,9 +66,13 @@ export async function createCheckoutSession({
     success_url: `${siteUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/cancel`,
     metadata: {
-      storyId,
-      storyTitle,
-      type: 'one-time',
+      storyId: storyId || '',
+      storyTitle: storyTitle || '',
+      type: storyId ? 'one-time' : 'lifetime',
+    },
+    // Save payment method for future one-click purchases
+    payment_intent_data: {
+      setup_future_usage: 'off_session',
     },
   });
 
@@ -72,10 +90,13 @@ export async function createSubscriptionSession({
     throw new Error('Stripe is not configured');
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const siteUrl = normalizeUrl(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000');
+
+  // Get or create customer to save payment methods
+  const customer = await getOrCreateCustomer(userEmail);
 
   const session = await stripe.checkout.sessions.create({
-    customer_email: userEmail,
+    customer: customer.id, // Use customer ID to save payment methods
     payment_method_types: ['card'],
     line_items: [
       {

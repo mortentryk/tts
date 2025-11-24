@@ -112,9 +112,14 @@ export async function GET(
     // Check if story exists but isn't published
     if (!story.is_published) {
       console.log('⚠️ Story exists but is not published:', storyId);
+      console.log('⚠️ Story title:', story.title);
+      console.log('⚠️ Story slug:', story.slug);
       return NextResponse.json({ 
         error: 'Story not found',
-        message: 'This story exists but is not published yet.'
+        message: 'This story exists but is not published yet. Please publish it in the admin panel to make it accessible.',
+        storyId: story.id,
+        storyTitle: story.title,
+        storySlug: story.slug
       }, { status: 404 });
     }
 
@@ -161,9 +166,16 @@ export async function GET(
 
     console.log('✅ Story loaded:', story.title, 'with', nodes?.length || 0, 'nodes');
     
+    // Add cache-control headers to prevent stale data
     return NextResponse.json({
       ...story,
       nodes: nodes || []
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
 
   } catch (error: any) {

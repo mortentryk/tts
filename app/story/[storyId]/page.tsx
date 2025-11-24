@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
+import { getUserEmail } from '@/lib/purchaseVerification';
 // import { loadStoryById } from '../../../lib/supabaseStoryManager';
 
 // Speech Recognition types
@@ -77,7 +78,7 @@ function hashText(t: string): string {
 const audioCache = new Map<string, string>(); // key -> objectURL
 
 // Cloud TTS for web — OpenAI only
-async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string): Promise<void> {
+async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string, abortControllerRef?: React.MutableRefObject<AbortController | null>, nodeKey?: string, storyId?: string): Promise<void> {
   if (!text || !text.trim()) return;
 
   // Stop any existing audio first
@@ -89,33 +90,111 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
 
   // If we have pre-generated audio URL, use it directly
   if (preGeneratedAudioUrl && preGeneratedAudioUrl.includes('cloudinary.com')) {
-    console.log('🎵 Using pre-generated audio from:', preGeneratedAudioUrl);
-    const audio = new Audio(preGeneratedAudioUrl);
+      const audio = new Audio(preGeneratedAudioUrl);
+    // Mobile-specific: configure audio for iOS Safari
+    audio.preload = 'auto';
+    audio.volume = 1.0; // Ensure volume is set
     audioRef.current = audio;
     
+    console.log('🎵 Mobile: Loading pre-generated audio from Cloudinary');
+    
     try {
+      // For mobile: ensure audio is loaded before playing
+      // Check if audio is already loaded
+      if (audio.readyState >= 3) { // HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA
+        console.log('🎵 Mobile: Audio already loaded, readyState:', audio.readyState);
+      } else {
+        console.log('🎵 Mobile: Waiting for audio to load, current readyState:', audio.readyState);
+        // Wait for audio to load (with timeout for mobile networks)
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            // Check if audio was stopped
+            if (audioRef.current !== audio) {
+              reject(new Error('Audio stopped by user'));
+              return;
+            }
+            // If audio has some data, proceed anyway (mobile networks can be slow)
+            if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
+              console.log('🎵 Mobile: Audio loading timeout but has data, readyState:', audio.readyState);
+              resolve();
+            } else {
+              console.error('🎵 Mobile: Audio loading timeout, readyState:', audio.readyState);
+              reject(new Error('Audio loading timeout - network may be slow'));
+            }
+          }, 10000); // 10 second timeout for mobile networks
+          
+          // Check if audio was stopped (audioRef.current is null or different)
+          const checkStopped = () => {
+            if (audioRef.current !== audio) {
+              clearTimeout(timeout);
+              reject(new Error('Audio stopped by user'));
+            }
+          };
+          
+          audio.oncanplaythrough = () => {
+            checkStopped();
+            if (audioRef.current !== audio) return;
+            console.log('🎵 Mobile: Audio can play through');
+            clearTimeout(timeout);
+            resolve();
+          };
+          audio.oncanplay = () => {
+            checkStopped();
+            if (audioRef.current !== audio) return;
+            // For mobile, canplay is often enough
+            if (audio.readyState >= 2) {
+              console.log('🎵 Mobile: Audio can play, readyState:', audio.readyState);
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          audio.onerror = (e) => {
+            console.error('🎵 Mobile: Audio loading error:', e);
+            clearTimeout(timeout);
+            reject(new Error('Failed to load audio'));
+          };
+          audio.load(); // Explicitly load the audio
+        });
+      }
+      
+      // Check if audio was stopped before playing
+      if (audioRef.current !== audio) {
+        return; // Audio was stopped, exit silently
+      }
+      
+      console.log('🎵 Mobile: Attempting to play audio, readyState:', audio.readyState);
       await audio.play();
+      console.log('🎵 Mobile: Audio playback started successfully');
       return new Promise<void>((resolve) => {
+        // Check if audio was stopped
+        if (audioRef.current !== audio) {
+          resolve();
+          return;
+        }
+        
         audio.onended = () => {
-          audioRef.current = null;
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
           onComplete?.();
           resolve();
         };
-        audio.onerror = () => {
-          audioRef.current = null;
+        audio.onerror = (e) => {
+          if (audioRef.current === audio) {
+            audioRef.current = null;
+          }
           onComplete?.();
           resolve();
         };
       });
     } catch (playError: any) {
       audioRef.current = null;
-      // Handle autoplay policy errors
+      // Handle autoplay policy errors - but button clicks should not trigger this
       if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
-        console.log('⚠️ Autoplay blocked (non-critical):', playError);
-        return;
+        // For button clicks, we should still try to play - user interaction should allow it
+        // Fall through to generate TTS as fallback
       }
-      console.log('⚠️ Failed to play pre-generated audio, falling back to TTS:', playError);
-      // Fall through to generate TTS
+      // Fall through to generate TTS if pre-generated audio fails
     }
   }
 
@@ -124,24 +203,16 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     const cached = audioCache.get(key);
     if (cached) {
       const audio = new Audio(cached);
+      // Mobile-specific: configure audio for iOS Safari
+      audio.preload = 'auto';
+      audio.volume = 1.0;
       
       // Store the audio element in the ref
       audioRef.current = audio;
       
-      // Clear the ref when audio ends or errors
-      audio.onended = () => { 
-        audioRef.current = null;
-        onComplete?.(); // Call completion callback
-      };
-      
-      audio.onerror = () => {
-        audioRef.current = null;
-        onComplete?.(); // Call completion callback even on error
-      };
-      
       try { 
         await audio.play();
-        // Wait for audio to finish playing
+        // Wait for audio to finish playing - ONLY set handlers here to avoid duplicates
         return new Promise<void>((resolve) => {
           audio.onended = () => {
             audioRef.current = null;
@@ -172,59 +243,163 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
     }
   }
 
-  const res = await fetch(SERVER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, provider: 'elevenlabs' })
-  });
+  // Add timeout for mobile networks (30 seconds)
+  const controller = new AbortController();
+  if (abortControllerRef) {
+    // Abort any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = controller;
+  }
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  
+  let res: Response;
+  try {
+    res = await fetch(SERVER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, provider: 'elevenlabs', nodeKey, storyId }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+  } catch (fetchError: any) {
+    clearTimeout(timeoutId);
+    if (fetchError.name === 'AbortError') {
+      // Clear the abort controller ref if it was aborted
+      if (abortControllerRef && abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      // Don't throw error if aborted - user intentionally stopped
+      return;
+    }
+    throw fetchError;
+  }
+  
+  // Clear the abort controller ref after successful fetch
+  if (abortControllerRef && abortControllerRef.current === controller) {
+    abortControllerRef.current = null;
+  }
 
   if (!res.ok) {
     let msg = "";
-    try { 
-      msg = await res.text(); 
-    } catch {}
-    const e = new Error(`TTS failed (${res.status})${msg ? `: ${msg.slice(0,180)}` : ""}`);
+    let errorDetails: any = null;
+    try {
+      // Try to parse as JSON first (API returns JSON errors)
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        errorDetails = await res.json();
+        msg = errorDetails.error || errorDetails.message || JSON.stringify(errorDetails);
+      } else {
+        msg = await res.text();
+      }
+    } catch (parseError) {
+      console.error('Failed to parse error response:', parseError);
+      msg = `HTTP ${res.status} ${res.statusText}`;
+    }
+    
+    console.error('TTS API Error:', {
+      status: res.status,
+      statusText: res.statusText,
+      message: msg,
+      details: errorDetails
+    });
+    
+    const e = new Error(`TTS failed (${res.status})${msg ? `: ${msg.slice(0,300)}` : ""}`);
     (e as any).status = res.status;
+    (e as any).details = errorDetails;
     throw e;
   }
 
+  // Get the blob from response (Content-Type is preserved automatically)
   const blob = await res.blob();
+  
+  // Verify blob has content
+  if (blob.size === 0) {
+    throw new Error('TTS Error: Received empty audio response');
+  }
+  
+  // Create object URL for the blob
   const url = URL.createObjectURL(blob);
   audioCache.set(key, url);
 
   const audio = new Audio(url);
+  // Mobile-specific: configure audio for iOS Safari
+  audio.preload = 'auto';
+  audio.volume = 1.0;
   
   // Store the audio element in the ref
   audioRef.current = audio;
   
-  try { 
-    await audio.play();
-    // Wait for audio to finish playing
-    return new Promise<void>((resolve) => {
-      audio.onended = () => {
-        audioRef.current = null;
-        onComplete?.();
-        resolve();
-      };
-      audio.onerror = () => {
-        audioRef.current = null;
-        onComplete?.();
-        resolve();
-      };
-    });
-  } catch (playError: any) {
-    audioRef.current = null;
-    URL.revokeObjectURL(url);
-    audioCache.delete(key);
+  // Wait for audio to be ready before playing
+  return new Promise<void>((resolve, reject) => {
+    // Handle audio loading errors
+    audio.onerror = (e) => {
+      console.error('Audio loading error:', e, audio.error);
+      const errorMsg = audio.error?.message || 'Failed to load audio';
+      audioRef.current = null;
+      URL.revokeObjectURL(url);
+      audioCache.delete(key);
+      reject(new Error(`TTS Error: ${errorMsg}`));
+    };
     
-    // Handle autoplay policy errors
-    if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
-      const e = new Error("Autoplay blocked – click the button and try again.");
-      (e as any).code = "AUTOPLAY";
-      throw e;
-    }
-    throw playError;
-  }
+    // Wait for audio to be ready
+    const handleCanPlay = async () => {
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('canplaythrough', handleCanPlay);
+      
+      try {
+        await audio.play();
+        
+        // Set up completion handlers
+        audio.onended = () => {
+          audioRef.current = null;
+          URL.revokeObjectURL(url);
+          onComplete?.();
+          resolve();
+        };
+        
+        // Handle play errors
+        audio.onerror = (e) => {
+          console.error('Audio play error:', e, audio.error);
+          audioRef.current = null;
+          URL.revokeObjectURL(url);
+          audioCache.delete(key);
+          const errorMsg = audio.error?.message || 'Failed to play audio';
+          reject(new Error(`TTS Error: ${errorMsg}`));
+        };
+      } catch (playError: any) {
+        audioRef.current = null;
+        URL.revokeObjectURL(url);
+        audioCache.delete(key);
+        
+        // Handle autoplay policy errors
+        if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
+          const e = new Error("Autoplay blokeret – klik på knappen og prøv igen.");
+          (e as any).code = "AUTOPLAY";
+          reject(e);
+          return;
+        }
+        reject(playError);
+      }
+    };
+    
+    // Listen for when audio is ready to play
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('canplaythrough', handleCanPlay);
+    
+    // Fallback: if audio doesn't load within 10 seconds, reject
+    setTimeout(() => {
+      if (audio.readyState < 2) { // HAVE_CURRENT_DATA
+        audio.removeEventListener('canplay', handleCanPlay);
+        audio.removeEventListener('canplaythrough', handleCanPlay);
+        audioRef.current = null;
+        URL.revokeObjectURL(url);
+        audioCache.delete(key);
+        reject(new Error('TTS Error: Audio failed to load within timeout'));
+      }
+    }, 10000);
+  });
 }
 
 export default function Game({ params }: { params: Promise<{ storyId: string }> }) {
@@ -241,6 +416,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isTTSRunningRef = useRef<boolean>(false);
   const lastTTSFinishTimeRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Dice roll state
   const [pendingDiceRoll, setPendingDiceRoll] = useState<{
@@ -268,6 +444,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listeningSessionRef = useRef<number>(0);
   const voiceMatchedRef = useRef<boolean>(false);
+  const [showControls, setShowControls] = useState(false);
   
   const router = useRouter();
   const passage = story[currentId];
@@ -284,6 +461,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   // --- TTS Controls ---
   const stopSpeak = useCallback(() => {
     try {
+      // Abort any in-flight fetch requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      
+      // Stop any playing audio
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -298,6 +482,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       audioRef.current = null;
       setSpeaking(false);
       isTTSRunningRef.current = false;
+      abortControllerRef.current = null;
     }
   }, []);
 
@@ -338,46 +523,120 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
     // Prevent multiple simultaneous TTS calls
     if (isTTSRunningRef.current) {
-      console.log('🎙️ TTS already running, skipping duplicate call');
       return;
     }
-
-    // Caller supplies final text; do not modify here to avoid duplicate reading
-    console.log('🎙️ speakWithVoiceListening called with text:', text.substring(0, 50) + '...');
-    console.log('🎙️ Current speaking state:', speaking);
 
     try {
       isTTSRunningRef.current = true;
       setSpeaking(true);
-      console.log('🎙️ Starting TTS, isTTSRunningRef set to true');
-      await speakViaCloud(text, audioRef, () => {
-        // Auto-start voice listening after TTS completes
-        if (passage?.choices && passage.choices.length > 0) {
-          console.log('TTS finished - starting voice listening for 10 seconds');
-          startVoiceListening(10000);
+      
+      // Capture passage state at TTS start to prevent stale closure issues
+      const passageIdAtStart = currentId;
+      const choicesAtStart = passage?.choices ? [...passage.choices] : null;
+      const audioUrlAtStart = passage?.audio;
+      
+      await speakViaCloud(text, audioRef, async () => {
+        // Validate passage hasn't changed during TTS playback
+        if (currentId !== passageIdAtStart) {
+          console.warn('⚠️ Passage changed during TTS, skipping button reading');
+          setSpeaking(false);
+          isTTSRunningRef.current = false;
+          lastTTSFinishTimeRef.current = Date.now();
+          abortControllerRef.current = null;
+          onDone?.();
+          return;
         }
-        // Set speaking to false only after TTS actually completes
-        setSpeaking(false);
-        isTTSRunningRef.current = false;
-        lastTTSFinishTimeRef.current = Date.now();
-        console.log('🎙️ TTS completed, isTTSRunningRef set to false');
-      }, passage?.audio); // Pass pre-generated audio URL
+        
+        // After main text finishes, read buttons separately if they exist
+        if (choicesAtStart && choicesAtStart.length > 0) {
+          const choicesText = choicesAtStart
+            .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
+            .join(' ');
+          const buttonsText = `Valgmuligheder: ${choicesText} Hvad vælger du?`;
+          
+          // Read buttons separately after main text
+          try {
+            await speakViaCloud(buttonsText, audioRef, () => {
+              // Validate passage still hasn't changed during button TTS
+              if (currentId !== passageIdAtStart) {
+                console.warn('⚠️ Passage changed during button TTS');
+                setSpeaking(false);
+                isTTSRunningRef.current = false;
+                lastTTSFinishTimeRef.current = Date.now();
+                abortControllerRef.current = null;
+                onDone?.();
+                return;
+              }
+              
+              // Auto-start voice listening after buttons are read
+              startVoiceListening(10000);
+              // Set speaking to false only after buttons TTS actually completes
+              setSpeaking(false);
+              isTTSRunningRef.current = false;
+              lastTTSFinishTimeRef.current = Date.now();
+              // Clear abort controller when TTS completes
+              abortControllerRef.current = null;
+              onDone?.();
+            }, undefined, abortControllerRef, passageIdAtStart, storyId);
+          } catch (buttonError) {
+            // If button reading fails, still start voice listening and complete
+            console.error('Failed to read buttons:', buttonError);
+            startVoiceListening(10000);
+            setSpeaking(false);
+            isTTSRunningRef.current = false;
+            lastTTSFinishTimeRef.current = Date.now();
+            abortControllerRef.current = null;
+            onDone?.();
+          }
+        } else {
+          // No choices, just complete normally
+          setSpeaking(false);
+          isTTSRunningRef.current = false;
+          lastTTSFinishTimeRef.current = Date.now();
+          abortControllerRef.current = null;
+          onDone?.();
+        }
+      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId); // Pass pre-generated audio URL, abort controller ref, nodeKey, and storyId
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
       setSpeaking(false);
       isTTSRunningRef.current = false;
-      console.log('🎙️ TTS error, isTTSRunningRef set to false');
+      abortControllerRef.current = null; // Clear abort controller on error
+      
+      // Don't show error if it was aborted or stopped by user
+      if (e?.message?.includes('aborted') || e?.message?.includes('stopped by user') || e?.name === 'AbortError') {
+        return;
+      }
+      
+      // Log full error details for debugging
+      console.error('TTS Error Details:', {
+        message: e?.message,
+        status: e?.status,
+        details: e?.details,
+        stack: e?.stack
+      });
+      
       // Show a more user-friendly error message
-      if (e?.message?.includes("API key not configured")) {
-        alert("TTS is not configured. Please set up your OpenAI API key to enable voice narration.");
-      } else if (e?.message?.includes("Incorrect API key")) {
-        alert("TTS API key is invalid or expired. Please update your OpenAI API key to enable voice narration.");
+      if (e?.message?.includes("API key not configured") || e?.message?.includes("ELEVENLABS_API_KEY")) {
+        alert("TTS er ikke konfigureret. Indstil venligst din ElevenLabs API-nøgle for at aktivere stemme-fortælling.");
+      } else if (e?.message?.includes("Incorrect API key") || e?.message?.includes("invalid") || e?.message?.includes("unauthorized")) {
+        alert("TTS API-nøgle er ugyldig eller udløbet. Opdater venligst din ElevenLabs API-nøgle for at aktivere stemme-fortælling.");
+      } else if (e?.code === "AUTOPLAY") {
+        // Mobile browsers sometimes block autoplay even with user interaction
+        alert("Lydafspilning blev blokeret. Prøv venligst at klikke på afspil-knappen igen.");
+      } else if (e?.message?.includes("timeout") || e?.message?.includes("network")) {
+        // Mobile network issues
+        alert("Netværksfejl. Tjek venligst din forbindelse og prøv igen.");
+      } else if (e?.status === 500) {
+        // Server error - show more details if available
+        const errorMsg = e?.details?.error || e?.message || "Serverfejl opstod";
+        alert(`TTS Serverfejl: ${errorMsg}\n\nTjek venligst konsollen for flere detaljer.`);
       } else {
-        alert(`TTS Error: ${e?.message || "Could not play voice narration."}`);
+        alert(`TTS Fejl: ${e?.message || "Kunne ikke afspille stemme-fortælling. Prøv venligst igen."}`);
       }
     }
-  }, [passage?.choices, passage?.audio, startVoiceListening, speaking]);
+  }, [passage?.choices, passage?.audio, startVoiceListening, speaking, currentId, storyId]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -419,7 +678,14 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         // Load story metadata
         console.log('📡 Fetching story metadata from:', `/api/stories/${storyId}`);
-        const storyResponse = await fetch(`/api/stories/${storyId}`);
+        const userEmail = getUserEmail();
+        const headers: HeadersInit = {};
+        if (userEmail) {
+          headers['user-email'] = userEmail;
+        }
+        const storyResponse = await fetch(`/api/stories/${storyId}`, {
+          headers
+        });
         
         if (!storyResponse.ok) {
           let errorMessage = 'Story not found';
@@ -440,13 +706,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           } catch (e) {
             // If we can't parse the error, use status-based message
             if (storyResponse.status === 404) {
-              errorMessage = 'Story not found. It may not exist or may not be published yet.';
+              errorMessage = 'Historie ikke fundet. Den eksisterer muligvis ikke eller er endnu ikke offentliggjort.';
             } else if (storyResponse.status === 403) {
-              errorMessage = 'Access denied. This story may require a purchase.';
+              errorMessage = 'Adgang nægtet. Denne historie kræver muligvis et køb.';
             } else if (storyResponse.status === 500) {
-              errorMessage = 'Server error. Please try again later.';
+              errorMessage = 'Serverfejl. Prøv venligst igen senere.';
             } else {
-              errorMessage = `Failed to load story (${storyResponse.status})`;
+              errorMessage = `Kunne ikke indlæse historie (${storyResponse.status})`;
             }
           }
           throw new Error(errorMessage);
@@ -457,7 +723,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         // Load first node
         console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
-        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`);
+        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`, {
+          headers: userEmail ? { 'user-email': userEmail } : {}
+        });
         
         if (!nodeResponse.ok) {
           let errorMessage = 'Story content not found';
@@ -468,9 +736,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             }
           } catch (e) {
             if (nodeResponse.status === 404) {
-              errorMessage = 'Story node not found. The story may be missing content.';
+              errorMessage = 'Historie-node ikke fundet. Historien mangler muligvis indhold.';
             } else {
-              errorMessage = `Failed to load story content (${nodeResponse.status})`;
+              errorMessage = `Kunne ikke indlæse historieindhold (${nodeResponse.status})`;
             }
           }
           throw new Error(errorMessage);
@@ -478,6 +746,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         const nodeData = await nodeResponse.json();
         console.log('✅ Story node loaded:', nodeData);
+        console.log('🎬 Node media data:', {
+          node_key: nodeData.node_key,
+          has_video_url: !!nodeData.video_url,
+          video_url: nodeData.video_url,
+          has_image_url: !!nodeData.image_url,
+          image_url: nodeData.image_url
+        });
         
         // Convert to the format expected by the component
         const story = {
@@ -497,12 +772,20 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           }
         };
         
+        console.log('📦 Story object created:', {
+          node_key: nodeData.node_key,
+          has_video: !!story[nodeData.node_key].video,
+          video: story[nodeData.node_key].video,
+          has_image: !!story[nodeData.node_key].image,
+          image: story[nodeData.node_key].image
+        });
+        
         setStory(story as Record<string, StoryNode>);
         setLoading(false);
       } catch (error: any) {
         console.error('Failed to load story:', error);
-        const errorMessage = error?.message || String(error) || 'Unknown error occurred';
-        setStoryError(`Failed to load story: ${errorMessage}`);
+        const errorMessage = error?.message || String(error) || 'Ukendt fejl opstod';
+        setStoryError(`Kunne ikke indlæse historie: ${errorMessage}`);
         setLoading(false);
       }
     };
@@ -520,7 +803,12 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       const auto = localStorage.getItem("svt_autoread_v1");
-      if (auto !== null) setAutoRead(auto === "1");
+      // Default to false - TTS should only play when user clicks button
+      if (auto !== null) {
+        setAutoRead(auto === "1");
+      } else {
+        setAutoRead(false); // Explicitly set to false if not in localStorage
+      }
       if (raw) {
         const { storyId: loadedStoryId, id, s }: SaveData = JSON.parse(raw);
         if (loadedStoryId === storyId && id && s) { 
@@ -545,6 +833,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       localStorage.setItem("svt_autoread_v1", autoRead ? "1" : "0");
     } catch {}
   }, [autoRead]);
+
+  // Auto-open controls when speaking starts
+  useEffect(() => {
+    if (speaking && !showControls) {
+      setShowControls(true);
+    }
+  }, [speaking, showControls]);
 
   // --- Dice / checks ---
   const rolledForPassageRef = useRef<string | null>(null);
@@ -584,29 +879,49 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     try {
       // Load the new node from API
-      const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${id}`);
+      const userEmail = getUserEmail();
+      const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${id}`, {
+        headers: userEmail ? { 'user-email': userEmail } : {}
+      });
       if (!nodeResponse.ok) {
         throw new Error('Node not found');
       }
       const nodeData = await nodeResponse.json();
+      console.log('🎬 Node data for navigation:', {
+        node_key: nodeData.node_key,
+        has_video_url: !!nodeData.video_url,
+        video_url: nodeData.video_url,
+        has_image_url: !!nodeData.image_url,
+        image_url: nodeData.image_url
+      });
       
       // Update the story with the new node
+      const newNode = {
+        id: nodeData.node_key,
+        text: nodeData.text_md,
+        choices: (nodeData.choices || []).map((choice: any) => ({
+          label: choice.label,
+          goto: choice.to_node_key,
+          match: choice.match
+        })),
+        check: nodeData.dice_check,
+        image: nodeData.image_url,
+        video: nodeData.video_url,
+        backgroundImage: undefined,
+        audio: nodeData.audio_url
+      };
+      
+      console.log('📦 New node object:', {
+        node_key: newNode.id,
+        has_video: !!newNode.video,
+        video: newNode.video,
+        has_image: !!newNode.image,
+        image: newNode.image
+      });
+      
       setStory(prevStory => ({
         ...prevStory,
-        [nodeData.node_key]: {
-          id: nodeData.node_key,
-          text: nodeData.text_md,
-          choices: (nodeData.choices || []).map((choice: any) => ({
-            label: choice.label,
-            goto: choice.to_node_key,
-            match: choice.match
-          })),
-          check: nodeData.dice_check,
-          image: nodeData.image_url,
-          video: nodeData.video_url,
-          backgroundImage: undefined,
-          audio: nodeData.audio_url
-        }
+        [nodeData.node_key]: newNode
       }));
       
       setCurrentId(id);
@@ -683,17 +998,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const ttsCooldownRef = useRef(0);
   const COOL_DOWN_MS = 1000; // Reduced from 2500ms to 1000ms for better UX
 
-  // Build narration string including choices so buttons are read aloud
+  // Build narration string - main text only (buttons will be read separately)
   const getNarrationText = useCallback(() => {
     if (!passage?.text) return '';
-    let text = passage.text;
-    if (passage?.choices && passage.choices.length > 0) {
-      const choicesText = passage.choices
-        .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
-        .join(' ');
-      text = `${text} Valgmuligheder: ${choicesText} Hvad vælger du?`;
-    }
-    return text;
+    return passage.text;
   }, [passage]);
 
   const speakCloudThrottled = useCallback(async () => {
@@ -702,27 +1010,24 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     // Prevent multiple simultaneous calls
     if (isTTSRunningRef.current) {
-      console.log('🚫 TTS already running, skipping speakCloudThrottled');
       return;
     }
     
     const now = Date.now();
     if (now - ttsCooldownRef.current < COOL_DOWN_MS) {
-      console.log('🚫 TTS cooldown active, skipping');
-      const remainingTime = Math.ceil((COOL_DOWN_MS - (now - ttsCooldownRef.current)) / 1000);
-      showVoiceNotification(`⏳ Please wait ${remainingTime} second${remainingTime > 1 ? 's' : ''} before playing again`, 'info');
+        const remainingTime = Math.ceil((COOL_DOWN_MS - (now - ttsCooldownRef.current)) / 1000);
+      showVoiceNotification(`⏳ Vent venligst ${remainingTime} sekund${remainingTime > 1 ? 'er' : ''} før du afspiller igen`, 'info');
       return;
     }
     ttsCooldownRef.current = now;
 
-    console.log('🎙️ speakCloudThrottled called, TTS running:', isTTSRunningRef.current);
-    
     // Stop any existing voice listening immediately
     stopVoiceListening();
     
     // Use enhanced TTS with voice listening - it will handle starting voice listening automatically
+    // Pass pre-generated audio URL if available
     await speakWithVoiceListening(narration);
-  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening]);
+  }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, passage?.audio]);
 
   // Auto-read new scenes when enabled
   useEffect(() => {
@@ -736,11 +1041,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     // Add a delay after TTS finishes to allow voice commands to work
     const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
     if (timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
-      console.log('🎯 Auto-read delayed, TTS finished recently:', timeSinceLastTTS + 'ms ago');
       return;
     }
     
-    console.log('🎯 Auto-read triggered for passage:', passage.id);
     speakCloudThrottled();
   }, [autoRead, currentId, passage, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
 
@@ -749,7 +1052,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     // Check if speech recognition is supported
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setSpeechError("Speech recognition not supported in this browser");
+      setSpeechError("Stemmeigenkendelse understøttes ikke i denne browser");
       return;
     }
 
@@ -834,7 +1137,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           return;
         } else {
           console.log('❌ Choice index out of range:', choiceIndex, 'max:', passage.choices.length - 1);
-          showVoiceNotification(`❌ Choice ${choiceIndex + 1} not available (max: ${passage.choices.length})`, 'error');
+          showVoiceNotification(`❌ Valg ${choiceIndex + 1} ikke tilgængeligt (maks: ${passage.choices.length})`, 'error');
         }
       }
 
@@ -864,7 +1167,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             return;
           } else {
             console.log('❌ Danish number word out of range:', word, '->', number, 'max:', passage.choices.length);
-            showVoiceNotification(`❌ Choice ${number} not available (max: ${passage.choices.length})`, 'error');
+            showVoiceNotification(`❌ Valg ${number} ikke tilgængeligt (maks: ${passage.choices.length})`, 'error');
           }
         }
       }
@@ -923,14 +1226,14 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       });
 
       // No match found - show feedback
-      console.log('❌ No matching voice command found for:', transcript);
-      console.log('❌ Available button text:', passage.choices.map(c => c.label));
-      console.log('❌ Try saying part of any button text or use: left, right, 1, 2, etc.');
+      console.log('❌ Ingen matchende stemmekommando fundet for:', transcript);
+      console.log('❌ Tilgængelig knaptekst:', passage.choices.map(c => c.label));
+      console.log('❌ Prøv at sige en del af enhver knaptekst eller brug: venstre, højre, 1, 2, osv.');
     };
 
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
-      setSpeechError(`Speech recognition error: ${event.error}`);
+      setSpeechError(`Stemmeigenkendelsesfejl: ${event.error}`);
       setListening(false);
     };
 
@@ -954,7 +1257,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       recognition.start();
     } catch (e) {
       console.error('Failed to start speech recognition:', e);
-      setSpeechError('Failed to start speech recognition');
+      setSpeechError('Kunne ikke starte stemmeigenkendelse');
       setListening(false);
     }
 
@@ -1053,7 +1356,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-dungeon-text">Loading story...</p>
+          <p className="text-dungeon-text">Indlæser historie...</p>
         </div>
       </div>
     );
@@ -1064,13 +1367,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-400 text-6xl mb-4">❌</div>
-          <h2 className="text-2xl font-bold text-white mb-4">Story Not Found</h2>
+          <h2 className="text-2xl font-bold text-white mb-4">Historie ikke fundet</h2>
           <p className="text-dungeon-text mb-6">{storyError}</p>
           <button 
             onClick={goBackToStories}
             className="bg-dungeon-accent hover:bg-dungeon-accent-active text-white font-semibold py-3 px-6 rounded-lg transition-colors"
           >
-            Back to Stories
+            Tilbage til Historier
           </button>
         </div>
       </div>
@@ -1111,7 +1414,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             onClick={goBackToStories}
             className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm sm:text-base w-full sm:w-auto"
           >
-            ← Back to Stories
+            ← Tilbage til Historier
           </button>
         </div>
       </div>
@@ -1128,50 +1431,69 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         {/* Main Content */}
         <div className="mb-4">
           {/* Scene Video (prioritize video over image) */}
-          {passage?.video && passage.video.includes('cloudinary.com') ? (
-            <div className="mb-4 sm:mb-6 flex justify-center">
-              <video 
-                src={passage.video}
-                controls
-                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                onError={(e) => {
-                  console.error('Failed to load video:', passage.video);
-                  e.currentTarget.style.display = 'none';
-                }}
-              >
-                Your browser does not support the video tag.
-              </video>
-            </div>
-          ) : passage?.image && passage.image.includes('cloudinary.com') ? (
-            /* Scene Image (fallback if no video) */
-            <div className="mb-4 sm:mb-6 flex justify-center">
-              <img 
-                src={passage.image} 
-                alt="Scene illustration"
-                className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                onError={(e) => {
-                  console.error('Failed to load image:', passage.image);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            </div>
-          ) : null}
+          {(() => {
+            // Debug logging
+            if (passage) {
+              console.log('🎬 Passage media check:', {
+                hasVideo: !!passage.video,
+                videoUrl: passage.video,
+                hasImage: !!passage.image,
+                imageUrl: passage.image,
+                nodeId: passage.id
+              });
+            }
+            
+            // Check for video - prioritize video over image
+            if (passage?.video && typeof passage.video === 'string' && passage.video.trim() !== '') {
+              return (
+                <div className="mb-4 sm:mb-6 flex justify-center">
+                  <video 
+                    src={passage.video}
+                    autoPlay
+                    muted
+                    playsInline
+                    loop
+                    controls
+                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                    onError={(e) => {
+                      console.error('❌ Failed to load video:', passage.video);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    onLoadedData={() => {
+                      console.log('✅ Video loaded and playing:', passage.video);
+                    }}
+                  >
+                    Din browser understøtter ikke video-tagget.
+                  </video>
+                </div>
+              );
+            }
+            
+            // Fallback to image if no video
+            if (passage?.image && typeof passage.image === 'string' && passage.image.trim() !== '') {
+              return (
+                <div className="mb-4 sm:mb-6 flex justify-center">
+                  <img 
+                    src={passage.image} 
+                    alt="Scenebillede"
+                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                    onError={(e) => {
+                      console.error('Failed to load image:', passage.image);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              );
+            }
+            
+            // No media available
+            return null;
+          })()}
           
-          {/* Background Audio */}
-          {passage?.audio && (
-            <audio 
-              src={passage.audio}
-              autoPlay
-              loop
-              className="hidden"
-              onError={(e) => {
-                console.error('Failed to load audio:', passage.audio);
-              }}
-            />
-          )}
+          {/* Background Audio removed - TTS handles audio playback via speakViaCloud function */}
           
-          <p className="text-base sm:text-lg leading-relaxed text-white">
-            {passage?.text || "Story not found. Please check your story data."}
+          <p className="text-base sm:text-lg leading-relaxed text-white whitespace-pre-wrap">
+            {passage?.text || "Historie ikke fundet. Tjek venligst dine historiedata."}
           </p>
         </div>
 
@@ -1249,7 +1571,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             {passage.choices.map((choice, i) => (
               <button
                 key={i}
-                className="w-full bg-dungeon-surface p-3 sm:p-3.5 rounded-lg border border-dungeon-accent text-center text-white hover:bg-dungeon-accent transition-colors text-sm sm:text-base"
+                className="w-full bg-dungeon-surface p-3 sm:p-3.5 rounded-lg border border-dungeon-accent text-center text-white hover:bg-dungeon-accent transition-colors text-sm sm:text-base break-words whitespace-normal"
                 onClick={() => handleChoice(choice)}
               >
                 {choice.label}
@@ -1259,105 +1581,123 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         )}
       </div>
 
-      <div className="border-t border-dungeon-border p-3 space-y-3">
-        {/* TTS Controls */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
-          <button 
-            className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors text-sm sm:text-base ${
-              speaking ? 'bg-green-700' : ''
-            }`}
-            onClick={speakCloudThrottled}
-            disabled={speaking}
-          >
-            {speaking ? "🎙️ Playing..." : "🎙️ Read Story"}
-          </button>
-
-          <button 
-            className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors disabled:bg-gray-600"
-            onClick={stopSpeak}
-            disabled={!speaking}
-          >
-            ⏹️ Stop
-          </button>
-        </div>
-
-        {/* Auto Read Toggle */}
-        <div className="flex gap-2 sm:gap-2.5">
+      <div className="border-t border-dungeon-border p-3">
+        {/* Collapsible Controls Dropdown */}
+        <div className="space-y-3">
+          {/* Toggle Button */}
           <button
-            className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
-              autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
-            }`}
-            onClick={handleAutoReadToggle}
-            aria-pressed={autoRead}
-            aria-label={autoRead ? 'Disable auto read' : 'Enable auto read'}
-            title={autoRead ? 'Disable auto read' : 'Enable auto read'}
+            onClick={() => setShowControls(!showControls)}
+            className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-center font-semibold text-white transition-colors flex items-center justify-center gap-2"
+            aria-expanded={showControls}
           >
-            {autoRead ? '🔁 Auto-Read: On' : '🔁 Auto-Read: Off'}
+            <span className="text-lg">{showControls ? '▼' : '▲'}</span>
+            <span>Kontroller</span>
           </button>
-        </div>
 
-        {/* Voice Commands */}
-        <div className="space-y-2">
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
-            <button 
-              className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
-                listening 
-                  ? 'bg-blue-600 hover:bg-blue-700' 
-                  : 'bg-gray-600 hover:bg-gray-700'
-              }`}
-              onClick={() => listening ? stopVoiceListening() : startVoiceListening(10000)}
-            >
-              {listening ? "🎤 Listening..." : "🎤 Voice Commands"}
-            </button>
-            
-            {speechError && (
-              <div className="flex-1 bg-red-800 p-3 rounded-lg text-center text-sm">
-                {speechError}
+          {/* Controls Panel - Always visible when speaking, otherwise toggleable */}
+          {(showControls || speaking) && (
+            <div className="space-y-3">
+              {/* TTS Controls */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+                <button 
+                  className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors text-sm sm:text-base ${
+                    speaking ? 'bg-green-700' : ''
+                  }`}
+                  onClick={speakCloudThrottled}
+                  disabled={speaking}
+                >
+                  {speaking ? "🎙️ Afspiller..." : "🎙️ Læs Historie"}
+                </button>
+
+                <button 
+                  className="flex-1 bg-red-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-red-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                  onClick={stopSpeak}
+                  disabled={!speaking}
+                >
+                  ⏹️ Stop
+                </button>
               </div>
-            )}
-          </div>
-          
-          {/* Speech Recognition Display */}
-          {listening && (
-            <div className="bg-blue-900 p-3 rounded-lg text-center">
-              <div className="text-sm text-blue-200 mb-1">🎤 Lytter efter stemmekommandoer...</div>
-              <div className="text-lg font-mono text-white">
-                {lastTranscript || "Sig en del af knapteksten..."}
+
+              {/* Auto Read Toggle */}
+              <div className="flex gap-2 sm:gap-2.5">
+                <button
+                  className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
+                    autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
+                  }`}
+                  onClick={handleAutoReadToggle}
+                  aria-pressed={autoRead}
+                  aria-label={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
+                  title={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
+                >
+                  {autoRead ? '🔁 Auto-læs: Til' : '🔁 Auto-læs: Fra'}
+                </button>
               </div>
-              <div className="text-xs text-blue-300 mt-1">
-                Tilgængelige kommandoer:
-              </div>
-              <div className="text-xs text-blue-200 mt-1 space-y-1">
-                <div className="text-left mb-2">
-                  <span className="text-blue-400">•</span> <strong>Retninger:</strong> venstre, højre, frem, gå
+
+              {/* Voice Commands */}
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+                  <button 
+                    className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
+                      listening 
+                        ? 'bg-blue-600 hover:bg-blue-700' 
+                        : 'bg-gray-600 hover:bg-gray-700'
+                    }`}
+                    onClick={() => listening ? stopVoiceListening() : startVoiceListening(10000)}
+                  >
+                    {listening ? "🎤 Lytter..." : "🎤 Stemningskommandoer"}
+                  </button>
+                  
+                  {speechError && (
+                    <div className="flex-1 bg-red-800 p-3 rounded-lg text-center text-sm">
+                      {speechError}
+                    </div>
+                  )}
                 </div>
-                <div className="text-left mb-2">
-                  <span className="text-blue-400">•</span> <strong>Tal:</strong> 1, 2, 3... eller en, to, tre, første, anden...
-                </div>
-                {showDiceRollButton && (
-                  <div className="text-left mb-2">
-                    <span className="text-blue-400">•</span> <strong>Terning:</strong> roll, kast, terning, dice
+                
+                {/* Speech Recognition Display */}
+                {listening && (
+                  <div className="bg-blue-900 p-3 rounded-lg text-center">
+                    <div className="text-sm text-blue-200 mb-1">🎤 Lytter efter stemmekommandoer...</div>
+                    <div className="text-lg font-mono text-white">
+                      {lastTranscript || "Sig en del af knapteksten..."}
+                    </div>
+                    <div className="text-xs text-blue-300 mt-1">
+                      Tilgængelige kommandoer:
+                    </div>
+                    <div className="text-xs text-blue-200 mt-1 space-y-1">
+                      <div className="text-left mb-2">
+                        <span className="text-blue-400">•</span> <strong>Retninger:</strong> venstre, højre, frem, gå
+                      </div>
+                      <div className="text-left mb-2">
+                        <span className="text-blue-400">•</span> <strong>Tal:</strong> 1, 2, 3... eller en, to, tre, første, anden...
+                      </div>
+                      {showDiceRollButton && (
+                        <div className="text-left mb-2">
+                          <span className="text-blue-400">•</span> <strong>Terning:</strong> roll, kast, terning, dice
+                        </div>
+                      )}
+                      {passage?.choices?.map((choice, index) => (
+                        <div key={index} className="text-left">
+                          <span className="text-blue-400">•</span> "{choice.label}" 
+                          <span className="text-blue-500 ml-1">(eller sig: {choice.label.toLowerCase().split(' ').filter(w => w.length > 2).slice(0, 2).join(', ')})</span>
+                        </div>
+                      )) || <div>Ingen valg tilgængelige</div>}
+                    </div>
                   </div>
                 )}
-                {passage?.choices?.map((choice, index) => (
-                  <div key={index} className="text-left">
-                    <span className="text-blue-400">•</span> "{choice.label}" 
-                    <span className="text-blue-500 ml-1">(eller sig: {choice.label.toLowerCase().split(' ').filter(w => w.length > 2).slice(0, 2).join(', ')})</span>
-                  </div>
-                )) || <div>Ingen valg tilgængelige</div>}
+              </div>
+
+              {/* Game Controls */}
+              <div className="flex gap-2.5">
+                <button
+                  className="flex-1 bg-dungeon-accent p-3 rounded-lg text-center font-semibold text-white hover:bg-dungeon-accent-active transition-colors"
+                  onClick={resetGame}
+                >
+                  Start Forfra
+                </button>
               </div>
             </div>
           )}
-        </div>
-
-        {/* Game Controls */}
-        <div className="flex gap-2.5">
-          <button
-            className="flex-1 bg-dungeon-accent p-3 rounded-lg text-center font-semibold text-white hover:bg-dungeon-accent-active transition-colors"
-            onClick={resetGame}
-          >
-            Start Over
-          </button>
         </div>
       </div>
     </div>

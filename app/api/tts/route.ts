@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import crypto from 'crypto';
 import { withRateLimit, getClientIP } from '@/lib/rateLimit';
 import { SITE_URL } from '@/lib/env';
+import { uploadAudioToCloudinary } from '@/lib/cloudinary';
 
 const ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
 
@@ -12,7 +13,18 @@ const getAllowedOrigins = (): string[] => {
   const origins = process.env.ALLOWED_ORIGINS?.split(',') || [];
   // Always allow the site URL
   if (SITE_URL) {
-    origins.push(new URL(SITE_URL).origin);
+    try {
+      // Auto-add https:// if protocol is missing
+      let siteUrl = SITE_URL.trim();
+      if (!siteUrl.match(/^https?:\/\//)) {
+        siteUrl = `https://${siteUrl}`;
+      }
+      const siteOrigin = new URL(siteUrl).origin;
+      origins.push(siteOrigin);
+    } catch (error) {
+      console.warn('⚠️ Invalid SITE_URL format:', SITE_URL, error);
+      // Skip invalid URL, continue with other origins
+    }
   }
   // In development, allow localhost
   if (process.env.NODE_ENV === 'development') {
@@ -44,6 +56,207 @@ function generateTextHash(text: string): string {
   return crypto.createHash('md5').update(text).digest('hex');
 }
 
+// Helper function to save audio to Cloudinary and update database
+async function saveAudioToCloudinary(
+  audioBuffer: ArrayBuffer,
+  text: string,
+  nodeKey: string,
+  storyId: string
+): Promise<void> {
+  try {
+    // Get story to find slug and id
+    let { data: story, error: storyError } = await supabaseAdmin
+      .from('stories')
+      .select('id, slug')
+      .eq('slug', storyId)
+      .single();
+
+    // If not found by slug, try by id (UUID)
+    if (storyError || !story) {
+      const result = await supabaseAdmin
+        .from('stories')
+        .select('id, slug')
+        .eq('id', storyId)
+        .single();
+      
+      story = result.data;
+      storyError = result.error;
+    }
+
+    if (storyError || !story) {
+      console.warn('⚠️ Story not found, skipping Cloudinary save:', storyError);
+      return;
+    }
+
+    // Get the node to update (including text_md for hash comparison)
+    const { data: node, error: nodeError } = await supabaseAdmin
+      .from('story_nodes')
+      .select('id, text_md, audio_url, text_hash')
+      .eq('story_id', story.id)
+      .eq('node_key', nodeKey)
+      .single();
+
+    if (nodeError || !node) {
+      console.warn('⚠️ Node not found, skipping Cloudinary save:', nodeError);
+      return;
+    }
+
+    // Use node's text_md for hash comparison (to match database)
+    const nodeText = node.text_md || '';
+    const textHash = generateTextHash(nodeText);
+
+    // Check if audio is already up-to-date
+    if (node.text_hash === textHash && node.audio_url) {
+      console.log(`✅ Audio already up-to-date for node ${nodeKey}, skipping upload`);
+      return;
+    }
+
+    // Upload to Cloudinary
+    const storySlug = story.slug || 'general';
+    const cloudinaryFolder = `tts/${storySlug}/audio`;
+    const publicId = `node_${nodeKey}_${textHash.substring(0, 8)}`;
+
+    const uploadResult = await uploadAudioToCloudinary(
+      Buffer.from(audioBuffer),
+      cloudinaryFolder,
+      publicId
+    );
+
+    console.log(`✅ Audio uploaded to Cloudinary: ${uploadResult.secure_url}`);
+
+    // Update database with audio URL and text hash
+    const { error: updateError } = await supabaseAdmin
+      .from('story_nodes')
+      .update({
+        audio_url: uploadResult.secure_url,
+        text_hash: textHash,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', node.id);
+
+    if (updateError) {
+      console.error('❌ Failed to update node with audio URL:', updateError);
+    } else {
+      console.log(`✅ Database updated for node ${nodeKey}`);
+    }
+  } catch (error) {
+    // Don't fail the request if saving to Cloudinary fails
+    console.error('❌ Error saving audio to Cloudinary:', error);
+  }
+}
+
+// Split text into chunks at sentence boundaries, respecting ElevenLabs 5000 char limit
+function chunkText(text: string, maxChunkSize: number = 5000): string[] {
+  if (text.length <= maxChunkSize) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let currentChunk = '';
+  
+  // Split by sentences (period, exclamation, question mark, colon followed by space or newline)
+  // Use a regex that captures the sentence including its punctuation
+  const sentenceRegex = /([^.!?:]+[.!?:]+(?:\s+|\n+|$))/g;
+  const sentences: string[] = [];
+  let match;
+  
+  while ((match = sentenceRegex.exec(text)) !== null) {
+    sentences.push(match[0]);
+  }
+  
+  // If no sentences found (unusual), split by paragraphs
+  if (sentences.length === 0) {
+    const paragraphs = text.split(/\n\n+/);
+    for (const para of paragraphs) {
+      if (para.length <= maxChunkSize) {
+        chunks.push(para.trim());
+      } else {
+        // Paragraph too long, split by sentences or words
+        const paraSentences = para.match(/[^.!?:]+[.!?:]+(?:\s+|\n+|$)/g) || [];
+        for (const sent of paraSentences) {
+          if ((currentChunk + sent).length <= maxChunkSize) {
+            currentChunk += sent;
+          } else {
+            if (currentChunk.trim()) chunks.push(currentChunk.trim());
+            currentChunk = sent;
+          }
+        }
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+          currentChunk = '';
+        }
+      }
+    }
+    return chunks.filter(c => c.length > 0);
+  }
+  
+  // Process sentences
+  for (const sentence of sentences) {
+    const testChunk = currentChunk + sentence;
+    
+    if (testChunk.length <= maxChunkSize) {
+      currentChunk = testChunk;
+    } else {
+      // Current chunk is full, save it and start new one
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+      }
+      
+      // If single sentence is too long, split it by words
+      if (sentence.length > maxChunkSize) {
+        const words = sentence.split(/(\s+)/);
+        let wordChunk = '';
+        for (const word of words) {
+          if ((wordChunk + word).length <= maxChunkSize) {
+            wordChunk += word;
+          } else {
+            if (wordChunk.trim()) {
+              chunks.push(wordChunk.trim());
+            }
+            wordChunk = word;
+          }
+        }
+        currentChunk = wordChunk;
+      } else {
+        currentChunk = sentence;
+      }
+    }
+  }
+  
+  // Add the last chunk
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks.filter(c => c.length > 0);
+}
+
+// Concatenate multiple audio buffers (MP3 format)
+async function concatenateAudioBuffers(buffers: ArrayBuffer[]): Promise<ArrayBuffer> {
+  // For MP3, we can't easily concatenate without decoding/re-encoding
+  // Instead, we'll use a simple approach: combine the buffers
+  // Note: This works for raw audio but MP3 needs proper concatenation
+  // For now, we'll return the first buffer and log a warning
+  // In production, you'd want to use an audio library like ffmpeg
+  
+  if (buffers.length === 1) {
+    return buffers[0];
+  }
+  
+  // Simple concatenation (may cause audio glitches with MP3)
+  // Better solution would be to decode, concatenate, and re-encode
+  const totalLength = buffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  
+  for (const buffer of buffers) {
+    combined.set(new Uint8Array(buffer), offset);
+    offset += buffer.byteLength;
+  }
+  
+  return combined.buffer;
+}
+
 export async function OPTIONS(request: NextRequest) {
   const response = new NextResponse(null, { status: 204 });
   return setCors(response, request);
@@ -71,7 +284,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   return withRateLimit(request, 50, 60000, async () => {
     try {
-      const { text, nodeKey, storyId } = await request.json();
+      let body;
+      try {
+        body = await request.json();
+      } catch (parseError) {
+        console.error("Failed to parse request body:", parseError);
+        const errorResponse = NextResponse.json({ 
+          error: "Invalid JSON in request body" 
+        }, { status: 400 });
+        return setCors(errorResponse, request);
+      }
+
+      const { text, nodeKey, storyId } = body;
       const clean = (text || "").toString().trim();
       
       if (!clean) {
@@ -84,29 +308,43 @@ export async function POST(request: NextRequest) {
 
       // Check if we have cached audio for this exact text
       if (nodeKey && storyId) {
-        const { data: node } = await supabaseAdmin
-          .from('story_nodes')
-          .select('audio_url, text_hash')
-          .eq('story_id', storyId)
-          .eq('node_key', nodeKey)
-          .single();
+        try {
+          const { data: node, error: dbError } = await supabaseAdmin
+            .from('story_nodes')
+            .select('audio_url, text_hash')
+            .eq('story_id', storyId)
+            .eq('node_key', nodeKey)
+            .single();
 
-        // If hash matches and we have audio_url, return cached URL
-        if (node?.text_hash === textHash && node?.audio_url) {
-          console.log(`✅ Using cached audio for node ${nodeKey}`);
-          
-          // Fetch the audio from Cloudinary and return it
-          const audioResponse = await fetch(node.audio_url);
-          if (audioResponse.ok) {
-            const audioBuffer = await audioResponse.arrayBuffer();
-            const response = new NextResponse(audioBuffer, {
-              status: 200,
-              headers: {
-                "Content-Type": "audio/mpeg",
-              },
-            });
-            return setCors(response, request);
+          if (dbError) {
+            console.error("Database error checking cache:", dbError);
+            // Continue to generate new audio instead of failing
+          } else if (node?.text_hash === textHash && node?.audio_url) {
+            console.log(`✅ Using cached audio for node ${nodeKey}`);
+            
+            // Fetch the audio from Cloudinary and return it
+            try {
+              const audioResponse = await fetch(node.audio_url);
+              if (audioResponse.ok) {
+                const audioBuffer = await audioResponse.arrayBuffer();
+                const response = new NextResponse(audioBuffer, {
+                  status: 200,
+                  headers: {
+                    "Content-Type": "audio/mpeg",
+                  },
+                });
+                return setCors(response, request);
+              } else {
+                console.warn(`Failed to fetch cached audio from ${node.audio_url}, generating new audio`);
+              }
+            } catch (fetchError) {
+              console.error("Error fetching cached audio:", fetchError);
+              // Continue to generate new audio
+            }
           }
+        } catch (cacheError) {
+          console.error("Error checking cache:", cacheError);
+          // Continue to generate new audio instead of failing
         }
       }
 
@@ -120,11 +358,81 @@ export async function POST(request: NextRequest) {
       }
 
       console.log("🎙️ Generating audio with ElevenLabs...");
+      console.log(`📏 Text length: ${clean.length} characters`);
 
-      // Use Danish multilingual voice (Adam is good for Danish)
-      const voiceId = "pNInz6obpgDQGcFmaJgB"; // Adam - multilingual
+      // Use Danish multilingual voice
+      const voiceId = "qhEux886xDKbOdF7jkFP";
 
-      const body = {
+      // ElevenLabs has a 5000 character limit per request
+      const ELEVENLABS_MAX_CHARS = 5000;
+      
+      // If text is too long, split it into chunks
+      if (clean.length > ELEVENLABS_MAX_CHARS) {
+        console.log(`⚠️ Text exceeds ${ELEVENLABS_MAX_CHARS} characters, splitting into chunks...`);
+        const chunks = chunkText(clean, ELEVENLABS_MAX_CHARS);
+        console.log(`📦 Split into ${chunks.length} chunks`);
+        
+        const audioBuffers: ArrayBuffer[] = [];
+        
+        // Generate audio for each chunk
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          console.log(`🎙️ Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)...`);
+          
+          const chunkRequestBody = {
+            text: chunk,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+              style: 0.0,
+              use_speaker_boost: true
+            }
+          };
+
+          const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "xi-api-key": apiKey
+            },
+            body: JSON.stringify(chunkRequestBody)
+          });
+
+          if (!audioResponse.ok) {
+            const txt = await audioResponse.text().catch(() => "");
+            console.error(`ElevenLabs TTS error for chunk ${i + 1}:`, audioResponse.status, txt);
+            const errorResponse = NextResponse.json({ 
+              error: `ElevenLabs TTS error (chunk ${i + 1}/${chunks.length}): ${txt}` 
+            }, { status: audioResponse.status });
+            return setCors(errorResponse, request);
+          }
+
+          const chunkBuffer = await audioResponse.arrayBuffer();
+          audioBuffers.push(chunkBuffer);
+        }
+        
+        // Concatenate all audio chunks
+        console.log(`🔗 Concatenating ${audioBuffers.length} audio chunks...`);
+        const combinedAudio = await concatenateAudioBuffers(audioBuffers);
+        
+        // Save to Cloudinary if nodeKey and storyId are provided
+        if (nodeKey && storyId) {
+          await saveAudioToCloudinary(combinedAudio, clean, nodeKey, storyId);
+        }
+        
+        const response = new NextResponse(combinedAudio, {
+          status: 200,
+          headers: {
+            "Content-Type": "audio/mpeg",
+          },
+        });
+        
+        return setCors(response, request);
+      }
+
+      // Text is within limit, process normally
+      const requestBody = {
         text: clean,
         model_id: "eleven_multilingual_v2",
         voice_settings: {
@@ -141,7 +449,7 @@ export async function POST(request: NextRequest) {
           "Content-Type": "application/json",
           "xi-api-key": apiKey
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(requestBody)
       });
 
       if (!audioResponse.ok) {
@@ -152,6 +460,12 @@ export async function POST(request: NextRequest) {
       }
 
       const audioBuffer = await audioResponse.arrayBuffer();
+      
+      // Save to Cloudinary if nodeKey and storyId are provided
+      if (nodeKey && storyId) {
+        await saveAudioToCloudinary(audioBuffer, clean, nodeKey, storyId);
+      }
+      
       const response = new NextResponse(audioBuffer, {
         status: 200,
         headers: {
@@ -162,7 +476,12 @@ export async function POST(request: NextRequest) {
       return setCors(response, request);
     } catch (e: any) {
       console.error("TTS handler error:", e);
-      const errorResponse = NextResponse.json({ error: e?.message || "TTS failed in handler" }, { status: 500 });
+      console.error("Error stack:", e?.stack);
+      const errorMessage = e?.message || "TTS failed in handler";
+      const errorResponse = NextResponse.json({ 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? e?.stack : undefined
+      }, { status: 500 });
       return setCors(errorResponse, request);
     }
   });

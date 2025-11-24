@@ -1,96 +1,96 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service - TTS Story Platform',
-  description: 'Terms of Service for our interactive TTS story platform',
+  title: 'Servicevilkår - TTS Historie Platform',
+  description: 'Servicevilkår for vores interaktive TTS historie platform',
 };
 
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8">Terms of Service</h1>
+        <h1 className="text-4xl font-bold mb-8">Servicevilkår</h1>
         
         <div className="space-y-6 text-gray-300">
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">1. Acceptance of Terms</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">1. Accept af Vilkår</h2>
             <p>
-              By accessing and using this platform, you accept and agree to be bound by these Terms of Service. 
-              If you do not agree to these terms, please do not use our service.
+              Ved at tilgå og bruge denne platform accepterer og accepterer du at være bundet af disse Servicevilkår. 
+              Hvis du ikke accepterer disse vilkår, må du ikke bruge vores service.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">2. Description of Service</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">2. Beskrivelse af Service</h2>
             <p>
-              We provide an interactive story platform with text-to-speech narration, voice commands, and multimedia content. 
-              Stories are available for purchase individually or through a subscription plan.
+              Vi tilbyder en interaktiv historie platform med tekst-til-tale fortælling, stemmekommandoer og multimedieindhold. 
+              Historier er tilgængelige til køb individuelt eller gennem et abonnementsplan.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">3. User Accounts</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">3. Brugerkonti</h2>
             <p>
-              You may access our service as a guest with email-only authentication. You are responsible for maintaining 
-              the security of your email address and for all activities that occur under your account.
+              Du kan tilgå vores service som gæst med kun email-autentificering. Du er ansvarlig for at opretholde 
+              sikkerheden af din email-adresse og for alle aktiviteter, der forekommer under din konto.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">4. Purchases and Subscriptions</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">4. Køb og Abonnementer</h2>
             <p>
-              <strong>One-Time Purchases:</strong> Individual stories can be purchased for a one-time fee. Once purchased, 
-              you will have lifetime access to that story.
+              <strong>Engangskøb:</strong> Enkelte historier kan købes for et engangsgebyr. Når de er købt, 
+              har du livstidsadgang til den historie.
             </p>
             <p>
-              <strong>Subscriptions:</strong> Subscriptions provide access to all stories during the active subscription period. 
-              Subscriptions are billed monthly and can be cancelled at any time.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">5. Refunds</h2>
-            <p>
-              Due to the digital nature of our content, refunds are generally not provided. However, if you experience 
-              technical issues that prevent you from accessing purchased content, please contact our support team.
+              <strong>Abonnementer:</strong> Abonnementer giver adgang til alle historier i den aktive abonnementsperiode. 
+              Abonnementer faktureres månedligt og kan annulleres når som helst.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">6. Intellectual Property</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">5. Refusioner</h2>
             <p>
-              All content, including stories, images, and audio, is protected by copyright and other intellectual property laws. 
-              You may not reproduce, distribute, or create derivative works without explicit permission.
+              På grund af det digitale indhold, ydes refusioner generelt ikke. Hvis du oplever 
+              tekniske problemer, der forhindrer dig i at tilgå købt indhold, skal du kontakte vores supportteam.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">7. Limitation of Liability</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">6. Immaterielle Rettigheder</h2>
             <p>
-              We strive to provide a reliable service but do not guarantee uninterrupted access. We are not liable for any 
-              damages resulting from the use or inability to use our service.
+              Alt indhold, inklusive historier, billeder og lyd, er beskyttet af ophavsret og andre immaterielle rettighedslove. 
+              Du må ikke reproducere, distribuere eller oprette afledte værker uden eksplicit tilladelse.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">8. Changes to Terms</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">7. Begrænsning af Ansvar</h2>
             <p>
-              We reserve the right to modify these terms at any time. Continued use of the service after changes 
-              constitutes acceptance of the new terms.
+              Vi stræber efter at levere en pålidelig service, men garanterer ikke uafbrudt adgang. Vi er ikke ansvarlige for eventuelle 
+              skader, der opstår som følge af brug eller manglende evne til at bruge vores service.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold mb-4 text-white">9. Contact</h2>
+            <h2 className="text-2xl font-semibold mb-4 text-white">8. Ændringer af Vilkår</h2>
             <p>
-              For questions about these terms, please contact us through our support channels.
+              Vi forbeholder os retten til at ændre disse vilkår når som helst. Fortsat brug af servicen efter ændringer 
+              udgør accept af de nye vilkår.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-2xl font-semibold mb-4 text-white">9. Kontakt</h2>
+            <p>
+              For spørgsmål om disse vilkår, kontakt os venligst gennem vores supportkanaler.
             </p>
           </section>
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-700">
           <p className="text-sm text-gray-400">
-            Last updated: {new Date().toLocaleDateString()}
+            Sidst opdateret: {new Date().toLocaleDateString('da-DK')}
           </p>
         </div>
       </div>

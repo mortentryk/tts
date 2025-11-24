@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateImage, createStoryImagePrompt } from '../../../../lib/aiImageGenerator';
+import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -8,8 +8,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { 
       storySlug, 
-      model = 'dalle3',
-      style = 'fantasy adventure book illustration',
+      model = 'stable-diffusion', // Default to Stable Diffusion for better style consistency with img2img
+      style = 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children',
       size = '1024x1024',
       quality = 'standard',
       replaceExisting = false
@@ -78,6 +78,19 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️ Could not load character assignments:', assignmentsError);
     }
 
+    // Get story visual style
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+    } catch (error) {
+      console.log('Note: visual_style column not yet added to database');
+    }
+
     // Process each node
     for (const node of nodes) {
       try {
@@ -110,14 +123,77 @@ export async function POST(request: NextRequest) {
             };
           }) || [];
 
-        // Create AI prompt from story text with character consistency
-        const prompt = createStoryImagePrompt(node.text_md, story.title, style, nodeCharacters);
+        // Get PREVIOUS scene as reference (not first scene)
+        let referenceImageUrl: string | null = null;
+        let extractedStyleDescription: string | undefined = undefined;
+        
+        // Find previous node with an image
+        const currentNodeIndex = nodes.findIndex(n => n.node_key === node.node_key);
+        if (currentNodeIndex > 0) {
+          // Look backwards for the most recent node with an image
+          for (let i = currentNodeIndex - 1; i >= 0; i--) {
+            const prevNode = nodes[i];
+            if (prevNode.image_url) {
+              referenceImageUrl = prevNode.image_url;
+              console.log(`🎨 Using previous scene (node ${prevNode.node_key}) as reference for node ${node.node_key}`);
+              
+              // Only analyze style with GPT-4 Vision if we're NOT using img2img
+              // img2img sees the image directly, so text description is redundant
+              const willUseImg2Img = referenceImageUrl && model === 'stable-diffusion';
+              
+              if (!willUseImg2Img && referenceImageUrl) {
+                // Only for DALL-E 3 - it can't see images, needs text description
+                try {
+                  console.log(`🔍 Analyzing previous scene style for DALL-E 3 (node ${node.node_key})...`);
+                  extractedStyleDescription = await analyzeImageStyle(referenceImageUrl);
+                  if (extractedStyleDescription) {
+                    console.log(`✅ Extracted style from previous scene for node ${node.node_key}`);
+                  }
+                } catch (error) {
+                  console.warn(`⚠️ Failed to analyze previous scene style:`, error);
+                }
+              } else {
+                console.log(`⏭️ Skipping GPT-4 Vision analysis for node ${node.node_key} - using img2img which sees image directly`);
+              }
+              break;
+            }
+          }
+        }
+        
+        // Use story's visual style or fallback
+        const visualStyle = storyVisualStyle || style || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+        
+        // Create AI prompt from story text with character consistency and style reference
+        const prompt = createStoryImagePrompt(
+          node.text_md, 
+          story.title, 
+          visualStyle, 
+          nodeCharacters,
+          referenceImageUrl || undefined,
+          extractedStyleDescription
+        );
+        
+        // Use img2img if we have a reference image and using stable-diffusion for better style consistency
+        const useImg2Img = referenceImageUrl && model === 'stable-diffusion';
+        const imageModel = useImg2Img ? 'stable-diffusion-img2img' : (model as any);
+        
+        if (referenceImageUrl) {
+          console.log(`🖼️ Using previous scene image for style consistency on node ${node.node_key}`);
+          if (extractedStyleDescription) {
+            console.log(`🎭 Using extracted style description for precise matching on node ${node.node_key}`);
+          }
+          if (useImg2Img) {
+            console.log(`🔄 Using img2img mode for better style consistency on node ${node.node_key}`);
+          }
+        }
         
         // Generate image with AI
         const generatedImage = await generateImage(prompt, {
-          model: model as any,
+          model: imageModel,
           size: size as any,
           quality: quality as any,
+          referenceImageUrl: useImg2Img ? (referenceImageUrl || undefined) : undefined,
+          strength: 0.65, // Good balance: maintains style while allowing scene changes
         });
 
         // Upload to Cloudinary

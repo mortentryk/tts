@@ -11,9 +11,9 @@ interface Story {
   id: string;
   slug: string;
   title: string;
-  description: string;
-  journey_order: number;
-  landmark_type: string;
+  description?: string;
+  journey_order?: number | null;
+  landmark_type?: string;
   thumbnail?: string;
 }
 
@@ -44,8 +44,8 @@ export default function JourneyMap({ stories, onExit, showIntro = true }: Journe
 
   // Get journey stories sorted by order
   const journeyStories = stories
-    .filter(story => story.journey_order !== null)
-    .sort((a, b) => a.journey_order - b.journey_order);
+    .filter(story => story.journey_order !== null && story.journey_order !== undefined)
+    .sort((a, b) => (a.journey_order ?? 0) - (b.journey_order ?? 0));
 
   // Load journey state from localStorage
   useEffect(() => {
@@ -154,16 +154,16 @@ export default function JourneyMap({ stories, onExit, showIntro = true }: Journe
       {/* Header */}
       <div className="absolute top-4 left-4 right-4 z-10 flex justify-between items-center">
         <div className="text-white">
-          <h1 className="text-2xl font-bold">Your Adventure Journey</h1>
+          <h1 className="text-2xl font-bold">Din Eventyrrejse</h1>
           <p className="text-dungeon-text">
-            Stop {journeyState.currentStopIndex + 1} of {journeyStories.length}
+            Stop {journeyState.currentStopIndex + 1} af {journeyStories.length}
           </p>
         </div>
         <button
           onClick={handleExitJourney}
           className="bg-dungeon-surface hover:bg-dungeon-accent text-white px-4 py-2 rounded-lg border border-dungeon-border transition-colors"
         >
-          Exit Journey
+          Afslut Rejse
         </button>
       </div>
 
@@ -219,7 +219,7 @@ export default function JourneyMap({ stories, onExit, showIntro = true }: Journe
                     {story.landmark_type === 'cave' && '🕳️'}
                     {story.landmark_type === 'castle' && '🏰'}
                     {story.landmark_type === 'forest' && '🌲'}
-                    {!['tree', 'sea', 'cave', 'castle', 'forest'].includes(story.landmark_type) && '📍'}
+                    {(!story.landmark_type || !['tree', 'sea', 'cave', 'castle', 'forest'].includes(story.landmark_type)) && '📍'}
                   </div>
                   
                   {/* Story Title */}
@@ -250,22 +250,22 @@ export default function JourneyMap({ stories, onExit, showIntro = true }: Journe
       {isJourneyComplete && (
         <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-20">
           <div className="bg-dungeon-surface border-2 border-dungeon-accent rounded-lg p-8 max-w-md text-center">
-            <h2 className="text-2xl font-bold text-white mb-4">🎉 Journey Complete!</h2>
+            <h2 className="text-2xl font-bold text-white mb-4">🎉 Rejse Gennemført!</h2>
             <p className="text-dungeon-text mb-6">
-              You've explored all the magical lands! You can replay any adventure or explore more stories.
+              Du har udforsket alle de magiske lande! Du kan genafspille ethvert eventyr eller udforske flere historier.
             </p>
             <div className="space-y-3">
               <button
                 onClick={handleExitJourney}
                 className="w-full bg-dungeon-accent hover:bg-dungeon-accent-active text-white px-6 py-3 rounded-lg transition-colors"
               >
-                Browse All Stories
+                Gennemse Alle Historier
               </button>
               <button
                 onClick={() => setJourneyState(prev => ({ ...prev, currentStopIndex: 0, visitedStops: [] }))}
                 className="w-full bg-dungeon-surface hover:bg-dungeon-accent text-white px-6 py-3 rounded-lg border border-dungeon-border transition-colors"
               >
-                Start Journey Again
+                Start Rejse Igen
               </button>
             </div>
           </div>

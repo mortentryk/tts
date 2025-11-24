@@ -25,18 +25,62 @@ export async function POST(request: NextRequest) {
     // Verify webhook signature
     const event = verifyWebhookSignature(body, signature);
 
-    // Log webhook event
-    await supabaseAdmin.from('stripe_webhooks').insert({
-      event_id: event.id,
-      event_type: event.type,
-      event_data: event.data,
-      processed: false,
-    });
+    // Idempotency check: skip if event already processed
+    const { data: existingEvent } = await supabaseAdmin
+      .from('stripe_webhooks')
+      .select('id, processed')
+      .eq('event_id', event.id)
+      .single();
+
+    if (existingEvent) {
+      if (existingEvent.processed) {
+        console.log(`Event ${event.id} already processed, skipping`);
+        return NextResponse.json({ received: true, skipped: true });
+      }
+      // Event exists but not processed - update it and continue
+      await supabaseAdmin
+        .from('stripe_webhooks')
+        .update({
+          event_type: event.type,
+          event_data: event.data,
+          processed: false,
+        })
+        .eq('event_id', event.id);
+    } else {
+      // Log new webhook event
+      try {
+        await supabaseAdmin.from('stripe_webhooks').insert({
+          event_id: event.id,
+          event_type: event.type,
+          event_data: event.data,
+          processed: false,
+        });
+      } catch (insertError: any) {
+        // If insert fails due to unique constraint, event already exists - update it
+        if (insertError.code === '23505') { // PostgreSQL unique violation
+          await supabaseAdmin
+            .from('stripe_webhooks')
+            .update({
+              event_type: event.type,
+              event_data: event.data,
+              processed: false,
+            })
+            .eq('event_id', event.id);
+        } else {
+          throw insertError;
+        }
+      }
+    }
 
     // Handle different event types
     switch (event.type) {
       case 'checkout.session.completed': {
         await handleCheckoutCompleted(event.data.object);
+        break;
+      }
+
+      case 'payment_intent.succeeded': {
+        await handlePaymentIntentSucceeded(event.data.object);
         break;
       }
 
@@ -130,7 +174,7 @@ async function handleCheckoutCompleted(session: any) {
   }
 
   // Handle based on session mode
-  const { type, storyId } = session.metadata || {};
+  const { type, storyId, planId, isLifetime } = session.metadata || {};
 
   if (session.mode === 'subscription') {
     // Get subscription ID from line items
@@ -145,18 +189,41 @@ async function handleCheckoutCompleted(session: any) {
       }
       const subscription = await stripe.subscriptions.retrieve(subscriptionId) as any;
 
-      // Update user subscription
+      // Extract subscription price ID from line items
+      const subscriptionPriceId = subscription.items?.data?.[0]?.price?.id || 
+                                   session.line_items?.data?.[0]?.price?.id ||
+                                   null;
+
+      // Update user subscription with price ID tracking
+      const updateData: any = {
+        subscription_status: subscription.status,
+        subscription_id: subscriptionId,
+        subscription_period_end: subscription.current_period_end 
+          ? new Date(subscription.current_period_end * 1000).toISOString() 
+          : null,
+      };
+
+      // Add subscription_price_id if column exists (graceful degradation)
+      if (subscriptionPriceId) {
+        updateData.subscription_price_id = subscriptionPriceId;
+      }
+
       await supabaseAdmin
         .from('users')
-        .update({
-          subscription_status: subscription.status,
-          subscription_id: subscriptionId,
-          subscription_period_end: subscription.current_period_end 
-            ? new Date(subscription.current_period_end * 1000).toISOString() 
-            : null,
-        })
+        .update(updateData)
         .eq('id', user.id);
     }
+  } else if (type === 'lifetime' || isLifetime === 'true') {
+    // Handle lifetime subscription (one-time payment that grants permanent access)
+    // Set subscription_period_end to far future (2099-12-31) to indicate lifetime
+    await supabaseAdmin
+      .from('users')
+      .update({
+        subscription_status: 'active',
+        subscription_id: session.id, // Use session ID as identifier
+        subscription_period_end: new Date('2099-12-31').toISOString(),
+      })
+      .eq('id', user.id);
   } else if (type === 'one-time' && storyId) {
     // Record purchase
     await supabaseAdmin.from('purchases').upsert({
@@ -175,28 +242,72 @@ async function handleSubscriptionUpdate(subscription: any) {
   const customerId = subscription.customer;
 
   // Find user by customer ID
-  const { data: user } = await supabaseAdmin
+  let { data: user } = await supabaseAdmin
     .from('users')
-    .select('id')
+    .select('id, stripe_customer_id')
     .eq('stripe_customer_id', customerId)
     .single();
 
+  // Fallback: if user not found by customer ID, try email lookup
   if (!user) {
-    console.error('User not found for subscription:', customerId);
-    return;
+    const stripe = (await import('@/lib/stripe')).stripe;
+    if (stripe) {
+      try {
+        // Get customer email from Stripe
+        const customer = await stripe.customers.retrieve(customerId) as any;
+        const customerEmail = customer.email || customer.metadata?.email;
+
+        if (customerEmail) {
+          // Find user by email
+          const { data: userByEmail } = await supabaseAdmin
+            .from('users')
+            .select('id, stripe_customer_id')
+            .eq('email', customerEmail)
+            .single();
+
+          if (userByEmail) {
+            user = userByEmail;
+            // Update stripe_customer_id if missing
+            if (!user.stripe_customer_id) {
+              await supabaseAdmin
+                .from('users')
+                .update({ stripe_customer_id: customerId })
+                .eq('id', user.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching customer from Stripe:', error);
+      }
+    }
+
+    if (!user) {
+      console.error('User not found for subscription:', customerId);
+      return;
+    }
   }
+
+  // Extract subscription price ID from line items
+  const subscriptionPriceId = subscription.items?.data?.[0]?.price?.id || null;
 
   // Update subscription status
   const subscriptionData = subscription as any;
+  const updateData: any = {
+    subscription_status: subscriptionData.status,
+    subscription_id: subscriptionData.id,
+    subscription_period_end: subscriptionData.current_period_end 
+      ? new Date(subscriptionData.current_period_end * 1000).toISOString() 
+      : null,
+  };
+
+  // Add subscription_price_id if available
+  if (subscriptionPriceId) {
+    updateData.subscription_price_id = subscriptionPriceId;
+  }
+
   await supabaseAdmin
     .from('users')
-    .update({
-      subscription_status: subscriptionData.status,
-      subscription_id: subscriptionData.id,
-      subscription_period_end: subscriptionData.current_period_end 
-        ? new Date(subscriptionData.current_period_end * 1000).toISOString() 
-        : null,
-    })
+    .update(updateData)
     .eq('id', user.id);
 }
 
@@ -205,15 +316,50 @@ async function handleSubscriptionDeleted(subscription: any) {
 
   const customerId = subscription.customer;
 
-  const { data: user } = await supabaseAdmin
+  // Find user by customer ID
+  let { data: user } = await supabaseAdmin
     .from('users')
-    .select('id')
+    .select('id, stripe_customer_id')
     .eq('stripe_customer_id', customerId)
     .single();
 
+  // Fallback: if user not found by customer ID, try email lookup
   if (!user) {
-    console.error('User not found for deleted subscription:', customerId);
-    return;
+    const stripe = (await import('@/lib/stripe')).stripe;
+    if (stripe) {
+      try {
+        // Get customer email from Stripe
+        const customer = await stripe.customers.retrieve(customerId) as any;
+        const customerEmail = customer.email || customer.metadata?.email;
+
+        if (customerEmail) {
+          // Find user by email
+          const { data: userByEmail } = await supabaseAdmin
+            .from('users')
+            .select('id, stripe_customer_id')
+            .eq('email', customerEmail)
+            .single();
+
+          if (userByEmail) {
+            user = userByEmail;
+            // Update stripe_customer_id if missing
+            if (!user.stripe_customer_id) {
+              await supabaseAdmin
+                .from('users')
+                .update({ stripe_customer_id: customerId })
+                .eq('id', user.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching customer from Stripe:', error);
+      }
+    }
+
+    if (!user) {
+      console.error('User not found for deleted subscription:', customerId);
+      return;
+    }
   }
 
   // Mark subscription as canceled
@@ -224,6 +370,60 @@ async function handleSubscriptionDeleted(subscription: any) {
       subscription_period_end: new Date().toISOString(),
     })
     .eq('id', user.id);
+}
+
+async function handlePaymentIntentSucceeded(paymentIntent: any) {
+  console.log('Payment intent succeeded:', paymentIntent.id);
+
+  // Only process one-time story purchases (not subscriptions)
+  const { type, storyId, userEmail } = paymentIntent.metadata || {};
+  
+  if (type !== 'one-time' || !storyId) {
+    return; // Not a one-click story purchase
+  }
+
+  // Get or create user
+  let { data: user } = await supabaseAdmin
+    .from('users')
+    .select('id, stripe_customer_id')
+    .eq('email', userEmail)
+    .single();
+
+  if (!user && userEmail) {
+    const { data: newUser } = await supabaseAdmin
+      .from('users')
+      .insert({ email: userEmail })
+      .select()
+      .single();
+    
+    if (newUser) {
+      user = newUser;
+    }
+  }
+
+  if (!user) {
+    console.error('User not found for payment intent:', paymentIntent.id);
+    return;
+  }
+
+  // Update Stripe customer ID if available
+  if (paymentIntent.customer && !user.stripe_customer_id) {
+    await supabaseAdmin
+      .from('users')
+      .update({ stripe_customer_id: paymentIntent.customer })
+      .eq('id', user.id);
+  }
+
+  // Record purchase (idempotent - use upsert)
+  await supabaseAdmin.from('purchases').upsert({
+    user_id: user.id,
+    story_id: storyId,
+    stripe_session_id: paymentIntent.id,
+    stripe_checkout_session_id: paymentIntent.id,
+    amount_paid: paymentIntent.amount / 100, // Convert from cents
+  }, {
+    onConflict: 'user_id,story_id',
+  });
 }
 
 async function handleInvoicePaymentSucceeded(invoice: any) {

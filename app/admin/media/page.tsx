@@ -22,6 +22,7 @@ interface StoryNode {
   audio_url?: string;
   media_type?: string;
   image_prompt?: string;
+  reference_image_node_key?: string;
 }
 
 interface ImageRow {
@@ -34,6 +35,7 @@ interface ImageRow {
   status: 'empty' | 'generating' | 'ready' | 'error';
   generated_at?: string;
   cost?: number;
+  reference_image_node_key?: string;
 }
 
 interface Character {
@@ -62,6 +64,7 @@ interface ImageRow {
   status: 'empty' | 'generating' | 'ready' | 'error';
   generated_at?: string;
   cost?: number;
+  reference_image_node_key?: string;
 }
 
 interface Character {
@@ -79,6 +82,20 @@ interface CharacterAssignment {
   emotion?: string;
   action?: string;
 }
+
+// Helper function to truncate text at word boundaries
+const truncateText = (text: string, maxLength: number = 150): string => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  const truncated = text.substring(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  const lastNewline = truncated.lastIndexOf('\n');
+  const lastBreak = Math.max(lastSpace, lastNewline);
+  if (lastBreak > maxLength * 0.7) { // Only use break if it's not too early
+    return truncated.substring(0, lastBreak) + '...';
+  }
+  return truncated + '...';
+};
 
 export default function MediaManager() {
   const router = useRouter();
@@ -98,6 +115,11 @@ export default function MediaManager() {
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [customPromptReferenceImage, setCustomPromptReferenceImage] = useState<string>('');
+  const [customPromptReferenceType, setCustomPromptReferenceType] = useState<'node' | 'url' | 'upload'>('node');
+  const [customPromptReferenceUrl, setCustomPromptReferenceUrl] = useState<string>('');
+  const [customPromptReferenceFile, setCustomPromptReferenceFile] = useState<File | null>(null);
+  const [customPromptReferencePreview, setCustomPromptReferencePreview] = useState<string>('');
 
   // Check if user is logged in via server session
   useEffect(() => {
@@ -178,8 +200,15 @@ export default function MediaManager() {
           audio_url: node.audio_url || '',
           status: node.image_url ? 'ready' : 'empty',
           generated_at: node.image_url ? new Date().toISOString() : undefined,
-          cost: 0
+          cost: 0,
+          reference_image_node_key: node.reference_image_node_key
         }));
+        
+        // Log video URLs for debugging
+        const nodesWithVideos = rows.filter(r => r.video_url);
+        if (nodesWithVideos.length > 0) {
+          console.log(`📹 Found ${nodesWithVideos.length} nodes with videos:`, nodesWithVideos.map(r => ({ node: r.node_key, video: r.video_url })));
+        }
         
         setImageRows(rows);
       }
@@ -228,18 +257,50 @@ export default function MediaManager() {
     }
   };
 
+  const saveReferenceImage = async (nodeKey: string, referenceNodeKey: string | null) => {
+    if (!selectedStory) return;
+    
+    try {
+      const response = await fetch('/api/stories/' + selectedStory + '/nodes/' + nodeKey, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          reference_image_node_key: referenceNodeKey || null,
+        }),
+      });
+
+      if (response.ok) {
+        // Update local state
+        setImageRows(prev => prev.map(row => 
+          row.node_key === nodeKey 
+            ? { ...row, reference_image_node_key: referenceNodeKey || undefined }
+            : row
+        ));
+        loadStoryNodes(); // Reload to sync
+      }
+    } catch (error) {
+      console.error('Failed to save reference image:', error);
+    }
+  };
+
   const generateImage = async (nodeKey: string) => {
     if (!selectedStory) return;
     
     setGenerating(nodeKey);
     
     try {
-      // Find the node to get its text
+      // Find the node to get its text and reference image
       const node = nodes.find(n => n.node_key === nodeKey);
       if (!node) {
         alert('❌ Node not found');
         return;
       }
+
+      const imageRow = imageRows.find(r => r.node_key === nodeKey);
+      const referenceImageNodeKey = imageRow?.reference_image_node_key;
 
       const response = await fetch('/api/admin/generate-image', {
         method: 'POST',
@@ -252,7 +313,9 @@ export default function MediaManager() {
           nodeId: nodeKey,
           storyText: node.text_md,
           storyTitle: selectedStoryData?.title || selectedStory,
+          model: 'nano-banana', // Use nano-banana for Danish support and reference images
           style: 'fantasy adventure book illustration',
+          referenceImageNodeKey: referenceImageNodeKey || undefined,
         }),
       });
 
@@ -330,9 +393,13 @@ export default function MediaManager() {
       const data = await response.json();
 
       if (response.ok) {
+        console.log('✅ Video generated successfully:', data.video);
         alert(`✅ Video generated! URL: ${data.video.url}\nCost: $${data.video.cost}`);
-        loadStoryNodes();
+        // Reload nodes to show the new video
+        await loadStoryNodes();
+        console.log('✅ Story nodes reloaded after video generation');
       } else {
+        console.error('❌ Video generation failed:', data.error);
         alert(`❌ Failed to generate video: ${data.error}`);
       }
     } catch (error) {
@@ -359,10 +426,23 @@ export default function MediaManager() {
         }),
       });
 
-      const data = await response.json();
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      let data;
+      
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // Handle non-JSON responses (e.g., timeout errors)
+        const text = await response.text();
+        throw new Error(text || `Server error: ${response.status} ${response.statusText}`);
+      }
 
       if (response.ok) {
-        alert(`✅ Audio generated!\n${data.audio.characters} characters\nCost: $${data.audio.cost.toFixed(4)}\nCached: ${data.audio.cached ? 'Yes' : 'No'}`);
+        const characters = data.audio?.characters ?? 0;
+        const cost = data.audio?.cost ?? 0;
+        const cached = data.audio?.cached ?? false;
+        alert(`✅ Audio generated!\n${characters} characters\nCost: $${cost.toFixed(4)}\nCached: ${cached ? 'Yes' : 'No'}`);
         
         // Update the row to show audio is available
         setImageRows(prev => prev.map(row => 
@@ -371,11 +451,16 @@ export default function MediaManager() {
             : row
         ));
       } else {
-        alert(`❌ Failed to generate audio: ${data.error}`);
+        alert(`❌ Failed to generate audio: ${data.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Generate audio error:', error);
-      alert('❌ Failed to generate audio');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('504') || errorMessage.includes('timeout')) {
+        alert('❌ Request timed out. The audio generation may still be processing. Please try again in a moment.');
+      } else {
+        alert(`❌ Failed to generate audio: ${errorMessage}`);
+      }
     } finally {
       setGeneratingAudio(null);
     }
@@ -512,16 +597,39 @@ export default function MediaManager() {
         return;
       }
 
+      // Determine reference image based on type
+      let referenceImageUrl: string | undefined = undefined;
+      let referenceImageNodeKey: string | undefined = undefined;
+
+      if (customPromptReferenceType === 'node' && customPromptReferenceImage) {
+        referenceImageNodeKey = customPromptReferenceImage;
+      } else if (customPromptReferenceType === 'url' && customPromptReferenceUrl) {
+        referenceImageUrl = customPromptReferenceUrl;
+      } else if (customPromptReferenceType === 'upload' && customPromptReferenceFile) {
+        // Convert file to data URL for now (or upload to Cloudinary)
+        // For now, we'll use the data URL directly
+        referenceImageUrl = customPromptReferencePreview;
+      }
+
+      const requestBody: any = {
+        storySlug: selectedStory,
+        nodeId: nodeKey,
+        storyText: customPrompt, // Use custom prompt as story text
+        storyTitle: selectedStoryData?.title || selectedStory,
+        useCustomPrompt: true, // Flag to use custom prompt directly without story context
+        model: 'nano-banana', // Use nano-banana for Danish support
+      };
+
+      if (referenceImageNodeKey) {
+        requestBody.referenceImageNodeKey = referenceImageNodeKey;
+      } else if (referenceImageUrl) {
+        requestBody.referenceImageUrl = referenceImageUrl;
+      }
+
       const response = await fetch('/api/admin/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storySlug: selectedStory,
-          nodeId: nodeKey,
-          storyText: customPrompt, // Use custom prompt as story text
-          storyTitle: selectedStoryData?.title || selectedStory,
-          style: '', // No style prefix, use prompt as-is
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -654,6 +762,7 @@ export default function MediaManager() {
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Node</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Text</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Characters</th>
+                          <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Reference Image</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Media</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Audio</th>
                           <th className="border border-gray-300 px-4 py-2 text-left text-gray-900 font-semibold">Actions</th>
@@ -667,15 +776,17 @@ export default function MediaManager() {
                               {row.node_key}
                             </td>
                             <td className="border border-gray-300 px-4 py-2 max-w-md">
-                              <div className="text-sm text-gray-900 font-medium">
-                                {row.text.substring(0, 100)}...
+                              <div className="text-sm text-gray-900 font-medium whitespace-pre-wrap line-clamp-3">
+                                {truncateText(row.text, 200)}
                               </div>
-                              <button
-                                onClick={() => setExpandedText(row.node_key)}
-                                className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                              >
-                                📖 Read full text
-                              </button>
+                              {row.text.length > 200 && (
+                                <button
+                                  onClick={() => setExpandedText(row.node_key)}
+                                  className="mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  📖 Read full text
+                                </button>
+                              )}
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {(() => {
@@ -743,6 +854,32 @@ export default function MediaManager() {
                                   </div>
                                 );
                               })()}
+                            </td>
+                            <td className="border border-gray-300 px-4 py-2">
+                              <div className="space-y-2">
+                                <select
+                                  value={row.reference_image_node_key || ''}
+                                  onChange={(e) => {
+                                    const refKey = e.target.value || null;
+                                    saveReferenceImage(row.node_key, refKey);
+                                  }}
+                                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                                >
+                                  <option value="">Auto (first image)</option>
+                                  {imageRows
+                                    .filter(r => r.node_key !== row.node_key && r.image_url && r.status === 'ready')
+                                    .map(refRow => (
+                                      <option key={refRow.node_key} value={refRow.node_key}>
+                                        {refRow.node_key} {refRow.image_url ? '🖼️' : ''}
+                                      </option>
+                                    ))}
+                                </select>
+                                {row.reference_image_node_key && (
+                                  <div className="text-xs text-gray-600">
+                                    Using: {row.reference_image_node_key}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {(() => {
@@ -861,13 +998,32 @@ export default function MediaManager() {
                             <td className="border border-gray-300 px-4 py-2">
                               <div className="flex space-x-2">
                                 {row.status === 'empty' && (
-                                  <button
-                                    onClick={() => generateImage(row.node_key)}
-                                    disabled={generating === row.node_key}
-                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
-                                  >
-                                    {generating === row.node_key ? '⏳ Generating...' : '🎨 Make Image'}
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => generateImage(row.node_key)}
+                                      disabled={generating === row.node_key}
+                                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                      {generating === row.node_key ? '⏳ Generating...' : '🎨 Make Image'}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setCustomPromptNode(row.node_key);
+                                        setCustomPrompt('');
+                                      }}
+                                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+                                    >
+                                      ✏️ Custom
+                                    </button>
+                                    <button
+                                      onClick={() => generateAudio(row.node_key)}
+                                      disabled={generatingAudio === row.node_key}
+                                      className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:bg-gray-400"
+                                      title={row.audio_url ? 'Audio already generated - click to regenerate' : 'Generate audio with ElevenLabs'}
+                                    >
+                                      {generatingAudio === row.node_key ? '⏳ Audio...' : row.audio_url ? '🔊 ✓' : '🔊 Audio'}
+                                    </button>
+                                  </>
                                 )}
                                 
                                 {row.status === 'ready' && (
@@ -994,6 +1150,28 @@ export default function MediaManager() {
                   💡 Tip: Be specific! Include lighting, mood, colors, and style.
                 </p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  🖼️ Reference Image (Optional):
+                </label>
+                <select
+                  value={customPromptReferenceImage}
+                  onChange={(e) => setCustomPromptReferenceImage(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                >
+                  <option value="">None - Generate without reference</option>
+                  {imageRows
+                    .filter(row => row.node_key !== customPromptNode && row.image_url)
+                    .map(row => (
+                      <option key={row.node_key} value={row.node_key}>
+                        Node {row.node_key} - {row.text.substring(0, 50)}...
+                      </option>
+                    ))}
+                </select>
+                <p className="mt-2 text-xs text-gray-600">
+                  💡 Select a previous node's image to maintain style consistency.
+                </p>
+              </div>
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setCustomPromptNode(null)}
@@ -1088,6 +1266,153 @@ export default function MediaManager() {
                   💡 Tip: Be specific! Include lighting, mood, colors, and style.
                 </p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  🖼️ Reference Image (Optional):
+                </label>
+                
+                {/* Reference Type Selector */}
+                <div className="flex space-x-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomPromptReferenceType('node');
+                      setCustomPromptReferenceUrl('');
+                      setCustomPromptReferenceFile(null);
+                      setCustomPromptReferencePreview('');
+                    }}
+                    className={`px-3 py-1 rounded text-sm ${
+                      customPromptReferenceType === 'node'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    📋 From Node
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomPromptReferenceType('url');
+                      setCustomPromptReferenceImage('');
+                      setCustomPromptReferenceFile(null);
+                      setCustomPromptReferencePreview('');
+                    }}
+                    className={`px-3 py-1 rounded text-sm ${
+                      customPromptReferenceType === 'url'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    🔗 From URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomPromptReferenceType('upload');
+                      setCustomPromptReferenceImage('');
+                      setCustomPromptReferenceUrl('');
+                      setCustomPromptReferencePreview('');
+                    }}
+                    className={`px-3 py-1 rounded text-sm ${
+                      customPromptReferenceType === 'upload'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    📤 Upload
+                  </button>
+                </div>
+
+                {/* Node Selection */}
+                {customPromptReferenceType === 'node' && (
+                  <>
+                    <select
+                      value={customPromptReferenceImage}
+                      onChange={(e) => setCustomPromptReferenceImage(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                    >
+                      <option value="">None - Generate without reference</option>
+                      {imageRows
+                        .filter(row => row.node_key !== customPromptNode && row.image_url)
+                        .map(row => (
+                          <option key={row.node_key} value={row.node_key}>
+                            Node {row.node_key} - {row.text.substring(0, 50)}...
+                          </option>
+                        ))}
+                    </select>
+                    <p className="mt-2 text-xs text-gray-600">
+                      💡 Select a previous node's image to maintain style consistency.
+                    </p>
+                  </>
+                )}
+
+                {/* URL Input */}
+                {customPromptReferenceType === 'url' && (
+                  <>
+                    <input
+                      type="url"
+                      value={customPromptReferenceUrl}
+                      onChange={(e) => {
+                        setCustomPromptReferenceUrl(e.target.value);
+                        if (e.target.value) {
+                          setCustomPromptReferencePreview(e.target.value);
+                        } else {
+                          setCustomPromptReferencePreview('');
+                        }
+                      }}
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                    />
+                    {customPromptReferencePreview && (
+                      <div className="mt-2">
+                        <img
+                          src={customPromptReferencePreview}
+                          alt="Reference preview"
+                          className="max-w-full h-32 object-contain border border-gray-300 rounded"
+                          onError={() => setCustomPromptReferencePreview('')}
+                        />
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-gray-600">
+                      💡 Paste a URL to an image you want to use as reference.
+                    </p>
+                  </>
+                )}
+
+                {/* File Upload */}
+                {customPromptReferenceType === 'upload' && (
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setCustomPromptReferenceFile(file);
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            setCustomPromptReferencePreview(event.target?.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                    />
+                    {customPromptReferencePreview && (
+                      <div className="mt-2">
+                        <img
+                          src={customPromptReferencePreview}
+                          alt="Reference preview"
+                          className="max-w-full h-32 object-contain border border-gray-300 rounded"
+                        />
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-gray-600">
+                      💡 Upload an image file to use as reference (JPG, PNG, etc.).
+                    </p>
+                  </>
+                )}
+              </div>
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setCustomPromptNode(null)}
@@ -1104,9 +1429,9 @@ export default function MediaManager() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+                      </div>
+            </div>
+        )}
 
       {/* Full Text Modal */}
       {expandedText && (

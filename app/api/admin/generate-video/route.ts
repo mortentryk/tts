@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
+import { generateVideoWithReplicate, createStoryVideoPrompt } from '../../../../lib/aiImageGenerator';
 import { uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 
@@ -32,9 +32,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
+    // Get story's visual style for consistency
+    let storyVisualStyle = null;
+    try {
+      const { data: storyWithStyle } = await supabase
+        .from('stories')
+        .select('visual_style')
+        .eq('id', story.id)
+        .single();
+      storyVisualStyle = storyWithStyle?.visual_style;
+      console.log(`🎨 Story visual_style: ${storyVisualStyle || 'NOT SET'}`);
+    } catch (error) {
+      console.log('⚠️ Note: visual_style column not yet added to database');
+    }
+
     const { data: node } = await supabase
       .from('story_nodes')
-      .select('image_url, text_md')
+      .select('image_url, text_md, sort_index')
       .eq('story_id', story.id)
       .eq('node_key', nodeId)
       .single();
@@ -48,8 +62,60 @@ export async function POST(request: NextRequest) {
 
     console.log('🖼️ Using existing image:', node.image_url);
 
-    // Generate video from the image
-    const generatedVideo = await generateVideoWithReplicate(node.text_md, node.image_url);
+    // Get story title
+    const { data: storyWithTitle } = await supabase
+      .from('stories')
+      .select('title')
+      .eq('id', story.id)
+      .single();
+
+    // Get previous node text for context (similar to image generation)
+    let previousNodeText = '';
+    let referenceImageUrls: string[] = [];
+    
+    if (node.sort_index && node.sort_index > 1) {
+      // Get the last 3 previous nodes (for better context)
+      const startIndex = Math.max(1, node.sort_index - 3);
+      const { data: previousNodes } = await supabase
+        .from('story_nodes')
+        .select('node_key, text_md, image_url, sort_index')
+        .eq('story_id', story.id)
+        .gte('sort_index', startIndex)
+        .lt('sort_index', node.sort_index)
+        .order('sort_index', { ascending: true });
+
+      if (previousNodes && previousNodes.length > 0) {
+        // Get previous node text
+        const previousNodesText = previousNodes
+          .filter(n => n.text_md)
+          .map(n => n.text_md!);
+        previousNodeText = previousNodesText.join('\n\n');
+        
+        // Get reference images from previous nodes (last 2 nodes with images)
+        referenceImageUrls = previousNodes
+          .filter(n => n.image_url)
+          .map(n => n.image_url!)
+          .slice(-2); // Get last 2 reference images
+        
+        console.log(`📖 Found ${previousNodesText.length} previous node(s) for context`);
+        console.log(`🖼️ Found ${referenceImageUrls.length} reference image(s)`);
+      }
+    }
+
+    // Use the same visual style as images
+    const visualStyle = storyVisualStyle || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+
+    // Create Danish video prompt (similar to image prompt structure)
+    const videoPrompt = createStoryVideoPrompt(
+      node.text_md, 
+      storyWithTitle?.title || '', 
+      visualStyle,
+      previousNodeText || undefined,
+      referenceImageUrls
+    );
+
+    // Generate video from the image using the same structured prompt as images
+    const generatedVideo = await generateVideoWithReplicate(videoPrompt, node.image_url);
 
     console.log('✅ Video generated:', generatedVideo.url);
 
@@ -57,7 +123,10 @@ export async function POST(request: NextRequest) {
     const videoResponse = await fetch(generatedVideo.url);
     const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
     
-    const publicId = generateStoryAssetId(storySlug, nodeId, 'video');
+    // Generate public ID - extract just the filename part since we pass folder separately
+    const fullPublicId = generateStoryAssetId(storySlug, nodeId, 'video');
+    // Remove the folder prefix since we'll pass it separately
+    const publicId = fullPublicId.replace(`tts-books/${storySlug}/`, '');
     const uploadResult = await uploadVideoToCloudinary(
       videoBuffer,
       `tts-books/${storySlug}`,
@@ -103,7 +172,7 @@ export async function POST(request: NextRequest) {
         height: uploadResult.height,
         duration: 2.3, // ~14 frames at 6 FPS
         cost: generatedVideo.cost,
-        prompt: node.text_md,
+        prompt: videoPrompt,
       },
     });
 
