@@ -182,14 +182,21 @@ export default function Home() {
     });
   };
 
-  const handleSubscription = async (planId: string, type: 'subscription' | 'lifetime') => {
+  const handleSubscription = async (planId: string, type: 'subscription' | 'lifetime', emailOverride?: string) => {
+    const emailToUse = emailOverride || userEmail;
+    
+    if (!emailToUse) {
+      alert('Email er påkrævet for at abonnere');
+      return;
+    }
+    
     try {
       const response = await fetch('/api/checkout/create-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type,
-          userEmail: userEmail,
+          userEmail: emailToUse,
           planId,
         }),
       });
@@ -446,7 +453,7 @@ export default function Home() {
                             async (email: string) => {
                               setUserEmail(email);
                               setUserEmailState(email);
-                              await handleSubscription(monthlyPlan.id, 'subscription');
+                              await handleSubscription(monthlyPlan.id, 'subscription', email);
                             }
                           );
                         }
@@ -487,7 +494,7 @@ export default function Home() {
                             async (email: string) => {
                               setUserEmail(email);
                               setUserEmailState(email);
-                              await handleSubscription(lifetimePlan.id, 'lifetime');
+                              await handleSubscription(lifetimePlan.id, 'lifetime', email);
                             }
                           );
                         }
