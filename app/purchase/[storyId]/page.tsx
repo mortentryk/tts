@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { getUserEmail } from '@/lib/purchaseVerification';
 
 export default function PurchasePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [story, setStory] = useState<any>(null);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -32,11 +34,40 @@ export default function PurchasePage() {
 
   useEffect(() => {
     loadStory();
-  }, [loadStory]);
+    
+    // Try to get email from URL params first, then from localStorage
+    const emailFromUrl = searchParams.get('email');
+    if (emailFromUrl) {
+      setEmail(emailFromUrl);
+    } else {
+      // Fallback to localStorage
+      const storedEmail = getUserEmail();
+      if (storedEmail) {
+        setEmail(storedEmail);
+      }
+    }
+  }, [loadStory, searchParams]);
+
+  const validateEmail = (email: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
 
   const handlePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // Validate email
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Email er påkrævet');
+      return;
+    }
+    
+    if (!validateEmail(trimmedEmail)) {
+      setError('Indtast venligst en gyldig email-adresse');
+      return;
+    }
+
     setProcessing(true);
 
     try {
@@ -48,7 +79,7 @@ export default function PurchasePage() {
         },
         body: JSON.stringify({
           type: 'one-time',
-          userEmail: email,
+          userEmail: trimmedEmail,
           storyId: story.id,
         }),
       });
@@ -138,7 +169,7 @@ export default function PurchasePage() {
                 placeholder="din@email.dk"
               />
               <p className="text-sm text-gray-400 mt-2">
-                Vi sender din købsbekræftelse til denne email
+                {email ? 'Vi sender din købsbekræftelse til denne email' : 'Indtast din email-adresse for at fortsætte'}
               </p>
             </div>
 
@@ -150,7 +181,7 @@ export default function PurchasePage() {
 
             <button
               type="submit"
-              disabled={processing || !email}
+              disabled={processing || !email.trim()}
               className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 rounded-lg transition-colors"
             >
               {processing ? 'Behandler...' : `Køb for ${Number(story.price).toFixed(0)} kr.`}

@@ -45,8 +45,8 @@ export default function PurchaseButton({ story, hasAccess, userEmail }: Purchase
   const handleEmailConfirm = (email: string) => {
     setUserEmail(email);
     setShowEmailDialog(false);
-    // Navigate to purchase page after email is set
-    router.push(`/purchase/${story.id}`);
+    // Navigate to purchase page with email in URL to avoid asking again
+    router.push(`/purchase/${story.id}?email=${encodeURIComponent(email)}`);
   };
 
   return (
