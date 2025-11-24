@@ -95,7 +95,8 @@ export default function PurchasePage() {
       if (oneClickData.requiresAction && oneClickData.clientSecret) {
         // Load Stripe.js
         const stripeModule = await import('@stripe/stripe-js');
-        const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+        // NEXT_PUBLIC_ env vars are available in client components
+        const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
         
         if (!stripePublishableKey) {
           throw new Error('Stripe publishable key not configured');
