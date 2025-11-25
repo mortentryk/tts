@@ -378,7 +378,13 @@ export async function POST(request: NextRequest) {
 
     // Get list of node_keys from CSV (using deduplicated nodes)
     // Normalize to strings for comparison to avoid type mismatch issues
+    // Use both string and number comparison to handle type mismatches
     const csvNodeKeys = new Set(deduplicatedNodes.map(n => String(n.node_key).trim()));
+    const csvNodeKeysNumeric = new Set(deduplicatedNodes.map(n => {
+      const key = String(n.node_key).trim();
+      const num = Number(key);
+      return isNaN(num) ? key : num.toString();
+    }));
 
     console.log(`📋 CSV contains ${csvNodeKeys.size} unique node keys`);
     console.log(`📋 Sample CSV keys:`, Array.from(csvNodeKeys).slice(0, 10).join(', '));
@@ -393,9 +399,16 @@ export async function POST(request: NextRequest) {
       const nodesToDelete = existingNodes
         .filter(n => {
           const existingKey = String(n.node_key).trim();
+          const existingKeyNumeric = (() => {
+            const num = Number(existingKey);
+            return isNaN(num) ? existingKey : num.toString();
+          })();
+          
+          // Check both string and numeric versions to handle type mismatches
+          const inCsv = csvNodeKeys.has(existingKey) || csvNodeKeysNumeric.has(existingKeyNumeric);
           
           // Delete if not in CSV
-          if (!csvNodeKeys.has(existingKey)) {
+          if (!inCsv) {
             console.log(`🗑️ Marking for deletion: "${existingKey}" (not in CSV)`);
             return true;
           }
@@ -549,7 +562,89 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Verify final node count matches CSV and clean up any remaining extra nodes
+    const { count: finalNodeCount, error: countError } = await supabaseAdmin
+      .from('story_nodes')
+      .select('*', { count: 'exact', head: true })
+      .eq('story_id', storyId);
+    
+    if (countError) {
+      console.warn(`⚠️ Could not verify final node count:`, countError.message);
+    } else {
+      console.log(`📊 Final node count: ${finalNodeCount || 0} (CSV had ${deduplicatedNodes.length} nodes)`);
+      if (finalNodeCount !== deduplicatedNodes.length) {
+        console.warn(`⚠️ Node count mismatch! Database has ${finalNodeCount} nodes but CSV has ${deduplicatedNodes.length} nodes.`);
+        
+        // Get all node keys in database to help debug and clean up
+        const { data: allDbNodes } = await supabaseAdmin
+          .from('story_nodes')
+          .select('node_key')
+          .eq('story_id', storyId);
+        
+        if (allDbNodes) {
+          const dbNodeKeys = new Set(allDbNodes.map(n => String(n.node_key).trim()));
+          const csvKeys = new Set(deduplicatedNodes.map(n => String(n.node_key).trim()));
+          
+          const extraInDb = Array.from(dbNodeKeys).filter(k => !csvKeys.has(k));
+          const missingInDb = Array.from(csvKeys).filter(k => !dbNodeKeys.has(k));
+          
+          if (extraInDb.length > 0) {
+            console.warn(`⚠️ Extra nodes in database (not in CSV):`, extraInDb.slice(0, 10).join(', '), extraInDb.length > 10 ? `... and ${extraInDb.length - 10} more` : '');
+            
+            // Delete the extra nodes that weren't caught by the initial deletion
+            console.log(`🗑️ Deleting ${extraInDb.length} extra nodes that weren't caught by initial deletion...`);
+            
+            // Delete choices for these extra nodes first
+            await supabaseAdmin
+              .from('story_choices')
+              .delete()
+              .eq('story_id', storyId)
+              .in('from_node_key', extraInDb);
+            
+            // Delete the extra nodes
+            const batchSize = 100;
+            for (let i = 0; i < extraInDb.length; i += batchSize) {
+              const batch = extraInDb.slice(i, i + batchSize);
+              const { error: extraDeleteError } = await supabaseAdmin
+                .from('story_nodes')
+                .delete()
+                .eq('story_id', storyId)
+                .in('node_key', batch);
+              
+              if (extraDeleteError) {
+                console.error(`❌ Error deleting extra nodes batch:`, extraDeleteError);
+              } else {
+                console.log(`✅ Deleted batch of ${batch.length} extra nodes`);
+              }
+            }
+            
+            // Verify deletion worked
+            const { count: newCount } = await supabaseAdmin
+              .from('story_nodes')
+              .select('*', { count: 'exact', head: true })
+              .eq('story_id', storyId);
+            
+            console.log(`📊 Node count after cleanup: ${newCount || 0} (should be ${deduplicatedNodes.length})`);
+          }
+          
+          if (missingInDb.length > 0) {
+            console.warn(`⚠️ Missing nodes in database (in CSV but not in DB):`, missingInDb.slice(0, 10).join(', '), missingInDb.length > 10 ? `... and ${missingInDb.length - 10} more` : '');
+            console.warn(`⚠️ These nodes should have been inserted. This may indicate an upsert issue.`);
+          }
+        }
+      } else {
+        console.log(`✅ Node count verified: ${finalNodeCount} nodes match CSV`);
+      }
+    }
+
+    // Get final verified count for response
+    const { count: verifiedFinalCount } = await supabaseAdmin
+      .from('story_nodes')
+      .select('*', { count: 'exact', head: true })
+      .eq('story_id', storyId);
+
     console.log('✅ CSV upload successful!');
+    console.log(`📊 Final verified node count: ${verifiedFinalCount || 0}`);
 
     return NextResponse.json({
       success: true,
@@ -558,7 +653,7 @@ export async function POST(request: NextRequest) {
         id: story.id,
         slug: storySlug,
         title: metadata.title || storySlug,
-        nodes: deduplicatedNodes.length,
+        nodes: verifiedFinalCount || deduplicatedNodes.length,
         choices: choices.length,
         published: publishStory
       }
