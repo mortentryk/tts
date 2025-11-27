@@ -77,6 +77,11 @@ export default function SimpleImageManager() {
   const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
+  const [tempAssignments, setTempAssignments] = useState<Array<{
+    characterId: string;
+    emotion: string;
+    action: string;
+  }>>([]);
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
 
@@ -117,6 +122,23 @@ export default function SimpleImageManager() {
       setCharacterAssignments([]);
     }
   }, [selectedStory]);
+
+  // Initialize tempAssignments when editing a node
+  useEffect(() => {
+    if (editingNode) {
+      const nodeChars = characterAssignments.filter(a => a.node_key === editingNode);
+      const currentAssignments = nodeChars.length > 0
+        ? nodeChars.map(a => ({
+            characterId: a.character_id,
+            emotion: a.emotion || '',
+            action: a.action || '',
+          }))
+        : [{ characterId: '', emotion: '', action: '' }];
+      setTempAssignments(currentAssignments);
+    } else {
+      setTempAssignments([]);
+    }
+  }, [editingNode, characterAssignments]);
 
   const loadStories = async () => {
     try {
@@ -516,8 +538,15 @@ export default function SimpleImageManager() {
   };
 
   const assignCharacterToNode = async (nodeKey: string) => {
-    if (!selectedStory || !assignForm.characterId) {
-      alert('Please select a character');
+    if (!selectedStory) {
+      alert('Please select a story');
+      return;
+    }
+
+    // Filter out empty assignments
+    const validAssignments = tempAssignments.filter(a => a.characterId);
+    if (validAssignments.length === 0) {
+      alert('Please add at least one character');
       return;
     }
 
@@ -529,12 +558,12 @@ export default function SimpleImageManager() {
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeKey: nodeKey,
-          assignments: [{
-            characterId: assignForm.characterId,
-            emotion: assignForm.emotion || null,
-            action: assignForm.action || null,
+          assignments: validAssignments.map(a => ({
+            characterId: a.characterId,
+            emotion: a.emotion || null,
+            action: a.action || null,
             role: 'main',
-          }],
+          })),
         }),
       });
 
@@ -542,13 +571,14 @@ export default function SimpleImageManager() {
         // Reload assignments
         await loadCharacterAssignments();
         setEditingNode(null);
+        setTempAssignments([]);
         setAssignForm({ characterId: '', emotion: '', action: '' });
       } else {
-        alert('❌ Failed to assign character');
+        alert('❌ Failed to assign characters');
       }
     } catch (error) {
       console.error('Assign character error:', error);
-      alert('❌ Failed to assign character');
+      alert('❌ Failed to assign characters');
     }
   };
 
@@ -680,33 +710,79 @@ export default function SimpleImageManager() {
                                 if (editingNode === row.node_key) {
                                   return (
                                     <div className="space-y-2">
-                                      <select
-                                        value={assignForm.characterId}
-                                        onChange={(e) => setAssignForm({...assignForm, characterId: e.target.value})}
-                                        className="w-full text-xs px-2 py-1 border rounded"
+                                      {tempAssignments.map((assignment, idx) => (
+                                        <div key={idx} className="border border-gray-300 p-2 rounded space-y-1 bg-gray-50">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-semibold text-gray-700">Character {idx + 1}</span>
+                                            {tempAssignments.length > 1 && (
+                                              <button
+                                                onClick={() => {
+                                                  setTempAssignments(tempAssignments.filter((_, i) => i !== idx));
+                                                }}
+                                                className="text-xs text-red-600 hover:text-red-800 font-bold"
+                                                title="Remove this character"
+                                              >
+                                                ✕
+                                              </button>
+                                            )}
+                                          </div>
+                                          <select
+                                            value={assignment.characterId}
+                                            onChange={(e) => {
+                                              const updated = [...tempAssignments];
+                                              updated[idx].characterId = e.target.value;
+                                              setTempAssignments(updated);
+                                            }}
+                                            className="w-full text-xs px-2 py-1 border rounded"
+                                          >
+                                            <option value="">Select character...</option>
+                                            {characters.map(char => (
+                                              <option key={char.id} value={char.id}>{char.name}</option>
+                                            ))}
+                                          </select>
+                                          <input
+                                            type="text"
+                                            placeholder="Emotion (e.g. happy)"
+                                            value={assignment.emotion}
+                                            onChange={(e) => {
+                                              const updated = [...tempAssignments];
+                                              updated[idx].emotion = e.target.value;
+                                              setTempAssignments(updated);
+                                            }}
+                                            className="w-full text-xs px-2 py-1 border rounded"
+                                          />
+                                          <input
+                                            type="text"
+                                            placeholder="Action (e.g. standing)"
+                                            value={assignment.action}
+                                            onChange={(e) => {
+                                              const updated = [...tempAssignments];
+                                              updated[idx].action = e.target.value;
+                                              setTempAssignments(updated);
+                                            }}
+                                            className="w-full text-xs px-2 py-1 border rounded"
+                                          />
+                                        </div>
+                                      ))}
+                                      <button
+                                        onClick={() => {
+                                          setTempAssignments([...tempAssignments, { characterId: '', emotion: '', action: '' }]);
+                                        }}
+                                        className="w-full text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
                                       >
-                                        <option value="">Select character...</option>
-                                        {characters.map(char => (
-                                          <option key={char.id} value={char.id}>{char.name}</option>
-                                        ))}
-                                      </select>
-                                      <input
-                                        type="text"
-                                        placeholder="Emotion (e.g. happy)"
-                                        value={assignForm.emotion}
-                                        onChange={(e) => setAssignForm({...assignForm, emotion: e.target.value})}
-                                        className="w-full text-xs px-2 py-1 border rounded"
-                                      />
+                                        ➕ Add Another Character
+                                      </button>
                                       <div className="flex space-x-1">
                                         <button
                                           onClick={() => assignCharacterToNode(row.node_key)}
                                           className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
                                         >
-                                          ✓ Save
+                                          ✓ Save All
                                         </button>
                                         <button
                                           onClick={() => {
                                             setEditingNode(null);
+                                            setTempAssignments([]);
                                             setAssignForm({ characterId: '', emotion: '', action: '' });
                                           }}
                                           className="text-xs bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500"
@@ -731,7 +807,10 @@ export default function SimpleImageManager() {
                                       <div className="text-gray-600 text-xs">No characters</div>
                                     )}
                                     <button
-                                      onClick={() => setEditingNode(row.node_key)}
+                                      onClick={() => {
+                                        setEditingNode(row.node_key);
+                                        setTempAssignments([]); // Reset when opening
+                                      }}
                                       className="mt-1 text-xs text-purple-600 hover:text-purple-800 hover:underline"
                                     >
                                       {nodeChars.length > 0 ? '✏️ Edit' : '➕ Add Character'}
