@@ -703,8 +703,11 @@ export function createStoryImagePrompt(
     .trim();
   
   // Use more of the story text (up to 1000 chars) to capture full scene details
-  // Use light sanitization that preserves visual details
+  // Include story title in scene description for better context and SEO
   let sceneDescription = cleanStoryText.substring(0, 1000).trim();
+  if (storyTitle && storyTitle.trim()) {
+    sceneDescription = `From "${storyTitle}": ${sceneDescription}`;
+  }
   
   // Use light sanitization that preserves visual details, locations, objects, actions
   sceneDescription = sanitizeSceneDescription(sceneDescription);

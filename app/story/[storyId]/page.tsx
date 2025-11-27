@@ -411,6 +411,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const [story, setStory] = useState<Record<string, StoryNode>>({});
   const [loading, setLoading] = useState(true);
   const [storyError, setStoryError] = useState<string | null>(null);
+  const [storyMetadata, setStoryMetadata] = useState<{ title?: string; description?: string; cover_image_url?: string } | null>(null);
   
   // Audio management
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -773,6 +774,18 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         const storyData = await storyResponse.json();
         console.log('✅ Story metadata loaded:', storyData);
+        
+        // Store story metadata for SEO and display
+        setStoryMetadata({
+          title: storyData.title,
+          description: storyData.description,
+          cover_image_url: storyData.cover_image_url
+        });
+        
+        // Update document title for SEO
+        if (storyData.title) {
+          document.title = `${storyData.title} - Storific Stories`;
+        }
         
         // Load first node
         console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
@@ -1475,7 +1488,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="border-b border-dungeon-border p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex-1">
-            <h1 className="text-lg sm:text-xl font-bold text-white">Sword & Sorcery (MVP)</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-white">
+              {storyMetadata?.title || 'Interactive Story'}
+            </h1>
             <p className="text-dungeon-text mt-1.5 text-sm sm:text-base">
               Evner {stats.Evner}  •  HP {stats.Udholdenhed}  •  Held {stats.Held}
             </p>
@@ -1515,43 +1530,70 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             
             // Check for video - prioritize video over image
             if (passage?.video && typeof passage.video === 'string' && passage.video.trim() !== '') {
+              // Create descriptive alt text for video
+              const videoAlt = passage.text 
+                ? `${storyMetadata?.title || 'Story'} - ${passage.text.substring(0, 100).replace(/\n/g, ' ')}`
+                : `${storyMetadata?.title || 'Story'} scene video`;
+              
               return (
-                <div className="mb-4 sm:mb-6 flex justify-center">
-                  <video 
-                    src={passage.video}
-                    autoPlay
-                    muted
-                    playsInline
-                    loop
-                    controls
-                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                    onError={(e) => {
-                      console.error('❌ Failed to load video:', passage.video);
-                      e.currentTarget.style.display = 'none';
-                    }}
-                    onLoadedData={() => {
-                      console.log('✅ Video loaded and playing:', passage.video);
-                    }}
-                  >
-                    Din browser understøtter ikke video-tagget.
-                  </video>
+                <div className="mb-4 sm:mb-6 flex flex-col items-center">
+                  <div className="relative w-full max-w-2xl">
+                    <video 
+                      src={passage.video}
+                      autoPlay
+                      muted
+                      playsInline
+                      loop
+                      controls
+                      aria-label={videoAlt}
+                      className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                      onError={(e) => {
+                        console.error('❌ Failed to load video:', passage.video);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                      onLoadedData={() => {
+                        console.log('✅ Video loaded and playing:', passage.video);
+                      }}
+                    >
+                      Din browser understøtter ikke video-tagget.
+                    </video>
+                    {/* Title overlay on video */}
+                    {storyMetadata?.title && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 rounded-b-lg">
+                        <h2 className="text-sm sm:text-base font-semibold">{storyMetadata.title}</h2>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             }
             
             // Fallback to image if no video
             if (passage?.image && typeof passage.image === 'string' && passage.image.trim() !== '') {
+              // Create descriptive alt text for SEO
+              const imageAlt = passage.text 
+                ? `${storyMetadata?.title || 'Story'} - ${passage.text.substring(0, 100).replace(/\n/g, ' ')}`
+                : `${storyMetadata?.title || 'Story'} scene image`;
+              
               return (
-                <div className="mb-4 sm:mb-6 flex justify-center">
-                  <img 
-                    src={passage.image} 
-                    alt="Scenebillede"
-                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                    onError={(e) => {
-                      console.error('Failed to load image:', passage.image);
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
+                <div className="mb-4 sm:mb-6 flex flex-col items-center">
+                  <div className="relative w-full max-w-2xl">
+                    <img 
+                      src={passage.image} 
+                      alt={imageAlt}
+                      className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                      onError={(e) => {
+                        console.error('Failed to load image:', passage.image);
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                    {/* Title overlay on image */}
+                    {storyMetadata?.title && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 rounded-b-lg">
+                        <h2 className="text-sm sm:text-base font-semibold">{storyMetadata.title}</h2>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             }
