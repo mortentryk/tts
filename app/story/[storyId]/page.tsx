@@ -417,6 +417,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const isTTSRunningRef = useRef<boolean>(false);
   const lastTTSFinishTimeRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastAutoReadSceneIdRef = useRef<string | null>(null);
   
   // Dice roll state
   const [pendingDiceRoll, setPendingDiceRoll] = useState<{
@@ -517,7 +518,59 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     }, timeoutMs);
   }, []);
 
-  // Enhanced TTS with voice listening
+  // Simple TTS - just reads the text (for autoplay/audiobook mode)
+  const speakSimple: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
+    if (!text || !text.trim()) return;
+
+    // Prevent multiple simultaneous TTS calls
+    if (isTTSRunningRef.current) {
+      return;
+    }
+
+    try {
+      isTTSRunningRef.current = true;
+      setSpeaking(true);
+      
+      // Capture passage state at TTS start to prevent stale closure issues
+      const passageIdAtStart = currentId;
+      const audioUrlAtStart = passage?.audio;
+      
+      await speakViaCloud(text, audioRef, () => {
+        // Validate passage hasn't changed during TTS playback
+        if (currentId !== passageIdAtStart) {
+          console.warn('⚠️ Passage changed during TTS');
+          setSpeaking(false);
+          isTTSRunningRef.current = false;
+          lastTTSFinishTimeRef.current = Date.now();
+          abortControllerRef.current = null;
+          onDone?.();
+          return;
+        }
+        
+        // Just complete - no button reading for simple/autoplay mode
+        setSpeaking(false);
+        isTTSRunningRef.current = false;
+        lastTTSFinishTimeRef.current = Date.now();
+        abortControllerRef.current = null;
+        onDone?.();
+      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId);
+    } catch (e: any) {
+      audioRef.current = null;
+      setSpeaking(false);
+      isTTSRunningRef.current = false;
+      abortControllerRef.current = null;
+      
+      // Don't show error if it was aborted or stopped by user
+      if (e?.message?.includes('aborted') || e?.message?.includes('stopped by user') || e?.name === 'AbortError') {
+        return;
+      }
+      
+      // Log error but don't show alert for autoplay failures
+      console.error('TTS Error (autoplay):', e?.message);
+    }
+  }, [passage?.audio, currentId, storyId]);
+
+  // Enhanced TTS with voice listening and button reading (for manual button clicks)
   const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
     if (!text || !text.trim()) return;
 
@@ -547,7 +600,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           return;
         }
         
-        // After main text finishes, read buttons separately if they exist
+        // After main text finishes, read buttons separately if they exist (only for manual button clicks)
         if (choicesAtStart && choicesAtStart.length > 0) {
           const choicesText = choicesAtStart
             .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
@@ -877,6 +930,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     isTTSRunningRef.current = false;
     voiceMatchedRef.current = true;
     
+    // Clear the last auto-read scene ID so autoplay can trigger for the new scene
+    lastAutoReadSceneIdRef.current = null;
+    
     try {
       // Load the new node from API
       const userEmail = getUserEmail();
@@ -1038,12 +1094,21 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     if (isTTSRunningRef.current) return; // don't start if TTS is already running
     if (listening) return; // don't start TTS if voice listening is active
     
+    // Prevent duplicate triggers - only read each scene once
+    if (lastAutoReadSceneIdRef.current === currentId) {
+      return;
+    }
+    
     // Add a delay after TTS finishes to allow voice commands to work
     const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
     if (timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
       return;
     }
     
+    // Mark this scene as being read
+    lastAutoReadSceneIdRef.current = currentId;
+    
+    // Start reading this scene
     speakCloudThrottled();
   }, [autoRead, currentId, passage, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
 
@@ -1274,6 +1339,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     localStorage.removeItem(SAVE_KEY);
     setCurrentId(START_ID);
     setStats({ Evner: 10, Udholdenhed: 18, Held: 10 });
+    // Clear the last auto-read scene ID so autoplay can read from the start
+    lastAutoReadSceneIdRef.current = null;
   }, []);
 
   // Handle auto-read toggle with timing check
@@ -1283,6 +1350,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     // If turning on auto-read, check if we should start immediately
     if (newAutoRead) {
+      // Clear the last read scene ID so we can read the current scene
+      lastAutoReadSceneIdRef.current = null;
+      
       const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
       if (timeSinceLastTTS < 3000) {
         console.log('🎯 Auto-read enabled but delayed, TTS finished recently:', timeSinceLastTTS + 'ms ago');
