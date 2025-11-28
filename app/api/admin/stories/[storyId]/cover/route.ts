@@ -2,31 +2,46 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
 
+async function findStoryBySlugOrId(identifier: string) {
+  // First try slug (string identifiers like "fyrtojet")
+  const { data: slugStory } = await supabaseAdmin
+    .from('stories')
+    .select('*')
+    .eq('slug', identifier)
+    .single();
+
+  if (slugStory) {
+    return slugStory;
+  }
+
+  // Fall back to id lookup (UUIDs)
+  const { data: idStory } = await supabaseAdmin
+    .from('stories')
+    .select('*')
+    .eq('id', identifier)
+    .single();
+
+  return idStory;
+}
+
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ storySlug: string }> }
+  { params }: { params: Promise<{ storyId: string }> }
 ) {
   return withAdminAuth(request, async () => {
     try {
-      const { storySlug } = await params;
+      const { storyId } = await params;
       const body = await request.json();
       const { coverImageUrl, nodeKey, action } = body || {};
 
-      if (!storySlug) {
-        return NextResponse.json({ error: 'Missing story slug' }, { status: 400 });
+      if (!storyId) {
+        return NextResponse.json({ error: 'Missing story identifier' }, { status: 400 });
       }
 
-      const { data: story, error: storyError } = await supabaseAdmin
-        .from('stories')
-        .select('id, slug')
-        .eq('slug', storySlug)
-        .single();
+      const story = await findStoryBySlugOrId(storyId);
 
-      if (storyError || !story) {
-        return NextResponse.json(
-          { error: 'Story not found' },
-          { status: 404 }
-        );
+      if (!story) {
+        return NextResponse.json({ error: 'Story not found' }, { status: 404 });
       }
 
       let nextCover: string | null = null;
