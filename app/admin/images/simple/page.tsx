@@ -10,6 +10,7 @@ interface Story {
   description?: string;
   is_published: boolean;
   node_count: number;
+  cover_image_url?: string | null;
 }
 
 interface StoryNode {
@@ -84,6 +85,8 @@ export default function SimpleImageManager() {
   }>>([]);
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [coverSavingNode, setCoverSavingNode] = useState<string | null>(null);
+  const [clearingCover, setClearingCover] = useState(false);
 
   // Check if user is logged in via server session
   useEffect(() => {
@@ -522,6 +525,88 @@ export default function SimpleImageManager() {
     }
   };
 
+  const setCoverImageFromNode = async (nodeKey: string, imageUrl: string) => {
+    if (!selectedStory) {
+      alert('Please select a story first');
+      return;
+    }
+
+    if (!imageUrl) {
+      alert('Generate an image before setting it as the cover');
+      return;
+    }
+
+    setCoverSavingNode(nodeKey);
+
+    try {
+      const response = await fetch(`/api/admin/stories/${selectedStory}/cover`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          nodeKey,
+          coverImageUrl: imageUrl,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update cover image');
+      }
+
+      setStories(prev =>
+        prev.map(story =>
+          story.slug === selectedStory ? { ...story, cover_image_url: data.cover_image_url } : story
+        )
+      );
+
+      alert('✅ Cover image updated');
+    } catch (error) {
+      console.error('Set cover image error:', error);
+      alert(error instanceof Error ? `❌ ${error.message}` : '❌ Failed to set cover image');
+    } finally {
+      setCoverSavingNode(null);
+    }
+  };
+
+  const clearCoverImage = async () => {
+    if (!selectedStory) return;
+    if (!confirm('Remove the custom cover image and fall back to the first scene image?')) return;
+
+    setClearingCover(true);
+
+    try {
+      const response = await fetch(`/api/admin/stories/${selectedStory}/cover`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'clear',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to clear cover image');
+      }
+
+      setStories(prev =>
+        prev.map(story =>
+          story.slug === selectedStory ? { ...story, cover_image_url: data.cover_image_url } : story
+        )
+      );
+
+      alert('✅ Cover image cleared. The first story image will be used.');
+    } catch (error) {
+      console.error('Clear cover image error:', error);
+      alert(error instanceof Error ? `❌ ${error.message}` : '❌ Failed to clear cover image');
+    } finally {
+      setClearingCover(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await fetch('/api/admin/logout', {
@@ -647,6 +732,29 @@ export default function SimpleImageManager() {
                           {selectedStoryData.node_count} nodes • {selectedStoryData.is_published ? 'Published' : 'Draft'}
                           {characters.length > 0 && ` • ${characters.length} character${characters.length > 1 ? 's' : ''}`}
                         </p>
+                        {selectedStoryData.cover_image_url ? (
+                          <div className="mt-4 flex items-center space-x-3">
+                            <img
+                              src={selectedStoryData.cover_image_url}
+                              alt={`${selectedStoryData.title} cover preview`}
+                              className="w-16 h-16 object-cover rounded border border-blue-200 shadow-sm"
+                            />
+                            <div>
+                              <p className="text-sm text-blue-900 font-semibold">Current cover image</p>
+                              <button
+                                onClick={clearCoverImage}
+                                disabled={clearingCover}
+                                className="mt-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 disabled:opacity-60"
+                              >
+                                {clearingCover ? 'Removing...' : 'Remove cover'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-sm text-blue-700">
+                            No cover image set. The front page will fall back to the first scene image.
+                          </p>
+                        )}
                       </div>
                       <button
                         onClick={() => router.push('/admin/characters')}
@@ -835,9 +943,6 @@ export default function SimpleImageManager() {
                                         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
                                           <span className="text-white text-2xl">▶️</span>
                                         </div>
-                                        <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-1 py-0.5 rounded">
-                                          🎬
-                                        </div>
                                       </div>
                                       <div className="flex flex-col space-y-1">
                                         <button
@@ -866,9 +971,6 @@ export default function SimpleImageManager() {
                                           alt={`Node ${row.node_key}`}
                                           className="w-20 h-20 object-cover rounded-lg border-2 border-blue-300 shadow-md"
                                         />
-                                        <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs px-1 py-0.5 rounded">
-                                          🖼️
-                                        </div>
                                       </div>
                                       <div className="flex flex-col space-y-1">
                                         <button
@@ -981,6 +1083,15 @@ export default function SimpleImageManager() {
                                     >
                                       ✏️ Custom
                                     </button>
+                                    {row.image_url && (
+                                      <button
+                                        onClick={() => setCoverImageFromNode(row.node_key, row.image_url)}
+                                        disabled={coverSavingNode === row.node_key}
+                                        className={`text-sm px-3 py-1 rounded text-white ${row.image_url === selectedStoryData?.cover_image_url ? 'bg-yellow-500' : 'bg-orange-500'} hover:opacity-90 disabled:bg-gray-400`}
+                                      >
+                                        {coverSavingNode === row.node_key ? '🏠 Saving...' : row.image_url === selectedStoryData?.cover_image_url ? '🏠 Cover ✓' : '🏠 Make Cover'}
+                                      </button>
+                                    )}
                                     {!row.video_url && (
                                       <button
                                         onClick={() => generateVideo(row.node_key)}

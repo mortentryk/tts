@@ -1536,34 +1536,26 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                 : `${storyMetadata?.title || 'Story'} scene video`;
               
               return (
-                <div className="mb-4 sm:mb-6 flex flex-col items-center">
-                  <div className="relative w-full max-w-2xl">
-                    <video 
-                      src={passage.video}
-                      autoPlay
-                      muted
-                      playsInline
-                      loop
-                      controls
-                      aria-label={videoAlt}
-                      className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                      onError={(e) => {
-                        console.error('❌ Failed to load video:', passage.video);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                      onLoadedData={() => {
-                        console.log('✅ Video loaded and playing:', passage.video);
-                      }}
-                    >
-                      Din browser understøtter ikke video-tagget.
-                    </video>
-                    {/* Title overlay on video */}
-                    {storyMetadata?.title && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 rounded-b-lg">
-                        <h2 className="text-sm sm:text-base font-semibold">{storyMetadata.title}</h2>
-                      </div>
-                    )}
-                  </div>
+                <div className="mb-4 sm:mb-6 flex justify-center">
+                  <video 
+                    src={passage.video}
+                    autoPlay
+                    muted
+                    playsInline
+                    loop
+                    controls
+                    aria-label={videoAlt}
+                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                    onError={(e) => {
+                      console.error('❌ Failed to load video:', passage.video);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    onLoadedData={() => {
+                      console.log('✅ Video loaded and playing:', passage.video);
+                    }}
+                  >
+                    Din browser understøtter ikke video-tagget.
+                  </video>
                 </div>
               );
             }
@@ -1576,24 +1568,16 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                 : `${storyMetadata?.title || 'Story'} scene image`;
               
               return (
-                <div className="mb-4 sm:mb-6 flex flex-col items-center">
-                  <div className="relative w-full max-w-2xl">
-                    <img 
-                      src={passage.image} 
-                      alt={imageAlt}
-                      className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
-                      onError={(e) => {
-                        console.error('Failed to load image:', passage.image);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                    {/* Title overlay on image */}
-                    {storyMetadata?.title && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 rounded-b-lg">
-                        <h2 className="text-sm sm:text-base font-semibold">{storyMetadata.title}</h2>
-                      </div>
-                    )}
-                  </div>
+                <div className="mb-4 sm:mb-6 flex justify-center">
+                  <img 
+                    src={passage.image} 
+                    alt={imageAlt}
+                    className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
+                    onError={(e) => {
+                      console.error('Failed to load image:', passage.image);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
                 </div>
               );
             }
