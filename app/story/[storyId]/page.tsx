@@ -516,6 +516,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   }, []);
 
   const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 10000) => {
+    // Stop any ongoing narration so auto-read doesn't keep talking while commands are used
+    stopSpeak();
+
     // Clear any existing timeout
     if (voiceTimeoutRef.current) {
       clearTimeout(voiceTimeoutRef.current);
@@ -534,7 +537,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       console.log('Voice listening timeout - stopping recognition');
       // Don't automatically re-read choices - let user manually trigger TTS if needed
     }, timeoutMs);
-  }, []);
+  }, [stopSpeak]);
 
   // Simple TTS - just reads the text (for autoplay/audiobook mode)
   const speakSimple: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
@@ -944,6 +947,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   const goTo = useCallback(async (id: string) => {
     console.log('🚀 goTo called with ID:', id);
+    const isSameNode = id === currentId;
     // Stop all audio and voice recognition immediately
     stopSpeak();
     stopVoiceListening();
@@ -959,9 +963,6 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     setSpeaking(false);
     isTTSRunningRef.current = false;
     voiceMatchedRef.current = true;
-    
-    // Clear the last auto-read scene ID so autoplay can trigger for the new scene
-    lastAutoReadSceneIdRef.current = null;
     
     try {
       // Load the new node from API
@@ -1010,12 +1011,15 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         [nodeData.node_key]: newNode
       }));
       
+      if (isSameNode) {
+        lastAutoReadSceneIdRef.current = null;
+      }
       setCurrentId(id);
       console.log('✅ Navigation completed to:', id);
     } catch (error) {
       console.error('Failed to load node:', error);
     }
-  }, [stopSpeak, stopVoiceListening, storyId]);
+  }, [stopSpeak, stopVoiceListening, storyId, currentId]);
 
   // Handle choice selection
   const handleChoice = useCallback((choice: any) => {
