@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
 import { getUserEmail } from '@/lib/purchaseVerification';
@@ -419,6 +419,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const lastTTSFinishTimeRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastAutoReadSceneIdRef = useRef<string | null>(null);
+  const skipAutoReadCooldownRef = useRef<boolean>(false);
   
   // Dice roll state
   const [pendingDiceRoll, setPendingDiceRoll] = useState<{
@@ -450,6 +451,22 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   
   const router = useRouter();
   const passage = story[currentId];
+
+  const autoReadBlockingReason = useMemo(() => {
+    if (!autoRead) return null;
+    if (pendingDiceRoll) return 'Afventer terningkast';
+    if (listening) return 'Lytter efter stemmekommandoer';
+    if (speaking) return 'Oplæsning i gang';
+    return null;
+  }, [autoRead, pendingDiceRoll, listening, speaking]);
+
+  const autoReadStatusLabel = useMemo(() => {
+    if (!autoRead) return 'Auto-læs: Fra';
+    if (autoReadBlockingReason) {
+      return `Auto-læs pauser – ${autoReadBlockingReason.toLowerCase()}`;
+    }
+    return 'Auto-læs: Aktiv';
+  }, [autoRead, autoReadBlockingReason]);
 
   // Load params
   useEffect(() => {
@@ -1047,6 +1064,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     // Create TTS narration for dice roll result
     const diceResultText = `Du kaster terningerne og får ${roll}. Med din ${stat} på ${stats[stat]} bliver det i alt ${total}. ${ok ? 'Det lykkes!' : 'Det mislykkes!'} ${ok ? 'Du kan fortsætte.' : 'Du mister 2 point i ' + stat + '.'}`;
     
+    // Allow the next auto-read to trigger immediately after dice narration
+    skipAutoReadCooldownRef.current = true;
+    
     // Speak the dice result
     try {
       await speakWithVoiceListening(diceResultText);
@@ -1098,6 +1118,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     await speakWithVoiceListening(narration);
   }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, passage?.audio]);
 
+  const handleManualSpeak = useCallback(() => {
+    if (autoRead) {
+      lastAutoReadSceneIdRef.current = currentId;
+    }
+    speakCloudThrottled();
+  }, [autoRead, currentId, speakCloudThrottled]);
+
   // Auto-read new scenes when enabled
   useEffect(() => {
     if (!autoRead) return;
@@ -1113,17 +1140,45 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     }
     
     // Add a delay after TTS finishes to allow voice commands to work
+    const shouldSkipCooldown = skipAutoReadCooldownRef.current;
     const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
-    if (timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
+    if (!shouldSkipCooldown && timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
       return;
     }
     
     // Mark this scene as being read
     lastAutoReadSceneIdRef.current = currentId;
     
-    // Start reading this scene
-    speakCloudThrottled();
-  }, [autoRead, currentId, passage, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
+    if (shouldSkipCooldown) {
+      skipAutoReadCooldownRef.current = false;
+    }
+    
+    const passageIdAtReadStart = currentId;
+    const shouldAutoRollAfterNarration = !!(passage?.check && showDiceRollButton);
+    let cancelled = false;
+    
+    const runAutoRead = async () => {
+      try {
+        await speakCloudThrottled();
+      } catch (error) {
+        console.error('Auto-read TTS failed:', error);
+        return;
+      }
+      
+      if (cancelled) return;
+      if (!autoRead) return;
+      if (!shouldAutoRollAfterNarration) return;
+      if (passageIdAtReadStart !== currentId) return; // user navigated away
+      
+      handleDiceRoll();
+    };
+    
+    runAutoRead();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [autoRead, currentId, passage, pendingDiceRoll, speaking, listening, speakCloudThrottled, handleDiceRoll, showDiceRollButton]);
 
   // --- Speech Recognition ---
   useEffect(() => {
@@ -1680,15 +1735,23 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="border-t border-dungeon-border p-3">
         {/* Collapsible Controls Dropdown */}
         <div className="space-y-3">
-          {/* Toggle Button */}
-          <button
-            onClick={() => setShowControls(!showControls)}
-            className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-center font-semibold text-white transition-colors flex items-center justify-center gap-2"
-            aria-expanded={showControls}
-          >
-            <span className="text-lg">{showControls ? '▼' : '▲'}</span>
-            <span>Kontroller</span>
-          </button>
+          {/* Toggle Button + Auto-read status */}
+          <div className="space-y-2">
+            <button
+              onClick={() => setShowControls(!showControls)}
+              className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-center font-semibold text-white transition-colors flex items-center justify-center gap-2"
+              aria-expanded={showControls}
+            >
+              <span className="text-lg">{showControls ? '▼' : '▲'}</span>
+              <span>Kontroller</span>
+            </button>
+            <div 
+              className={`text-xs text-center ${autoRead ? 'text-purple-200' : 'text-gray-400'}`}
+              aria-live="polite"
+            >
+              {autoReadStatusLabel}
+            </div>
+          </div>
 
           {/* Controls Panel - Always visible when speaking, otherwise toggleable */}
           {(showControls || speaking) && (
@@ -1699,7 +1762,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                   className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors text-sm sm:text-base ${
                     speaking ? 'bg-green-700' : ''
                   }`}
-                  onClick={speakCloudThrottled}
+                  onClick={handleManualSpeak}
                   disabled={speaking}
                 >
                   {speaking ? "🎙️ Afspiller..." : "🎙️ Læs Historie"}
@@ -1715,18 +1778,29 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               </div>
 
               {/* Auto Read Toggle */}
-              <div className="flex gap-2 sm:gap-2.5">
+              <div className="flex flex-col gap-1 sm:gap-1.5">
                 <button
-                  className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
+                  className={`p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
                     autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
-                  }`}
+                  } ${autoRead && autoReadBlockingReason ? 'border border-yellow-400/60' : ''}`}
                   onClick={handleAutoReadToggle}
                   aria-pressed={autoRead}
                   aria-label={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
-                  title={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
+                  title={
+                    autoRead && autoReadBlockingReason
+                      ? `Auto-læs pauser: ${autoReadBlockingReason}`
+                      : autoRead
+                        ? 'Deaktiver auto-læs'
+                        : 'Aktiver auto-læs'
+                  }
                 >
                   {autoRead ? '🔁 Auto-læs: Til' : '🔁 Auto-læs: Fra'}
                 </button>
+                {autoRead && autoReadBlockingReason && (
+                  <span className="text-xs text-yellow-200 text-center" aria-live="polite">
+                    Auto-læs venter: {autoReadBlockingReason.toLowerCase()}
+                  </span>
+                )}
               </div>
 
               {/* Voice Commands */}
