@@ -1161,7 +1161,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     return formatDiceSetupNarration(passage?.check, stats, showDiceRollButton);
   }, [passage?.check, stats, showDiceRollButton]);
 
-  const runAutoNarrationSequence = useCallback(async (options?: { suppressVoiceListening?: boolean }) => {
+  const runAutoNarrationSequence = useCallback(async (options?: { suppressVoiceListening?: boolean; includeChoices?: boolean }) => {
     if (!autoRead || !passage?.text) {
       return { completed: false };
     }
@@ -1169,7 +1169,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     const passageIdAtStart = currentId;
     const narration = getNarrationText();
     const diceNarration = getDiceSetupNarrationText();
-    const shouldReadChoices = !passage?.check && !!passage?.choices?.length;
+    const shouldReadChoices = !passage?.check && !!passage?.choices?.length && options?.includeChoices !== false;
     const choicesNarration = shouldReadChoices ? getChoicesNarrationText() : '';
 
     const segments: Array<{ text: string; audioUrl?: string }> = [];
@@ -1323,7 +1323,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     
     const runAutoRead = async () => {
       try {
-        const result = await runAutoNarrationSequence({ suppressVoiceListening: autoPlay });
+        const result = await runAutoNarrationSequence({
+          suppressVoiceListening: autoPlay,
+          includeChoices: !autoPlay
+        });
         if (!result.completed) {
           return;
         }
