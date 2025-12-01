@@ -1239,15 +1239,16 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     if (pendingDiceRoll) return; // hold during dice overlays
     if (speaking) return; // don't start TTS if already speaking
     if (isTTSRunningRef.current) return; // don't start if TTS is already running
-    if (listening) return; // don't start TTS if voice listening is active
+    // Don't wait for voice listening to stop if AutoPlay is on - AutoPlay ignores voice commands
+    if (!autoPlay && listening) return; // don't start TTS if voice listening is active (unless AutoPlay)
     
     // Prevent duplicate triggers - only read each scene once
     if (lastAutoReadSceneIdRef.current === currentId) {
       return;
     }
     
-    // Add a delay after TTS finishes to allow voice commands to work
-    const shouldSkipCooldown = skipAutoReadCooldownRef.current;
+    // Add a delay after TTS finishes to allow voice commands to work (skip for AutoPlay)
+    const shouldSkipCooldown = skipAutoReadCooldownRef.current || autoPlay;
     const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
     if (!shouldSkipCooldown && timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
       return;
@@ -1308,11 +1309,20 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     };
   }, [autoRead, autoPlay, currentId, passage, pendingDiceRoll, speaking, listening, runAutoPlayNarration, speakCloudThrottled, handleDiceRoll, showDiceRollButton]);
 
+  // AutoPlay: Stop voice listening when AutoPlay is enabled
+  useEffect(() => {
+    if (autoPlay && listening) {
+      console.log('🤖 AutoPlay: stopping voice listening (AutoPlay is on)');
+      stopVoiceListening();
+    }
+  }, [autoPlay, listening, stopVoiceListening]);
+
+  // AutoPlay: Auto-select a random choice after narration completes
   useEffect(() => {
     if (!autoPlay) return;
     if (!autoRead) return;
     if (autoPlayActionInFlightRef.current) return;
-    if (speaking || listening) return;
+    if (speaking) return;
     if (isTTSRunningRef.current) return; // Don't trigger if TTS is still running
     if (pendingDiceRoll) return;
     if (showDiceRollButton && passage?.check) return;
@@ -1329,7 +1339,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     autoPlayActionInFlightRef.current = true;
     const timeout = setTimeout(() => {
       // Double-check conditions before triggering
-      if (speaking || isTTSRunningRef.current || listening) {
+      if (speaking || isTTSRunningRef.current) {
         autoPlayActionInFlightRef.current = false;
         return;
       }
@@ -1349,7 +1359,6 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     autoPlay,
     autoRead,
     speaking,
-    listening,
     pendingDiceRoll,
     showDiceRollButton,
     passage?.check,

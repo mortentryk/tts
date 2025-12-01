@@ -37,3 +37,4 @@ Thumbs.db
 add-metadata-to-csv.py
 update-author.py
 add-linebreaks-to-csv.py
+.env*.local
