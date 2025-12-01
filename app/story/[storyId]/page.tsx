@@ -241,13 +241,15 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
         } catch {}
         audioCache.delete(key);
         
-        // Handle autoplay policy errors
+        // Handle autoplay policy errors - don't fall through, user needs to interact
         if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
           console.log('⚠️ Autoplay blocked (non-critical):', playError);
-          return; // Don't throw, just return silently
+          onComplete?.(); // Still call completion so flow continues
+          return;
         }
-        console.log('⚠️ Failed to play cached audio (non-critical):', playError);
-        return; // Don't throw, just return silently
+        // For other errors (like blob not found), fall through to regenerate TTS
+        console.log('⚠️ Failed to play cached audio, will regenerate TTS:', playError);
+        // Don't return - fall through to generate new TTS
       }
     }
   }
@@ -1256,7 +1258,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     }
     
     const passageIdAtReadStart = currentId;
-    lastAutoReadSceneIdRef.current = currentId;
+    // Mark as "in progress" to prevent duplicate triggers, but don't set lastAutoReadSceneIdRef yet
+    // That will be set AFTER narration completes successfully
     const shouldAutoRollAfterNarration = !!(passage?.check && showDiceRollButton);
     let cancelled = false;
     
@@ -1264,35 +1267,40 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       try {
         let completed = false;
         if (autoPlay) {
+          console.log('🤖 AutoPlay: starting narration for scene:', passageIdAtReadStart);
           completed = await runAutoPlayNarration();
         } else {
           await speakCloudThrottled();
           completed = true;
         }
         if (!completed) {
-          lastAutoReadSceneIdRef.current = null;
           return;
+        }
+        
+        // Only mark scene as read AFTER narration completes successfully
+        if (!cancelled && passageIdAtReadStart === currentId) {
+          lastAutoReadSceneIdRef.current = passageIdAtReadStart;
+          console.log('🤖 AutoPlay: narration completed, scene marked as read:', passageIdAtReadStart);
         }
       } catch (error) {
         console.error('Auto-read TTS failed:', error);
-        lastAutoReadSceneIdRef.current = null;
         return;
       }
       
       if (cancelled) {
-        lastAutoReadSceneIdRef.current = null;
         return;
       }
       if (!autoRead) return;
       if (!shouldAutoRollAfterNarration) return;
       if (passageIdAtReadStart !== currentId) {
-        lastAutoReadSceneIdRef.current = null;
         return; // user navigated away
       }
       
       await handleDiceRoll();
     };
     
+    // Set a temporary marker to prevent duplicate effect runs
+    lastAutoReadSceneIdRef.current = passageIdAtReadStart;
     runAutoRead();
     
     return () => {
@@ -1305,17 +1313,29 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     if (!autoRead) return;
     if (autoPlayActionInFlightRef.current) return;
     if (speaking || listening) return;
+    if (isTTSRunningRef.current) return; // Don't trigger if TTS is still running
     if (pendingDiceRoll) return;
     if (showDiceRollButton && passage?.check) return;
     const choices = passage?.choices;
     if (!choices || choices.length === 0) return;
     if (lastAutoReadSceneIdRef.current !== currentId) return;
+    
+    // Ensure enough time has passed since TTS finished (narration must have actually played)
+    const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
+    if (timeSinceLastTTS < 500) return; // Wait at least 500ms after TTS finishes
 
+    console.log('🤖 AutoPlay: selecting random choice after narration completed');
     let actionTriggered = false;
     autoPlayActionInFlightRef.current = true;
     const timeout = setTimeout(() => {
+      // Double-check conditions before triggering
+      if (speaking || isTTSRunningRef.current || listening) {
+        autoPlayActionInFlightRef.current = false;
+        return;
+      }
       actionTriggered = true;
       const randomChoice = choices[Math.floor(Math.random() * choices.length)];
+      console.log('🤖 AutoPlay: choosing:', randomChoice.label);
       handleChoice(randomChoice);
     }, 800);
 
