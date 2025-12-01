@@ -85,15 +85,6 @@ function formatChoicesForNarration(choices?: StoryNode['choices'] | null): strin
   return `Valgmuligheder: ${choicesText} Hvad vælger du?`;
 }
 
-function formatDiceSetupNarration(
-  check: StoryNode['check'] | undefined,
-  stats: GameStats,
-  shouldExplain: boolean
-): string {
-  if (!check || !shouldExplain) return '';
-  const statScore = stats[check.stat] ?? 0;
-  return `Denne scene kræver et ${check.stat} tjek med sværhedsgrad ${check.dc}. Din ${check.stat} er ${statScore}. Sig 'kast terninger' eller tryk på terning-knappen for at fortsætte.`;
-}
 
 // Cloud TTS for web — OpenAI only
 async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string, abortControllerRef?: React.MutableRefObject<AbortController | null>, nodeKey?: string, storyId?: string): Promise<void> {
@@ -1153,101 +1144,6 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     return passage.text;
   }, [passage]);
 
-  const getChoicesNarrationText = useCallback(() => {
-    return formatChoicesForNarration(passage?.choices);
-  }, [passage?.choices]);
-
-  const getDiceSetupNarrationText = useCallback(() => {
-    return formatDiceSetupNarration(passage?.check, stats, showDiceRollButton);
-  }, [passage?.check, stats, showDiceRollButton]);
-
-  const runAutoNarrationSequence = useCallback(async (options?: { suppressVoiceListening?: boolean; includeChoices?: boolean }) => {
-    if (!autoRead || !passage?.text) {
-      return { completed: false };
-    }
-
-    const passageIdAtStart = currentId;
-    const narration = getNarrationText();
-    const diceNarration = getDiceSetupNarrationText();
-    const shouldReadChoices = !passage?.check && !!passage?.choices?.length && options?.includeChoices !== false;
-    const choicesNarration = shouldReadChoices ? getChoicesNarrationText() : '';
-
-    const segments: Array<{ text: string; audioUrl?: string }> = [];
-    if (narration) {
-      segments.push({ text: narration, audioUrl: passage?.audio });
-    }
-    if (diceNarration) {
-      segments.push({ text: diceNarration });
-    }
-    if (choicesNarration) {
-      segments.push({ text: choicesNarration });
-    }
-
-    if (segments.length === 0) {
-      return { completed: false };
-    }
-
-    stopVoiceListening();
-
-    let cancelled = false;
-    try {
-      isTTSRunningRef.current = true;
-      setSpeaking(true);
-
-      for (const segment of segments) {
-        await speakViaCloud(
-          segment.text,
-          audioRef,
-          undefined,
-          segment.audioUrl,
-          abortControllerRef,
-          passageIdAtStart,
-          storyId
-        );
-
-        if (currentId !== passageIdAtStart) {
-          cancelled = true;
-          break;
-        }
-      }
-    } catch (error) {
-      console.error('Auto narration failed:', error);
-      cancelled = true;
-    } finally {
-      isTTSRunningRef.current = false;
-      abortControllerRef.current = null;
-      if (!cancelled) {
-        lastTTSFinishTimeRef.current = Date.now();
-        lastAutoReadSceneIdRef.current = passageIdAtStart;
-      } else {
-        lastAutoReadSceneIdRef.current = null;
-      }
-      setSpeaking(false);
-    }
-
-    if (cancelled) {
-      return { completed: false };
-    }
-
-    if (choicesNarration && !options?.suppressVoiceListening) {
-      startVoiceListening(10000);
-    }
-
-    return { completed: true };
-  }, [
-    autoRead,
-    passage?.text,
-    passage?.audio,
-    passage?.check,
-    passage?.choices,
-    currentId,
-    getNarrationText,
-    getChoicesNarrationText,
-    getDiceSetupNarrationText,
-    stopVoiceListening,
-    storyId,
-    startVoiceListening
-  ]);
 
   const speakCloudThrottled = useCallback(async () => {
     const narration = getNarrationText();
@@ -1274,6 +1170,21 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     await speakWithVoiceListening(narration);
   }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, passage?.audio]);
 
+  const runAutoPlayNarration = useCallback(async () => {
+    const narration = getNarrationText();
+    if (!narration) {
+      return false;
+    }
+    try {
+      stopVoiceListening();
+      await speakSimple(narration);
+      return true;
+    } catch (error) {
+      console.error('Auto-play narration failed:', error);
+      return false;
+    }
+  }, [getNarrationText, speakSimple, stopVoiceListening]);
+
   const activateAutoReadIfPossible = useCallback(() => {
     lastAutoReadSceneIdRef.current = null;
     const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
@@ -1281,9 +1192,13 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       return;
     }
     if (passage?.text && !pendingDiceRoll && !speaking && !isTTSRunningRef.current && !listening) {
-      speakCloudThrottled();
+      if (autoPlay) {
+        runAutoPlayNarration();
+      } else {
+        speakCloudThrottled();
+      }
     }
-  }, [passage?.text, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
+  }, [autoPlay, passage?.text, pendingDiceRoll, speaking, listening, speakCloudThrottled, runAutoPlayNarration]);
 
   const handleManualSpeak = useCallback(() => {
     if (autoRead) {
@@ -1318,27 +1233,39 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     }
     
     const passageIdAtReadStart = currentId;
+    lastAutoReadSceneIdRef.current = currentId;
     const shouldAutoRollAfterNarration = !!(passage?.check && showDiceRollButton);
     let cancelled = false;
     
     const runAutoRead = async () => {
       try {
-        const result = await runAutoNarrationSequence({
-          suppressVoiceListening: autoPlay,
-          includeChoices: !autoPlay
-        });
-        if (!result.completed) {
+        let completed = false;
+        if (autoPlay) {
+          completed = await runAutoPlayNarration();
+        } else {
+          await speakCloudThrottled();
+          completed = true;
+        }
+        if (!completed) {
+          lastAutoReadSceneIdRef.current = null;
           return;
         }
       } catch (error) {
         console.error('Auto-read TTS failed:', error);
+        lastAutoReadSceneIdRef.current = null;
         return;
       }
       
-      if (cancelled) return;
+      if (cancelled) {
+        lastAutoReadSceneIdRef.current = null;
+        return;
+      }
       if (!autoRead) return;
       if (!shouldAutoRollAfterNarration) return;
-      if (passageIdAtReadStart !== currentId) return; // user navigated away
+      if (passageIdAtReadStart !== currentId) {
+        lastAutoReadSceneIdRef.current = null;
+        return; // user navigated away
+      }
       
       await handleDiceRoll();
     };
@@ -1348,7 +1275,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     return () => {
       cancelled = true;
     };
-  }, [autoRead, autoPlay, currentId, passage, pendingDiceRoll, speaking, listening, runAutoNarrationSequence, handleDiceRoll, showDiceRollButton]);
+  }, [autoRead, autoPlay, currentId, passage, pendingDiceRoll, speaking, listening, runAutoPlayNarration, speakCloudThrottled, handleDiceRoll, showDiceRollButton]);
 
   useEffect(() => {
     if (!autoPlay) return;
