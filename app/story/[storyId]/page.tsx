@@ -571,7 +571,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // Simple TTS - just reads the text (for autoplay/audiobook mode)
   const speakSimple: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
-    if (!text || !text.trim()) return;
+    console.log('🤖 speakSimple called with text length:', text?.length, 'preview:', text?.substring(0, 100));
+    if (!text || !text.trim()) {
+      console.log('🤖 speakSimple: empty text, returning');
+      return;
+    }
 
     // Prevent multiple simultaneous TTS calls
     if (isTTSRunningRef.current) {
@@ -1187,12 +1191,16 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   const runAutoPlayNarration = useCallback(async () => {
     const narration = getNarrationText();
+    console.log('🤖 runAutoPlayNarration: narration length:', narration?.length, 'preview:', narration?.substring(0, 100));
     if (!narration) {
+      console.log('🤖 runAutoPlayNarration: no narration, returning false');
       return false;
     }
     try {
       stopVoiceListening();
+      console.log('🤖 runAutoPlayNarration: calling speakSimple with narration');
       await speakSimple(narration);
+      console.log('🤖 runAutoPlayNarration: speakSimple completed');
       return true;
     } catch (error) {
       console.error('Auto-play narration failed:', error);
