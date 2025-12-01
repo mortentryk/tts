@@ -623,7 +623,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // Enhanced TTS with voice listening and button reading (for manual button clicks)
   const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
-    if (!text || !text.trim()) return;
+    console.log('🔊 speakWithVoiceListening called with text length:', text?.length, 'text preview:', text?.substring(0, 100));
+    if (!text || !text.trim()) {
+      console.log('🔊 speakWithVoiceListening: empty text, returning early');
+      return;
+    }
 
     // Prevent multiple simultaneous TTS calls
     if (isTTSRunningRef.current) {
@@ -639,7 +643,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       const choicesAtStart = passage?.choices ? [...passage.choices] : null;
       const audioUrlAtStart = passage?.audio;
       
+      console.log('🔊 speakWithVoiceListening: calling speakViaCloud for main text, audioUrl:', audioUrlAtStart);
       await speakViaCloud(text, audioRef, async () => {
+        console.log('🔊 speakWithVoiceListening: main text callback fired');
         // Validate passage hasn't changed during TTS playback
         if (currentId !== passageIdAtStart) {
           console.warn('⚠️ Passage changed during TTS, skipping button reading');
@@ -654,6 +660,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         // After main text finishes, read buttons separately if they exist (only for manual button clicks)
         if (choicesAtStart && choicesAtStart.length > 0) {
           const buttonsText = formatChoicesForNarration(choicesAtStart);
+          console.log('🔊 speakWithVoiceListening: reading buttons:', buttonsText?.substring(0, 100));
           
           // Read buttons separately after main text
           try {
@@ -1147,7 +1154,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   const speakCloudThrottled = useCallback(async () => {
     const narration = getNarrationText();
-    if (!narration) return;
+    console.log('🔊 speakCloudThrottled: narration length:', narration?.length, 'preview:', narration?.substring(0, 100));
+    if (!narration) {
+      console.log('🔊 speakCloudThrottled: no narration, returning');
+      return;
+    }
     
     // Prevent multiple simultaneous calls
     if (isTTSRunningRef.current) {
