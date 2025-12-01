@@ -1677,9 +1677,12 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       if (!autoRead) {
         setAutoRead(true);
       }
-      activateAutoReadIfPossible();
+      // Clear the marker to allow the useEffect to trigger narration with correct state
+      // Don't call activateAutoReadIfPossible() as it uses stale closure values
+      // The useEffect will run with the NEW autoPlay=true state and call runAutoPlayNarration()
+      lastAutoReadSceneIdRef.current = null;
     }
-  }, [activateAutoReadIfPossible, autoPlay, autoRead, stopVoiceListening]);
+  }, [autoPlay, autoRead, stopVoiceListening]);
 
   const goBackToStories = useCallback(() => {
     // Stop all audio and voice recognition when leaving story
