@@ -1147,7 +1147,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // Build narration string - main text only (buttons will be read separately)
   const getNarrationText = useCallback(() => {
-    if (!passage?.text) return '';
+    if (!passage?.text) {
+      console.log('🔊 getNarrationText: passage.text is empty or undefined, passage:', passage);
+      return '';
+    }
+    console.log('🔊 getNarrationText: returning text length:', passage.text.length);
     return passage.text;
   }, [passage]);
 
