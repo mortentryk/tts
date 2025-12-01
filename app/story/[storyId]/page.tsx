@@ -1063,9 +1063,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         [nodeData.node_key]: newNode
       }));
       
-      if (isSameNode) {
-        lastAutoReadSceneIdRef.current = null;
-      }
+      // Always clear lastAutoReadSceneIdRef when navigating to allow auto-read to trigger for new node
+      console.log('🚀 Clearing lastAutoReadSceneIdRef before navigation, was:', lastAutoReadSceneIdRef.current, '-> null');
+      lastAutoReadSceneIdRef.current = null;
       setCurrentId(id);
       console.log('✅ Navigation completed to:', id);
     } catch (error) {
@@ -1319,35 +1319,51 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // AutoPlay: Auto-select a random choice after narration completes
   useEffect(() => {
-    if (!autoPlay) return;
-    if (!autoRead) return;
-    if (autoPlayActionInFlightRef.current) return;
-    if (speaking) return;
-    if (isTTSRunningRef.current) return; // Don't trigger if TTS is still running
-    if (pendingDiceRoll) return;
-    if (showDiceRollButton && passage?.check) return;
-    const choices = passage?.choices;
-    if (!choices || choices.length === 0) return;
-    if (lastAutoReadSceneIdRef.current !== currentId) return;
+    // Debug: log all conditions
+    console.log('🤖 AutoPlay effect check:', {
+      autoPlay,
+      autoRead,
+      autoPlayActionInFlight: autoPlayActionInFlightRef.current,
+      speaking,
+      isTTSRunning: isTTSRunningRef.current,
+      pendingDiceRoll: !!pendingDiceRoll,
+      showDiceRollButton,
+      hasCheck: !!passage?.check,
+      choicesCount: passage?.choices?.length || 0,
+      lastAutoReadSceneId: lastAutoReadSceneIdRef.current,
+      currentId
+    });
     
-    // Ensure enough time has passed since TTS finished (narration must have actually played)
-    const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
-    if (timeSinceLastTTS < 500) return; // Wait at least 500ms after TTS finishes
+    if (!autoPlay) { console.log('🤖 AutoPlay: skipping - autoPlay is false'); return; }
+    if (!autoRead) { console.log('🤖 AutoPlay: skipping - autoRead is false'); return; }
+    if (autoPlayActionInFlightRef.current) { console.log('🤖 AutoPlay: skipping - action in flight'); return; }
+    if (speaking) { console.log('🤖 AutoPlay: skipping - speaking'); return; }
+    if (isTTSRunningRef.current) { console.log('🤖 AutoPlay: skipping - TTS running'); return; }
+    if (pendingDiceRoll) { console.log('🤖 AutoPlay: skipping - pending dice roll'); return; }
+    if (showDiceRollButton && passage?.check) { console.log('🤖 AutoPlay: skipping - dice roll button showing'); return; }
+    const choices = passage?.choices;
+    if (!choices || choices.length === 0) { console.log('🤖 AutoPlay: skipping - no choices'); return; }
+    if (lastAutoReadSceneIdRef.current !== currentId) { 
+      console.log('🤖 AutoPlay: skipping - scene not marked as read yet', { lastAutoReadSceneId: lastAutoReadSceneIdRef.current, currentId }); 
+      return; 
+    }
 
-    console.log('🤖 AutoPlay: selecting random choice after narration completed');
+    console.log('🤖 AutoPlay: ALL CONDITIONS MET - scheduling choice selection');
     let actionTriggered = false;
     autoPlayActionInFlightRef.current = true;
+    // Use 1000ms delay to ensure TTS has truly finished and give a natural pause
     const timeout = setTimeout(() => {
       // Double-check conditions before triggering
       if (speaking || isTTSRunningRef.current) {
+        console.log('🤖 AutoPlay: timeout fired but TTS still running, aborting');
         autoPlayActionInFlightRef.current = false;
         return;
       }
       actionTriggered = true;
       const randomChoice = choices[Math.floor(Math.random() * choices.length)];
-      console.log('🤖 AutoPlay: choosing:', randomChoice.label);
+      console.log('🤖 AutoPlay: CHOOSING:', randomChoice.label, '-> goto:', randomChoice.goto);
       handleChoice(randomChoice);
-    }, 800);
+    }, 1000);
 
     return () => {
       clearTimeout(timeout);
@@ -1673,16 +1689,18 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     autoPlayActionInFlightRef.current = false;
     
     if (newAutoPlay) {
+      // Stop any existing TTS (might be auto-read style with button reading)
+      // so we can restart with AutoPlay style (no buttons)
+      stopSpeak();
       stopVoiceListening();
       if (!autoRead) {
         setAutoRead(true);
       }
       // Clear the marker to allow the useEffect to trigger narration with correct state
-      // Don't call activateAutoReadIfPossible() as it uses stale closure values
       // The useEffect will run with the NEW autoPlay=true state and call runAutoPlayNarration()
       lastAutoReadSceneIdRef.current = null;
     }
-  }, [autoPlay, autoRead, stopVoiceListening]);
+  }, [autoPlay, autoRead, stopSpeak, stopVoiceListening]);
 
   const goBackToStories = useCallback(() => {
     // Stop all audio and voice recognition when leaving story
