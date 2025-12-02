@@ -312,48 +312,55 @@ export async function POST(request: NextRequest) {
     // Get existing nodes to preserve their media URLs
     const { data: existingNodes } = await supabaseAdmin
       .from('story_nodes')
-      .select('node_key, image_url, video_url, audio_url, image_prompt')
+      .select('node_key, text_md, text_hash, image_url, video_url, audio_url, image_prompt')
       .eq('story_id', storyId);
 
     console.log('📦 Found', existingNodes?.length || 0, 'existing nodes');
 
-    // Create a map of existing node media for quick lookup
-    const existingMediaMap = new Map(
-      (existingNodes || []).map(node => [
-        node.node_key,
-        {
-          image_url: node.image_url,
-          video_url: node.video_url,
-          audio_url: node.audio_url,
-          image_prompt: node.image_prompt
-        }
-      ])
+    // Create a map of existing node data for quick lookup
+    const existingNodeMap = new Map(
+      (existingNodes || []).map(node => [node.node_key, node])
     );
 
     // Preserve media URLs for nodes that already exist (only if CSV doesn't specify new ones)
     // This is critical: if CSV doesn't provide an image URL, keep the existing one
     nodes.forEach(node => {
-      const existingMedia = existingMediaMap.get(node.node_key);
-      if (existingMedia) {
+      const existingNode = existingNodeMap.get(node.node_key);
+      if (existingNode) {
+        const incomingText = (node.text_md || '').trim();
+        const existingText = (existingNode.text_md || '').trim();
+        const textChanged = incomingText !== existingText;
+
+        if (textChanged) {
+          if (existingNode.audio_url) {
+            console.log(`🗑️ Clearing cached audio for node ${node.node_key} (text changed)`);
+          }
+          node.audio_url = null;
+          node.text_hash = null;
+        }
+
         // Keep existing media unless CSV explicitly provides new URLs
         // Check for undefined, null, or empty string to ensure we preserve existing images
         const hasImageUrl = node.image_url && String(node.image_url).trim() !== '';
-        if (!hasImageUrl && existingMedia.image_url && String(existingMedia.image_url).trim() !== '') {
-          node.image_url = existingMedia.image_url;
-          console.log(`✅ Preserving image for node ${node.node_key}: ${existingMedia.image_url.substring(0, 60)}...`);
+        if (!hasImageUrl && existingNode.image_url && String(existingNode.image_url).trim() !== '') {
+          node.image_url = existingNode.image_url;
+          console.log(`✅ Preserving image for node ${node.node_key}: ${existingNode.image_url.substring(0, 60)}...`);
         }
         const hasVideoUrl = node.video_url && String(node.video_url).trim() !== '';
-        if (!hasVideoUrl && existingMedia.video_url && String(existingMedia.video_url).trim() !== '') {
-          node.video_url = existingMedia.video_url;
+        if (!hasVideoUrl && existingNode.video_url && String(existingNode.video_url).trim() !== '') {
+          node.video_url = existingNode.video_url;
           console.log(`✅ Preserving video for node ${node.node_key}`);
         }
         const hasAudioUrl = node.audio_url && String(node.audio_url).trim() !== '';
-        if (!hasAudioUrl && existingMedia.audio_url && String(existingMedia.audio_url).trim() !== '') {
-          node.audio_url = existingMedia.audio_url;
+        if (!textChanged && !hasAudioUrl && existingNode.audio_url && String(existingNode.audio_url).trim() !== '') {
+          node.audio_url = existingNode.audio_url;
           console.log(`✅ Preserving audio for node ${node.node_key}`);
         }
-        if (!node.image_prompt && existingMedia.image_prompt) {
-          node.image_prompt = existingMedia.image_prompt;
+        if (!textChanged && (!node.text_hash || node.text_hash === null) && existingNode.text_hash) {
+          node.text_hash = existingNode.text_hash;
+        }
+        if (!node.image_prompt && existingNode.image_prompt) {
+          node.image_prompt = existingNode.image_prompt;
         }
       }
     });

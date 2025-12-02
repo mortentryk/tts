@@ -691,7 +691,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               // Clear abort controller when TTS completes
               abortControllerRef.current = null;
               onDone?.();
-            }, undefined, abortControllerRef, passageIdAtStart, storyId);
+            }, undefined, abortControllerRef);
           } catch (buttonError) {
             // If button reading fails, still start voice listening and complete
             console.error('Failed to read buttons:', buttonError);
