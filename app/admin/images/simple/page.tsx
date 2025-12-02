@@ -73,6 +73,7 @@ export default function SimpleImageManager() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
   const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
+  const [clearingAudio, setClearingAudio] = useState<string | null>(null);
   const [expandedText, setExpandedText] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
@@ -458,6 +459,44 @@ export default function SimpleImageManager() {
       }
     } finally {
       setGeneratingAudio(null);
+    }
+  };
+
+  const clearAudio = async (nodeKey: string) => {
+    if (!selectedStory) return;
+    const confirmed = confirm('Delete the generated audio for this node? This cannot be undone.');
+    if (!confirmed) return;
+
+    setClearingAudio(nodeKey);
+    try {
+      const response = await fetch(`/api/stories/${selectedStory}/nodes/${nodeKey}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          audio_url: null,
+          text_hash: null,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to delete audio');
+      }
+
+      setImageRows(prev => prev.map(row =>
+        row.node_key === nodeKey
+          ? { ...row, audio_url: '' }
+          : row
+      ));
+      alert('✅ Audio deleted. Generate a new clip when ready.');
+    } catch (error) {
+      console.error('Clear audio error:', error);
+      alert(`❌ Failed to delete audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setClearingAudio(null);
     }
   };
 
@@ -1017,18 +1056,27 @@ export default function SimpleImageManager() {
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {row.audio_url ? (
-                                <div className="flex items-center space-x-2">
-                                  <audio
-                                    src={row.audio_url}
-                                    controls
-                                    className="h-8"
-                                    style={{ maxWidth: '150px' }}
-                                  />
+                                <div className="space-y-2">
+                                  <div className="flex items-center space-x-2">
+                                    <audio
+                                      src={row.audio_url}
+                                      controls
+                                      className="h-8"
+                                      style={{ maxWidth: '150px' }}
+                                    />
+                                    <button
+                                      onClick={() => window.open(row.audio_url, '_blank')}
+                                      className="text-blue-600 hover:text-blue-800 text-sm"
+                                    >
+                                      🔊 Open
+                                    </button>
+                                  </div>
                                   <button
-                                    onClick={() => window.open(row.audio_url, '_blank')}
-                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                    onClick={() => clearAudio(row.node_key)}
+                                    disabled={clearingAudio === row.node_key}
+                                    className="text-xs text-red-600 hover:text-red-800"
                                   >
-                                    🔊 Open
+                                    {clearingAudio === row.node_key ? '🗑️ Deleting...' : '🗑️ Delete audio'}
                                   </button>
                                 </div>
                               ) : (
