@@ -87,8 +87,18 @@ function formatChoicesForNarration(choices?: StoryNode['choices'] | null): strin
 
 
 // Cloud TTS for web — OpenAI only
-async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string, abortControllerRef?: React.MutableRefObject<AbortController | null>, nodeKey?: string, storyId?: string): Promise<void> {
+async function speakViaCloud(
+  text: string,
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>,
+  onComplete?: () => void,
+  preGeneratedAudioUrl?: string,
+  abortControllerRef?: React.MutableRefObject<AbortController | null>,
+  nodeKey?: string,
+  storyId?: string,
+  options?: { allowGeneration?: boolean }
+): Promise<void> {
   if (!text || !text.trim()) return;
+  const allowGeneration = options?.allowGeneration ?? true;
 
   // Stop any existing audio first
   if (audioRef.current) {
@@ -252,6 +262,14 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
         // Don't return - fall through to generate new TTS
       }
     }
+  }
+
+  // If generation is disallowed (e.g., production playback) and no cached audio is found,
+  // abort before calling ElevenLabs to avoid consuming credits.
+  if (!allowGeneration) {
+    const err: any = new Error('Lyden er ikke forberedt endnu. Generér venligst audio i admin først.');
+    err.code = 'PREGENERATED_AUDIO_REQUIRED';
+    throw err;
   }
 
   // Add timeout for mobile networks (30 seconds)
@@ -610,7 +628,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         lastTTSFinishTimeRef.current = Date.now();
         abortControllerRef.current = null;
         onDone?.();
-      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId);
+      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId, { allowGeneration: false });
     } catch (e: any) {
       audioRef.current = null;
       setSpeaking(false);
@@ -619,6 +637,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       
       // Don't show error if it was aborted or stopped by user
       if (e?.message?.includes('aborted') || e?.message?.includes('stopped by user') || e?.name === 'AbortError') {
+        return;
+      }
+
+      if (e?.code === 'PREGENERATED_AUDIO_REQUIRED') {
+        console.warn('Audio not pre-generated; skipping playback.');
         return;
       }
       
@@ -691,7 +714,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               // Clear abort controller when TTS completes
               abortControllerRef.current = null;
               onDone?.();
-            }, undefined, abortControllerRef);
+            }, undefined, abortControllerRef, undefined, undefined, { allowGeneration: false });
           } catch (buttonError) {
             // If button reading fails, still start voice listening and complete
             console.error('Failed to read buttons:', buttonError);
@@ -710,7 +733,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           abortControllerRef.current = null;
           onDone?.();
         }
-      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId); // Pass pre-generated audio URL, abort controller ref, nodeKey, and storyId
+      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId, { allowGeneration: false }); // Only play pre-generated audio
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
@@ -720,6 +743,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       
       // Don't show error if it was aborted or stopped by user
       if (e?.message?.includes('aborted') || e?.message?.includes('stopped by user') || e?.name === 'AbortError') {
+        return;
+      }
+
+      if (e?.code === 'PREGENERATED_AUDIO_REQUIRED') {
+        alert("Denne scene har ikke forudindspillet lyd endnu. Gå til admin og generér audio, før du afspiller historien.");
         return;
       }
       

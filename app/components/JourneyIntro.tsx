@@ -32,6 +32,21 @@ interface JourneyIntroProps {
   onExit: () => void;
 }
 
+const LANDMARK_ICON_MAP: Record<string, string> = {
+  tree: '🌳',
+  sea: '🌊',
+  cave: '🕳️',
+  castle: '🏰',
+  forest: '🌲'
+};
+
+const getLandmarkIcon = (landmarkType?: string) => {
+  if (!landmarkType) {
+    return '⚔️';
+  }
+  return LANDMARK_ICON_MAP[landmarkType] ?? '⚔️';
+};
+
 export default function JourneyIntro({ stories, onStorySelect, onExit }: JourneyIntroProps) {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false); // Start false to prevent flash
@@ -186,78 +201,109 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
 
   const currentSegment = journeySegments[currentSegmentIndex];
   const hasJourneyContent = journeySegments.length > 0;
+  const showSegmentOverlay = isVideoPlaying && hasJourneyContent && !!currentSegment;
+  const fallbackBackgroundImage =
+    currentSegment?.image_url ||
+    currentStory.thumbnail ||
+    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=1920&h=1080&fit=crop';
+  const segmentPreviewText = currentSegment
+    ? `${currentSegment.journey_text.substring(0, 220)}${
+        currentSegment.journey_text.length > 220 ? '...' : ''
+      }`
+    : '';
+  const storyIcon = getLandmarkIcon(currentStory.landmark_type);
+  const storyDescription = currentStory.description || 'Et nyt eventyr venter på dig...';
+  const progressBarKey = `${currentSegment?.id ?? 'idle'}-${currentSegmentIndex}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      {/* Journey Segment Display (if custom media exists) */}
-      {isVideoPlaying && hasJourneyContent && currentSegment && (currentSegment.video_url || currentSegment.image_url) ? (
-        <div className="absolute inset-0">
-          {currentSegment.video_url ? (
-            <video
-              key={currentSegment.id}
-              src={currentSegment.video_url}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                console.error('Video failed to load:', currentSegment.video_url);
-                console.error('Error details:', e);
-              }}
-              onLoadedData={() => {
-                console.log('Video loaded successfully:', currentSegment.video_url);
-              }}
-            />
-          ) : currentSegment.image_url ? (
-            <img
-              key={currentSegment.id}
-              src={currentSegment.image_url}
-              alt={currentSegment.journey_title}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                console.error('Image failed to load:', currentSegment.image_url);
-              }}
-              onLoad={() => {
-                console.log('Image loaded successfully:', currentSegment.image_url);
-              }}
-            />
-          ) : null}
-          
-          {/* Dark overlay */}
-          <div className="absolute inset-0 bg-black bg-opacity-40" />
-          
-          {/* Title overlay on image/video */}
-          <div className="absolute inset-0 flex items-center justify-center z-10">
-            <div className="text-center text-white max-w-4xl mx-auto px-6">
-              <div className="bg-black bg-opacity-70 backdrop-blur-sm rounded-2xl p-8 border border-yellow-400 border-opacity-50">
-                {/* Segment counter */}
-                <div className="text-yellow-400 text-sm font-semibold mb-2">
-                  Segment {currentSegmentIndex + 1} af {journeySegments.length}
+      <VideoBackground
+        videoUrl={showSegmentOverlay ? currentSegment?.video_url : undefined}
+        fallbackImage={fallbackBackgroundImage}
+        useAIGeneratedMap={false}
+      >
+        <>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/70 to-black/90" />
+          {showSegmentOverlay && currentSegment ? (
+            <div className="absolute inset-0 flex items-center justify-center px-4 py-12">
+              <div className="w-full max-w-6xl grid gap-6 md:grid-cols-[1.2fr,0.8fr] items-stretch text-white">
+                <div className="bg-black/70 border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col gap-6">
+                  <div className="text-sm font-semibold tracking-[0.4em] text-yellow-300 uppercase">
+                    Segment {currentSegmentIndex + 1} / {journeySegments.length}
+                  </div>
+                  <h1 className="text-4xl md:text-5xl font-bold leading-tight">
+                    {currentSegment.journey_title}
+                  </h1>
+                  <p className="text-lg text-gray-200 leading-relaxed">
+                    {segmentPreviewText}
+                  </p>
+                  <div className="space-y-3">
+                    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        key={progressBarKey}
+                        className="h-full rounded-full bg-yellow-400"
+                        style={{
+                          animation: `progressFill ${currentSegment.duration_seconds}s linear forwards`
+                        }}
+                      />
+                    </div>
+                    <p className="text-sm text-gray-300 font-medium">
+                      {currentSegment.duration_seconds} sekunder til næste stop
+                    </p>
+                  </div>
                 </div>
-                <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6 animate-fade-in">
-                  {currentSegment.journey_title}
-                </h1>
-                
-                {/* Progress Timer */}
-                <div className="w-full bg-white bg-opacity-20 rounded-full h-3 mb-4">
-                  <div 
-                    className="bg-yellow-400 h-3 rounded-full transition-all"
-                    style={{ 
-                      width: '100%',
-                      transition: `width ${currentSegment.duration_seconds}s linear`
-                    }}
-                  />
+                <div className="bg-black/60 border border-yellow-500/40 rounded-3xl p-8 shadow-2xl flex flex-col gap-6">
+                  <div className="text-5xl">{storyIcon}</div>
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.4em] text-yellow-300 mb-2">
+                      Næste Historie
+                    </p>
+                    <h2 className="text-3xl font-bold">{currentStory.title}</h2>
+                  </div>
+                  <p className="text-gray-300 leading-relaxed">
+                    {storyDescription}
+                  </p>
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    <span className="bg-yellow-600/20 border border-yellow-500/40 text-yellow-200 px-4 py-2 rounded-full font-semibold">
+                      🟡 MEDIUM
+                    </span>
+                    <span className="bg-blue-600/20 border border-blue-500/40 text-blue-100 px-4 py-2 rounded-full font-semibold">
+                      ⏱️ 15-20 min
+                    </span>
+                  </div>
                 </div>
-                <p className="text-white text-lg opacity-80">
-                  {currentSegment.video_url ? '🎬' : '🖼️'} {currentSegment.journey_text.substring(0, 80)}...
-                </p>
               </div>
             </div>
-          </div>
-        </div>
-      ) : null}
-
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center px-6">
+              <div className="bg-black/70 border border-white/10 rounded-3xl px-8 py-12 text-center text-white max-w-md w-full space-y-4 shadow-2xl">
+                {loadingJourney ? (
+                  <>
+                    <div className="animate-spin rounded-full h-12 w-12 border-2 border-yellow-400 border-t-transparent mx-auto"></div>
+                    <p className="text-lg font-semibold">Henter din Eventyrrejse...</p>
+                    <p className="text-sm text-white/70">
+                      Magien er på vej – forbliv på stien.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-semibold">Ingen rejseindhold endnu</p>
+                    <p className="text-sm text-white/70">
+                      Vi kunne ikke finde nogen segmenter til denne historie.
+                    </p>
+                    <button
+                      onClick={onExit}
+                      className="mt-2 inline-flex items-center justify-center rounded-full bg-yellow-600 px-6 py-3 font-semibold text-white hover:bg-yellow-500 transition-colors"
+                    >
+                      Tilbage til kortet
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      </VideoBackground>
 
       {/* Quest Acceptance Popup - Enhanced with story info */}
       {showQuestPopup && (
@@ -279,12 +325,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
             <div className="p-8 text-center">
               {/* Icon */}
               <div className="text-7xl mb-4">
-                {currentStory.landmark_type === 'tree' && '🌳'}
-                {currentStory.landmark_type === 'sea' && '🌊'}
-                {currentStory.landmark_type === 'cave' && '🕳️'}
-                {currentStory.landmark_type === 'castle' && '🏰'}
-                {currentStory.landmark_type === 'forest' && '🌲'}
-                {(!currentStory.landmark_type || !['tree', 'sea', 'cave', 'castle', 'forest'].includes(currentStory.landmark_type)) && '⚔️'}
+                {storyIcon}
               </div>
 
               {/* Quest Title */}
@@ -294,7 +335,7 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
 
               {/* Story Description */}
               <p className="text-gray-300 text-lg mb-6 leading-relaxed">
-                {currentStory.description}
+                {storyDescription}
               </p>
 
               {/* Metadata badges */}

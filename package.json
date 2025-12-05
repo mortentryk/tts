@@ -13,6 +13,10 @@
     "cap:open:android": "npx cap open android",
     "cap:run:android": "npx cap run android"
   },
+  "engines": {
+    "node": ">=18.18.0",
+    "npm": ">=9.0.0"
+  },
   "dependencies": {
     "@cloudinary/url-gen": "^1.22.0",
     "@stripe/stripe-js": "^8.2.0",
@@ -22,7 +26,7 @@
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.8.0",
     "jose": "^5.9.6",
-    "next": "15.4.7",
+    "next": "^15.4.8",
     "next-pwa": "^5.6.0",
     "openai": "^6.6.0",
     "react": "18.3.1",
