@@ -200,11 +200,22 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         await releaseWakeLock();
 
         // Only try to exit app if running in Capacitor (native app)
+        // Use function-based dynamic import to prevent webpack analysis at build time
         try {
-          const { Capacitor } = await import('@capacitor/core');
-          if (Capacitor?.isNativePlatform?.()) {
-            const { App } = await import('@capacitor/app');
-            await App.exitApp();
+          // Check if we're in a Capacitor environment
+          const isCapacitor = typeof window !== 'undefined' && 
+            (window as any).Capacitor !== undefined;
+          
+          if (isCapacitor) {
+            // Use function to prevent static analysis
+            const loadCapacitor = () => import('@capacitor/core');
+            const loadApp = () => import('@capacitor/app');
+            
+            const { Capacitor } = await loadCapacitor();
+            if (Capacitor?.isNativePlatform?.()) {
+              const { App } = await loadApp();
+              await App.exitApp();
+            }
           }
         } catch (error) {
           // Not in Capacitor environment or exit failed - ignore silently
