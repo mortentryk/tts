@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { App } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
 import VideoBackground from './VideoBackground';
 
 interface Story {
@@ -201,12 +199,16 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         setScreenGuardEndTime(null);
         await releaseWakeLock();
 
-        if (Capacitor?.getPlatform?.() === 'android') {
-          try {
+        // Only try to exit app if running in Capacitor (native app)
+        try {
+          const { Capacitor } = await import('@capacitor/core');
+          if (Capacitor?.isNativePlatform?.()) {
+            const { App } = await import('@capacitor/app');
             await App.exitApp();
-          } catch (error) {
-            console.warn('Kunne ikke lukke appen', error);
           }
+        } catch (error) {
+          // Not in Capacitor environment or exit failed - ignore silently
+          // In PWA/web, we can't exit the app anyway
         }
       }, SCREEN_GUARD_DURATION_MS);
     } catch (error) {
