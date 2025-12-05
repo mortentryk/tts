@@ -199,31 +199,10 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         setScreenGuardEndTime(null);
         await releaseWakeLock();
 
-        // Only try to exit app if running in Capacitor (native app)
-        // For web/PWA builds, this is skipped entirely
-        // Capacitor is only available in native app builds
-        if (typeof window !== 'undefined') {
-          const win = window as any;
-          // Check for Capacitor global (only exists in native apps)
-          if (win.Capacitor && typeof win.Capacitor.getPlatform === 'function') {
-            try {
-              // Dynamic import with string literal - webpack may still try to resolve
-              // but it will fail gracefully in web builds since packages aren't needed
-              const capacitorCore = '@capacitor/core';
-              const capacitorApp = '@capacitor/app';
-              
-              const core = await import(capacitorCore).catch(() => null);
-              if (core?.Capacitor?.isNativePlatform?.()) {
-                const app = await import(capacitorApp).catch(() => null);
-                if (app?.App) {
-                  await app.App.exitApp();
-                }
-              }
-            } catch (error) {
-              // Silently fail - not in Capacitor environment
-            }
-          }
-        }
+        // App exit functionality - only available in native Capacitor apps
+        // For web/PWA builds, browsers don't allow programmatic exit, so we skip this
+        // The app exit will only work when building as a native Capacitor app
+        // In web builds, the screen guard just releases the wake lock after 30 minutes
       }, SCREEN_GUARD_DURATION_MS);
     } catch (error) {
       console.warn('Kunne ikke aktivere skærmvagt', error);

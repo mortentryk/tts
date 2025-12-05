@@ -36,10 +36,6 @@
     "stripe": "^19.1.0",
     "zod": "^3.23.8"
   },
-  "optionalDependencies": {
-    "@capacitor/app": "^7.1.0",
-    "@capacitor/core": "^7.4.4",
-  },
   "devDependencies": {
     "@capacitor/android": "^7.4.4",
     "@capacitor/cli": "^6.2.1",
