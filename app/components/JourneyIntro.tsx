@@ -200,26 +200,29 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
         await releaseWakeLock();
 
         // Only try to exit app if running in Capacitor (native app)
-        // Use function-based dynamic import to prevent webpack analysis at build time
-        try {
-          // Check if we're in a Capacitor environment
-          const isCapacitor = typeof window !== 'undefined' && 
-            (window as any).Capacitor !== undefined;
-          
-          if (isCapacitor) {
-            // Use function to prevent static analysis
-            const loadCapacitor = () => import('@capacitor/core');
-            const loadApp = () => import('@capacitor/app');
-            
-            const { Capacitor } = await loadCapacitor();
-            if (Capacitor?.isNativePlatform?.()) {
-              const { App } = await loadApp();
-              await App.exitApp();
+        // For web/PWA builds, this is skipped entirely
+        // Capacitor is only available in native app builds
+        if (typeof window !== 'undefined') {
+          const win = window as any;
+          // Check for Capacitor global (only exists in native apps)
+          if (win.Capacitor && typeof win.Capacitor.getPlatform === 'function') {
+            try {
+              // Dynamic import with string literal - webpack may still try to resolve
+              // but it will fail gracefully in web builds since packages aren't needed
+              const capacitorCore = '@capacitor/core';
+              const capacitorApp = '@capacitor/app';
+              
+              const core = await import(capacitorCore).catch(() => null);
+              if (core?.Capacitor?.isNativePlatform?.()) {
+                const app = await import(capacitorApp).catch(() => null);
+                if (app?.App) {
+                  await app.App.exitApp();
+                }
+              }
+            } catch (error) {
+              // Silently fail - not in Capacitor environment
             }
           }
-        } catch (error) {
-          // Not in Capacitor environment or exit failed - ignore silently
-          // In PWA/web, we can't exit the app anyway
         }
       }, SCREEN_GUARD_DURATION_MS);
     } catch (error) {

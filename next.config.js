@@ -18,6 +18,23 @@ const nextConfig = {
   // Note: This disables API routes. For full functionality, point Capacitor to deployed URL instead
   // Uncomment the line below for static export (for offline-capable Android app):
   // output: process.env.BUILD_STATIC === 'true' ? 'export' : undefined,
+  // Externalize Capacitor packages for web builds (only needed in native)
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // For client builds, make Capacitor packages external
+      // They're only needed in native Capacitor apps, not web/PWA
+      const originalExternals = config.externals;
+      config.externals = [
+        ...(Array.isArray(originalExternals) ? originalExternals : [originalExternals]),
+        ({ request }: any) => {
+          if (request && request.includes('@capacitor/')) {
+            return `commonjs ${request}`;
+          }
+        },
+      ].filter(Boolean);
+    }
+    return config;
+  },
 }
 
 // Apply PWA wrapper with error handling for Next.js 15 compatibility
