@@ -62,5 +62,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [...staticEntries, ...storyEntries];
 }
 
-export const revalidate = 60 * 60; // Refresh sitemap every hour
+export const revalidate = 3600; // 1 hour in seconds // Refresh sitemap every hour
 
