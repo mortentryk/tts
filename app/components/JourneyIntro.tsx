@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import VideoBackground from './VideoBackground';
 
 interface Story {
@@ -32,6 +34,21 @@ interface JourneyIntroProps {
   onExit: () => void;
 }
 
+const SCREEN_GUARD_DURATION_MS = 30 * 60 * 1000;
+
+type ScreenWakeLock = {
+  released: boolean;
+  release: () => Promise<void>;
+  addEventListener?: (type: 'release', listener: () => void) => void;
+  removeEventListener?: (type: 'release', listener: () => void) => void;
+};
+
+type NavigatorWithWakeLock = Navigator & {
+  wakeLock?: {
+    request: (type: 'screen') => Promise<ScreenWakeLock>;
+  };
+};
+
 const LANDMARK_ICON_MAP: Record<string, string> = {
   tree: '🌳',
   sea: '🌊',
@@ -56,6 +73,153 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [loadingJourney, setLoadingJourney] = useState(true);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const wakeLockRef = React.useRef<ScreenWakeLock | null>(null);
+  const screenGuardTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const [isScreenGuardActive, setIsScreenGuardActive] = useState(false);
+  const [screenGuardEndTime, setScreenGuardEndTime] = useState<number | null>(null);
+  const [screenGuardRemainingSeconds, setScreenGuardRemainingSeconds] = useState<number | null>(null);
+  const [screenGuardMessage, setScreenGuardMessage] = useState<string | null>(null);
+  const navigatorSupportsWakeLock =
+    typeof navigator !== 'undefined' && Boolean((navigator as NavigatorWithWakeLock).wakeLock);
+
+  const acquireWakeLock = useCallback(async () => {
+    if (!navigatorSupportsWakeLock || wakeLockRef.current) {
+      return;
+    }
+
+    try {
+      const nav = navigator as NavigatorWithWakeLock;
+      const sentinel = await nav.wakeLock?.request('screen');
+      if (sentinel) {
+        wakeLockRef.current = sentinel;
+        sentinel.addEventListener?.('release', () => {
+          wakeLockRef.current = null;
+        });
+      }
+    } catch (error) {
+      console.warn('Wake lock request failed', error);
+      setScreenGuardMessage('Kan ikke holde skærmen vågen');
+      throw error;
+    }
+  }, [navigatorSupportsWakeLock]);
+
+  const releaseWakeLock = useCallback(async () => {
+    if (!wakeLockRef.current) {
+      return;
+    }
+
+    try {
+      await wakeLockRef.current.release();
+    } catch (error) {
+      console.warn('Wake lock release failed', error);
+    } finally {
+      wakeLockRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!(isVideoPlaying || isScreenGuardActive)) {
+      releaseWakeLock();
+      return;
+    }
+
+    acquireWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        acquireWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (!isScreenGuardActive) {
+        releaseWakeLock();
+      }
+    };
+  }, [acquireWakeLock, releaseWakeLock, isScreenGuardActive, isVideoPlaying]);
+
+  useEffect(() => {
+    return () => {
+      if (screenGuardTimerRef.current) {
+        clearTimeout(screenGuardTimerRef.current);
+      }
+      releaseWakeLock();
+    };
+  }, [releaseWakeLock]);
+
+  useEffect(() => {
+    if (!isScreenGuardActive || !screenGuardEndTime) {
+      setScreenGuardRemainingSeconds(null);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const remaining = screenGuardEndTime - Date.now();
+      setScreenGuardRemainingSeconds(Math.max(0, Math.ceil(remaining / 1000)));
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+
+    return () => clearInterval(interval);
+  }, [isScreenGuardActive, screenGuardEndTime]);
+
+  const handleScreenGuardToggle = useCallback(async () => {
+    if (screenGuardTimerRef.current) {
+      clearTimeout(screenGuardTimerRef.current);
+      screenGuardTimerRef.current = null;
+    }
+
+    if (isScreenGuardActive) {
+      setIsScreenGuardActive(false);
+      setScreenGuardEndTime(null);
+      setScreenGuardMessage('Skærmvagt stoppet');
+      if (!isVideoPlaying) {
+        await releaseWakeLock();
+      }
+      return;
+    }
+
+    if (!navigatorSupportsWakeLock) {
+      setScreenGuardMessage('Wake Lock API er ikke understøttet på denne enhed.');
+      return;
+    }
+
+    try {
+      await acquireWakeLock();
+      const endTime = Date.now() + SCREEN_GUARD_DURATION_MS;
+      setIsScreenGuardActive(true);
+      setScreenGuardEndTime(endTime);
+      setScreenGuardMessage(null);
+
+      screenGuardTimerRef.current = setTimeout(async () => {
+        screenGuardTimerRef.current = null;
+        setIsScreenGuardActive(false);
+        setScreenGuardEndTime(null);
+        await releaseWakeLock();
+
+        if (Capacitor?.getPlatform?.() === 'android') {
+          try {
+            await App.exitApp();
+          } catch (error) {
+            console.warn('Kunne ikke lukke appen', error);
+          }
+        }
+      }, SCREEN_GUARD_DURATION_MS);
+    } catch (error) {
+      console.warn('Kunne ikke aktivere skærmvagt', error);
+      setScreenGuardMessage('Kunne ikke holde skærmen vågen.');
+    }
+  }, [
+    acquireWakeLock,
+    isScreenGuardActive,
+    isVideoPlaying,
+    navigatorSupportsWakeLock,
+    releaseWakeLock
+  ]);
 
   // Get journey stories sorted by order
   const journeyStories = stories
@@ -214,6 +378,19 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   const storyIcon = getLandmarkIcon(currentStory.landmark_type);
   const storyDescription = currentStory.description || 'Et nyt eventyr venter på dig...';
   const progressBarKey = `${currentSegment?.id ?? 'idle'}-${currentSegmentIndex}`;
+  const screenGuardButtonLabel = isScreenGuardActive
+    ? 'Stop 30 min auto-luk'
+    : 'Hold skærmen vågen (30 min)';
+  const screenGuardButtonClasses = isScreenGuardActive
+    ? 'bg-red-600 hover:bg-red-500'
+    : 'bg-green-600 hover:bg-green-500';
+  const screenGuardButtonDisabled = !navigatorSupportsWakeLock && !isScreenGuardActive;
+  const formattedScreenGuardCountdown =
+    screenGuardRemainingSeconds !== null
+      ? `${String(Math.floor(screenGuardRemainingSeconds / 60)).padStart(2, '0')}:${String(
+          screenGuardRemainingSeconds % 60
+        ).padStart(2, '0')}`
+      : null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
@@ -374,7 +551,22 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
       )}
 
       {/* Skip overlay */}
-      <div className="absolute top-4 right-4 z-40">
+      <div className="absolute top-4 right-4 z-40 flex flex-col items-end gap-2">
+        <button
+          onClick={handleScreenGuardToggle}
+          disabled={screenGuardButtonDisabled}
+          className={`text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${screenGuardButtonClasses} disabled:bg-gray-600 disabled:cursor-not-allowed`}
+        >
+          {screenGuardButtonLabel}
+        </button>
+        {formattedScreenGuardCountdown && (
+          <div className="text-xs text-yellow-200 font-semibold">
+            Lukker om {formattedScreenGuardCountdown}
+          </div>
+        )}
+        {screenGuardMessage && (
+          <div className="text-xs text-red-300 max-w-[240px] text-right">{screenGuardMessage}</div>
+        )}
         <button
           onClick={handleSkip}
           className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg text-sm hover:bg-opacity-70 transition-colors"
