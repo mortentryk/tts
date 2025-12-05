@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateImage, createStoryImagePrompt } from '../../../../../lib/aiImageGenerator';
+import { generateImage, createJourneySegmentPrompt } from '../../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, generateStoryAssetId } from '../../../../../lib/cloudinary';
 import { supabase } from '../../../../../lib/supabase';
 
@@ -53,22 +53,70 @@ export async function POST(request: NextRequest) {
     // Use story's visual style or fallback to journey style
     const visualStyle = storyData?.visual_style || style;
     
-    // Create AI prompt for journey image
-    const prompt = createStoryImagePrompt(
+    // Fetch previous segments' images for visual consistency
+    const { data: previousSegments, error: segmentsError } = await supabase
+      .from('journey_stories')
+      .select('image_url, sequence_number')
+      .eq('story_id', journey.story_id)
+      .eq('is_active', true)
+      .lt('sequence_number', journey.sequence_number)
+      .order('sequence_number', { ascending: true });
+
+    if (segmentsError) {
+      console.warn('⚠️ Could not fetch previous segments:', segmentsError);
+    }
+
+    // Collect reference image URLs from previous segments
+    const previousSegmentImageUrls: string[] = [];
+    if (previousSegments && previousSegments.length > 0) {
+      previousSegments.forEach(seg => {
+        if (seg.image_url) {
+          previousSegmentImageUrls.push(seg.image_url);
+        }
+      });
+      console.log(`📸 Found ${previousSegmentImageUrls.length} previous segment image(s) for reference`);
+    }
+
+    // Determine which model to use
+    // Use img2img if we have previous segments for consistency
+    let imageModel: 'dalle3' | 'stable-diffusion' | 'stable-diffusion-img2img' | 'nano-banana' = model as any;
+    let referenceImageUrl: string | undefined = undefined;
+
+    if (previousSegmentImageUrls.length > 0) {
+      // Use the most recent previous segment image as reference
+      referenceImageUrl = previousSegmentImageUrls[previousSegmentImageUrls.length - 1];
+      // Prefer img2img for consistency, but allow override
+      if (model === 'dalle3') {
+        // DALL-E 3 doesn't support img2img, so use stable-diffusion-img2img instead
+        imageModel = 'stable-diffusion-img2img';
+        console.log('🔄 Using img2img model for visual consistency with previous segments');
+      } else if (model === 'stable-diffusion' || model === 'stable-diffusion-img2img') {
+        imageModel = 'stable-diffusion-img2img';
+        console.log('🔄 Using img2img model for visual consistency with previous segments');
+      }
+    }
+
+    // Create AI prompt for journey image using the new journey-specific function
+    const prompt = createJourneySegmentPrompt(
       journeyText,
       journeyTitle || 'Journey',
+      storyData?.title || 'Story',
       visualStyle,
-      [] // No character data for journeys
+      journey.sequence_number || 1,
+      previousSegmentImageUrls
     );
     
     console.log('📝 Generated prompt:', prompt);
     console.log('🎨 Using visual style:', visualStyle);
+    console.log(`🎬 Sequence number: ${journey.sequence_number || 1}`);
 
     // Generate image with AI
     const generatedImage = await generateImage(prompt, {
-      model: model as any,
+      model: imageModel,
       size: size as any,
       quality: quality as any,
+      referenceImageUrl: referenceImageUrl,
+      strength: 0.65, // Good balance for maintaining style while allowing scene changes
     });
 
     console.log('✅ Image generated:', generatedImage.url);

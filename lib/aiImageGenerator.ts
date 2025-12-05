@@ -750,6 +750,78 @@ QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive
 }
 
 /**
+ * Create a journey segment-specific image prompt
+ * Optimized for journey intro segments that play before quest acceptance
+ * Supports reference images from previous segments for visual consistency
+ */
+export function createJourneySegmentPrompt(
+  journeyText: string,
+  journeyTitle: string,
+  storyTitle: string,
+  visualStyle: string,
+  sequenceNumber: number,
+  previousSegmentImageUrls: string[] = []
+): string {
+  // Clean up the journey text for better AI processing
+  let cleanJourneyText = journeyText
+    .replace(/\*\*/g, '') // Remove markdown bold
+    .replace(/\*/g, '') // Remove markdown italic
+    .replace(/#{1,6}\s/g, '') // Remove markdown headers
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert markdown links to plain text
+    .replace(/\n+/g, ' ') // Replace newlines with spaces
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+
+  // Use more of the journey text (up to 1000 chars) to capture full scene details
+  let sceneDescription = cleanJourneyText.substring(0, 1000).trim();
+  
+  // Use light sanitization that preserves visual details, locations, objects, actions
+  sceneDescription = sanitizeSceneDescription(sceneDescription);
+
+  // Build style reference section - this MUST come FIRST to ensure consistency
+  let styleReferenceSection = '';
+  
+  if (previousSegmentImageUrls.length > 0) {
+    // For subsequent segments, reference previous segments for visual consistency
+    const referenceCount = previousSegmentImageUrls.length;
+    styleReferenceSection = `STYLE REQUIREMENTS (MUST MATCH EXACTLY): This is segment ${sequenceNumber} in a journey sequence. You MUST match the exact same artistic style, color palette, lighting mood, character design approach, and visual aesthetic as the previous segment(s). Use the same warm, inviting lighting. Characters must have the same friendly, expressive design style. Maintain the same whimsical, storybook illustration quality with vibrant colors and soft, rounded shapes. Keep the same family-friendly, magical atmosphere. The visual style must be IDENTICAL to the previous segments, creating a cohesive cinematic sequence. `;
+  } else {
+    // For the first segment, establish the visual style
+    styleReferenceSection = `STYLE REQUIREMENTS (ESTABLISH VISUAL STYLE): This is the first segment in a journey sequence. You are establishing the visual style that all subsequent segments will follow. `;
+  }
+
+  // Enhanced default style to be more explicit about Disney/anime and child-friendly
+  const defaultStyle = visualStyle || 'Disney-style animation, anime-inspired character design, polished and professional, expressive friendly characters, vibrant bright colors, soft rounded shapes, family-friendly aesthetic, cinematic quality, warm inviting lighting, cheerful magical atmosphere, suitable for children';
+
+  // Build child-friendly requirements (always included)
+  const childFriendlyRequirements = 'CRITICAL: All content must be child-appropriate and family-friendly. Use warm, bright lighting throughout. All characters must appear friendly and approachable, never scary or threatening. Maintain a light, cheerful, magical atmosphere suitable for children.';
+
+  // Build sequence context
+  let sequenceContext = '';
+  if (sequenceNumber > 1) {
+    sequenceContext = `SEQUENCE CONTEXT: This is segment ${sequenceNumber} in a cinematic journey sequence leading up to a quest. The scene should flow naturally from the previous segment, maintaining visual and narrative continuity. `;
+  } else {
+    sequenceContext = `SEQUENCE CONTEXT: This is the opening segment of a cinematic journey sequence. It should establish the visual style and atmosphere for the entire sequence. `;
+  }
+
+  // Build story context
+  const storyContext = storyTitle ? `STORY CONTEXT: This journey sequence introduces the story "${storyTitle}". ` : '';
+
+  // Build a well-structured prompt with clear priority: Style → Sequence → Scene → Quality
+  const prompt = `${styleReferenceSection}${defaultStyle ? defaultStyle + '. ' : ''}
+
+${storyContext}${sequenceContext}
+
+IMPORTANT SCENE DESCRIPTION (READ CAREFULLY AND DEPICT ACCURATELY): ${sceneDescription}
+
+${childFriendlyRequirements}
+
+QUALITY REQUIREMENTS: High quality illustration, dynamic composition, expressive and appealing, warm inviting atmosphere, family-friendly, child-appropriate, no scary elements, no dark shadows, no text, no words, no writing, no letters, no dialogue boxes, no UI elements. The image must accurately show the scene described above, including all key elements, characters, objects, and setting details mentioned in the scene description. This is part of a cinematic trailer sequence, so the composition should be visually striking and engaging.`;
+
+  return prompt;
+}
+
+/**
  * Create a story-specific video prompt in Danish (similar to image prompt structure)
  * This follows the same structure as the nano-banana image prompts for consistency
  */
