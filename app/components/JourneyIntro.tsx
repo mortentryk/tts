@@ -375,11 +375,12 @@ export default function JourneyIntro({ stories, onStorySelect, onExit }: Journey
   const progressBarKey = `${currentSegment?.id ?? 'idle'}-${currentSegmentIndex}`;
   const screenGuardButtonLabel = isScreenGuardActive
     ? 'Stop 30 min auto-luk'
-    : 'Hold skærmen vågen (30 min)';
+    : 'Hold skærmen vågen (30 min) (kan være begrænset på iOS)';
   const screenGuardButtonClasses = isScreenGuardActive
     ? 'bg-red-600 hover:bg-red-500'
     : 'bg-green-600 hover:bg-green-500';
-  const screenGuardButtonDisabled = !navigatorSupportsWakeLock && !isScreenGuardActive;
+  // Allow the user to try on all devices; unsupported platforms will show a message.
+  const screenGuardButtonDisabled = false;
   const formattedScreenGuardCountdown =
     screenGuardRemainingSeconds !== null
       ? `${String(Math.floor(screenGuardRemainingSeconds / 60)).padStart(2, '0')}:${String(
