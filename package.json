@@ -14,7 +14,7 @@
     "cap:run:android": "npx cap run android"
   },
   "engines": {
-    "node": ">=18.18.0",
+    "node": "22.x",
     "npm": ">=9.0.0"
   },
   "dependencies": {
