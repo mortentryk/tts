@@ -14,6 +14,98 @@ function generateTextHash(text: string): string {
   return crypto.createHash('md5').update(text).digest('hex');
 }
 
+// Format choices for TTS narration (same format as client-side)
+function formatChoicesForNarration(choices: Array<{ label: string; sort_index: number }>): string {
+  if (!choices || choices.length === 0) return '';
+  const sortedChoices = [...choices].sort((a, b) => a.sort_index - b.sort_index);
+  const choicesText = sortedChoices
+    .map((choice, index) => `Valg ${index + 1}: ${choice.label}.`)
+    .join(' ');
+  return `Valgmuligheder: ${choicesText} Hvad vælger du?`;
+}
+
+// Generate audio from ElevenLabs API
+async function generateElevenLabsAudio(
+  text: string,
+  apiKey: string,
+  voiceId: string = "qhEux886xDKbOdF7jkFP"
+): Promise<Buffer> {
+  const ELEVENLABS_MAX_CHARS = 5000;
+  
+  if (text.length > ELEVENLABS_MAX_CHARS) {
+    console.log(`⚠️ Text exceeds ${ELEVENLABS_MAX_CHARS} characters, splitting into chunks...`);
+    const chunks = chunkText(text, ELEVENLABS_MAX_CHARS);
+    console.log(`📦 Split into ${chunks.length} chunks`);
+    
+    const audioBuffers: ArrayBuffer[] = [];
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log(`🎙️ Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)...`);
+      
+      const chunkBody = {
+        text: chunk,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.0,
+          use_speaker_boost: true
+        }
+      };
+
+      const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "xi-api-key": apiKey
+        },
+        body: JSON.stringify(chunkBody)
+      });
+
+      if (!audioResponse.ok) {
+        const errorText = await audioResponse.text().catch(() => "");
+        throw new Error(`Audio generation failed (chunk ${i + 1}/${chunks.length}): ${errorText}`);
+      }
+
+      const chunkBuffer = await audioResponse.arrayBuffer();
+      audioBuffers.push(chunkBuffer);
+    }
+    
+    console.log(`🔗 Concatenating ${audioBuffers.length} audio chunks...`);
+    const combinedAudio = concatenateAudioBuffers(audioBuffers);
+    return Buffer.from(combinedAudio);
+  } else {
+    const body = {
+      text: text,
+      model_id: "eleven_multilingual_v2",
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: 0.0,
+        use_speaker_boost: true
+      }
+    };
+
+    const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "xi-api-key": apiKey
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!audioResponse.ok) {
+      const errorText = await audioResponse.text().catch(() => "");
+      throw new Error(`Audio generation failed: ${errorText}`);
+    }
+
+    const audioArrayBuffer = await audioResponse.arrayBuffer();
+    return Buffer.from(audioArrayBuffer);
+  }
+}
+
 // Split text into chunks at sentence boundaries, respecting ElevenLabs 5000 char limit
 function chunkText(text: string, maxChunkSize: number = 5000): string[] {
   if (text.length <= maxChunkSize) {
@@ -153,6 +245,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Node not found' }, { status: 404 });
     }
 
+    // Get choices for this node
+    const { data: choices, error: choicesError } = await supabase
+      .from('story_choices')
+      .select('label, sort_index')
+      .eq('story_id', story.id)
+      .eq('from_node_key', nodeId)
+      .order('sort_index');
+
+    if (choicesError) {
+      console.warn('⚠️ Could not fetch choices:', choicesError);
+    }
+
     const text = node.text_md;
     
     // Validate text exists and is not empty
@@ -164,28 +268,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const currentHash = generateTextHash(text);
-
-    // Check if audio is already up-to-date
-    if (node.audio_url && node.text_hash === currentHash) {
-      console.log(`✅ Audio already up-to-date for node ${nodeId}`);
-      // Calculate cost and characters for consistency with new generation
-      const characterCount = text.length;
-      const costPerChar = 0.00022; // Approximate for Creator plan
-      const estimatedCost = characterCount * costPerChar;
-      
-      return NextResponse.json({
-        audio: {
-          url: node.audio_url,
-          cached: true,
-          message: 'Audio already exists and text unchanged',
-          cost: estimatedCost,
-          characters: characterCount
-        }
-      });
-    }
-
-    // Check ElevenLabs API key
+    // Check ElevenLabs API key upfront
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -194,150 +277,144 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`🎙️ Generating audio for node ${nodeId} in story "${story.title}"`);
-    console.log(`📏 Text length: ${text.length} characters`);
+    const currentHash = generateTextHash(text);
+    const cloudinaryFolder = `tts/${storySlug}/audio`;
+    const costPerChar = 0.00022; // Approximate for Creator plan
 
-    // Use Danish multilingual voice
-    const voiceId = "qhEux886xDKbOdF7jkFP";
+    // Track what we generate
+    let mainAudioResult: { url: string; bytes?: number; format?: string; cached: boolean } | null = null;
+    let choicesAudioResult: { url: string; bytes?: number; format?: string; cached: boolean } | null = null;
+    let totalCharacters = 0;
+    let totalCost = 0;
 
-    // ElevenLabs has a 5000 character limit per request
-    const ELEVENLABS_MAX_CHARS = 5000;
-
-    // If text is too long, split it into chunks
-    let audioBuffer: Buffer;
+    // --- Generate main text audio ---
+    const needsMainAudio = !node.audio_url || node.text_hash !== currentHash;
     
-    if (text.length > ELEVENLABS_MAX_CHARS) {
-      console.log(`⚠️ Text exceeds ${ELEVENLABS_MAX_CHARS} characters, splitting into chunks...`);
-      const chunks = chunkText(text, ELEVENLABS_MAX_CHARS);
-      console.log(`📦 Split into ${chunks.length} chunks`);
-      
-      const audioBuffers: ArrayBuffer[] = [];
-      
-      // Generate audio for each chunk
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        console.log(`🎙️ Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)...`);
-        
-        const chunkBody = {
-          text: chunk,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-            style: 0.0,
-            use_speaker_boost: true
-          }
+    if (needsMainAudio) {
+      console.log(`🎙️ Generating main audio for node ${nodeId} in story "${story.title}"`);
+      console.log(`📏 Text length: ${text.length} characters`);
+
+      try {
+        const audioBuffer = await generateElevenLabsAudio(text, apiKey);
+        console.log(`✅ Main audio generated: ${audioBuffer.length} bytes`);
+
+        const publicId = `node_${nodeId}_${currentHash.substring(0, 8)}`;
+        const uploadResult = await uploadAudioToCloudinary(audioBuffer, cloudinaryFolder, publicId);
+        console.log(`✅ Main audio uploaded to Cloudinary: ${uploadResult.secure_url}`);
+
+        mainAudioResult = {
+          url: uploadResult.secure_url,
+          bytes: uploadResult.bytes,
+          format: uploadResult.format,
+          cached: false
         };
-
-        const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "xi-api-key": apiKey
-          },
-          body: JSON.stringify(chunkBody)
-        });
-
-        if (!audioResponse.ok) {
-          const errorText = await audioResponse.text().catch(() => "");
-          console.error(`❌ ElevenLabs error for chunk ${i + 1}:`, audioResponse.status, errorText);
-          return NextResponse.json(
-            { error: `Audio generation failed (chunk ${i + 1}/${chunks.length}): ${errorText}` },
-            { status: audioResponse.status }
-          );
-        }
-
-        const chunkBuffer = await audioResponse.arrayBuffer();
-        audioBuffers.push(chunkBuffer);
-      }
-      
-      // Concatenate all audio chunks
-      console.log(`🔗 Concatenating ${audioBuffers.length} audio chunks...`);
-      const combinedAudio = concatenateAudioBuffers(audioBuffers);
-      audioBuffer = Buffer.from(combinedAudio);
-      console.log(`✅ Audio generated and concatenated: ${audioBuffer.length} bytes`);
-    } else {
-      // Text is within limit, process normally
-      const body = {
-        text: text,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.0,
-          use_speaker_boost: true
-        }
-      };
-
-      const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "xi-api-key": apiKey
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (!audioResponse.ok) {
-        const errorText = await audioResponse.text().catch(() => "");
-        console.error('❌ ElevenLabs error:', audioResponse.status, errorText);
+        totalCharacters += text.length;
+        totalCost += text.length * costPerChar;
+      } catch (error) {
+        console.error('❌ Failed to generate main audio:', error);
         return NextResponse.json(
-          { error: `Audio generation failed: ${errorText}` },
-          { status: audioResponse.status }
+          { error: `Main audio generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+          { status: 500 }
         );
       }
-
-      const audioArrayBuffer = await audioResponse.arrayBuffer();
-      audioBuffer = Buffer.from(audioArrayBuffer);
-      console.log(`✅ Audio generated: ${audioBuffer.length} bytes`);
+    } else {
+      console.log(`✅ Main audio already up-to-date for node ${nodeId}`);
+      mainAudioResult = { url: node.audio_url, cached: true };
+      totalCharacters += text.length;
+      totalCost += text.length * costPerChar;
     }
 
-    // Upload to Cloudinary
-    const cloudinaryFolder = `tts/${storySlug}/audio`;
-    const publicId = `node_${nodeId}_${currentHash.substring(0, 8)}`;
+    // --- Generate choices audio (if node has choices) ---
+    const choicesArray = choices || [];
+    if (choicesArray.length > 0) {
+      const choicesText = formatChoicesForNarration(choicesArray);
+      const choicesHash = generateTextHash(choicesText);
+      const needsChoicesAudio = !node.choices_audio_url || node.choices_text_hash !== choicesHash;
 
-    const uploadResult = await uploadAudioToCloudinary(
-      audioBuffer,
-      cloudinaryFolder,
-      publicId
-    );
+      if (needsChoicesAudio) {
+        console.log(`🎙️ Generating choices audio for node ${nodeId}`);
+        console.log(`📏 Choices text: "${choicesText.substring(0, 100)}..." (${choicesText.length} chars)`);
 
-    console.log(`✅ Audio uploaded to Cloudinary: ${uploadResult.secure_url}`);
+        try {
+          const choicesAudioBuffer = await generateElevenLabsAudio(choicesText, apiKey);
+          console.log(`✅ Choices audio generated: ${choicesAudioBuffer.length} bytes`);
 
-    // Update database with audio URL and text hash
-    const { error: updateError } = await supabase
-      .from('story_nodes')
-      .update({
-        audio_url: uploadResult.secure_url,
-        text_hash: currentHash,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', node.id);
+          const choicesPublicId = `node_${nodeId}_choices_${choicesHash.substring(0, 8)}`;
+          const choicesUploadResult = await uploadAudioToCloudinary(choicesAudioBuffer, cloudinaryFolder, choicesPublicId);
+          console.log(`✅ Choices audio uploaded to Cloudinary: ${choicesUploadResult.secure_url}`);
 
-    if (updateError) {
-      console.error('❌ Failed to update node with audio URL:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update database' },
-        { status: 500 }
-      );
+          choicesAudioResult = {
+            url: choicesUploadResult.secure_url,
+            bytes: choicesUploadResult.bytes,
+            format: choicesUploadResult.format,
+            cached: false
+          };
+          totalCharacters += choicesText.length;
+          totalCost += choicesText.length * costPerChar;
+
+          // Update choices audio in database
+          const { error: choicesUpdateError } = await supabase
+            .from('story_nodes')
+            .update({
+              choices_audio_url: choicesUploadResult.secure_url,
+              choices_text_hash: choicesHash
+            })
+            .eq('id', node.id);
+
+          if (choicesUpdateError) {
+            console.error('❌ Failed to update node with choices audio URL:', choicesUpdateError);
+            // Don't fail the whole request, just log it
+          }
+        } catch (error) {
+          console.error('❌ Failed to generate choices audio:', error);
+          // Don't fail the whole request for choices audio failure
+        }
+      } else {
+        console.log(`✅ Choices audio already up-to-date for node ${nodeId}`);
+        choicesAudioResult = { url: node.choices_audio_url, cached: true };
+        const choicesText = formatChoicesForNarration(choicesArray);
+        totalCharacters += choicesText.length;
+        totalCost += choicesText.length * costPerChar;
+      }
+    }
+
+    // --- Update main audio in database ---
+    if (mainAudioResult && !mainAudioResult.cached) {
+      const { error: updateError } = await supabase
+        .from('story_nodes')
+        .update({
+          audio_url: mainAudioResult.url,
+          text_hash: currentHash,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', node.id);
+
+      if (updateError) {
+        console.error('❌ Failed to update node with audio URL:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update database' },
+          { status: 500 }
+        );
+      }
     }
 
     console.log(`✅ Database updated for node ${nodeId}`);
 
-    // Calculate approximate cost (ElevenLabs pricing)
-    const characterCount = text.length;
-    const costPerChar = 0.00022; // Approximate for Creator plan
-    const estimatedCost = characterCount * costPerChar;
-
     return NextResponse.json({
       audio: {
-        url: uploadResult.secure_url,
-        bytes: uploadResult.bytes,
-        format: uploadResult.format,
-        cost: estimatedCost,
-        characters: characterCount,
-        cached: false
-      }
+        url: mainAudioResult?.url,
+        bytes: mainAudioResult?.bytes,
+        format: mainAudioResult?.format,
+        cost: totalCost,
+        characters: totalCharacters,
+        cached: mainAudioResult?.cached && (choicesAudioResult?.cached ?? true)
+      },
+      choicesAudio: choicesAudioResult ? {
+        url: choicesAudioResult.url,
+        bytes: choicesAudioResult.bytes,
+        format: choicesAudioResult.format,
+        cached: choicesAudioResult.cached
+      } : null
     });
 
   } catch (error) {

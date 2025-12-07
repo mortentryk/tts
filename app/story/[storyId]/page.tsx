@@ -671,8 +671,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       const passageIdAtStart = currentId;
       const choicesAtStart = passage?.choices ? [...passage.choices] : null;
       const audioUrlAtStart = passage?.audio;
+      const choicesAudioUrlAtStart = passage?.choicesAudio;
       
       console.log('🔊 speakWithVoiceListening: calling speakViaCloud for main text, audioUrl:', audioUrlAtStart);
+      console.log('🔊 speakWithVoiceListening: choicesAudioUrl:', choicesAudioUrlAtStart);
       await speakViaCloud(text, audioRef, async () => {
         console.log('🔊 speakWithVoiceListening: main text callback fired');
         // Validate passage hasn't changed during TTS playback
@@ -688,8 +690,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         
         // After main text finishes, read buttons separately if they exist (only for manual button clicks)
         if (choicesAtStart && choicesAtStart.length > 0) {
+          // Use pre-generated choices audio if available, otherwise generate text for fallback
           const buttonsText = formatChoicesForNarration(choicesAtStart);
           console.log('🔊 speakWithVoiceListening: reading buttons:', buttonsText?.substring(0, 100));
+          console.log('🔊 speakWithVoiceListening: using pre-generated choices audio:', !!choicesAudioUrlAtStart);
           
           // Read buttons separately after main text
           try {
@@ -714,7 +718,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               // Clear abort controller when TTS completes
               abortControllerRef.current = null;
               onDone?.();
-            }, undefined, abortControllerRef, undefined, undefined, { allowGeneration: false });
+            }, choicesAudioUrlAtStart, abortControllerRef, undefined, undefined, { allowGeneration: false });
           } catch (buttonError) {
             // If button reading fails, still start voice listening and complete
             console.error('Failed to read buttons:', buttonError);
@@ -778,7 +782,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         alert(`TTS Fejl: ${e?.message || "Kunne ikke afspille stemme-fortælling. Prøv venligst igen."}`);
       }
     }
-  }, [passage?.choices, passage?.audio, startVoiceListening, speaking, currentId, storyId]);
+  }, [passage?.choices, passage?.audio, passage?.choicesAudio, startVoiceListening, speaking, currentId, storyId]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -922,7 +926,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             image: nodeData.image_url,
             video: nodeData.video_url,
             backgroundImage: undefined,
-            audio: nodeData.audio_url
+            audio: nodeData.audio_url,
+            choicesAudio: nodeData.choices_audio_url
           }
         };
         
@@ -1075,7 +1080,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         image: nodeData.image_url,
         video: nodeData.video_url,
         backgroundImage: undefined,
-        audio: nodeData.audio_url
+        audio: nodeData.audio_url,
+        choicesAudio: nodeData.choices_audio_url
       };
       
       console.log('📦 New node object:', {
