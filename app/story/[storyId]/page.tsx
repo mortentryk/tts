@@ -476,6 +476,12 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   } | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentIdRef = useRef<string>(START_ID); // Ref to track current passage ID for stale closure checks
+  
+  // Keep currentIdRef in sync with currentId state
+  useEffect(() => {
+    currentIdRef.current = currentId;
+  }, [currentId]);
   const listeningSessionRef = useRef<number>(0);
   const voiceMatchedRef = useRef<boolean>(false);
   const [showControls, setShowControls] = useState(false);
@@ -611,9 +617,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       const audioUrlAtStart = passage?.audio;
       
       await speakViaCloud(text, audioRef, () => {
-        // Validate passage hasn't changed during TTS playback
-        if (currentId !== passageIdAtStart) {
-          console.warn('⚠️ Passage changed during TTS');
+        // Validate passage hasn't changed during TTS playback - use ref for latest value
+        if (currentIdRef.current !== passageIdAtStart) {
+          console.warn('⚠️ Passage changed during TTS. Current:', currentIdRef.current, 'Started:', passageIdAtStart);
           setSpeaking(false);
           isTTSRunningRef.current = false;
           lastTTSFinishTimeRef.current = Date.now();
@@ -677,9 +683,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       console.log('🔊 speakWithVoiceListening: choicesAudioUrl:', choicesAudioUrlAtStart);
       await speakViaCloud(text, audioRef, async () => {
         console.log('🔊 speakWithVoiceListening: main text callback fired');
-        // Validate passage hasn't changed during TTS playback
-        if (currentId !== passageIdAtStart) {
-          console.warn('⚠️ Passage changed during TTS, skipping button reading');
+        // Validate passage hasn't changed during TTS playback - use ref for latest value
+        if (currentIdRef.current !== passageIdAtStart) {
+          console.warn('⚠️ Passage changed during TTS, skipping button reading. Current:', currentIdRef.current, 'Started:', passageIdAtStart);
           setSpeaking(false);
           isTTSRunningRef.current = false;
           lastTTSFinishTimeRef.current = Date.now();
@@ -698,9 +704,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           // Read buttons separately after main text
           try {
             await speakViaCloud(buttonsText, audioRef, () => {
-              // Validate passage still hasn't changed during button TTS
-              if (currentId !== passageIdAtStart) {
-                console.warn('⚠️ Passage changed during button TTS');
+              // Validate passage still hasn't changed during button TTS - use ref for latest value
+              if (currentIdRef.current !== passageIdAtStart) {
+                console.warn('⚠️ Passage changed during button TTS. Current:', currentIdRef.current, 'Started:', passageIdAtStart);
                 setSpeaking(false);
                 isTTSRunningRef.current = false;
                 lastTTSFinishTimeRef.current = Date.now();
@@ -1033,6 +1039,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const goTo = useCallback(async (id: string) => {
     console.log('🚀 goTo called with ID:', id);
     const isSameNode = id === currentId;
+    
+    // IMMEDIATELY update the ref to prevent stale closure issues in TTS callbacks
+    currentIdRef.current = id;
+    
     // Stop all audio and voice recognition immediately
     stopSpeak();
     stopVoiceListening();
