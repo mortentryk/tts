@@ -25,7 +25,8 @@ export interface StoryNode {
   image?: string; // URL to image
   video?: string; // URL to video
   backgroundImage?: string; // URL to background image
-  audio?: string; // URL to background audio
+  audio?: string; // URL to main narration audio
+  choicesAudio?: string; // URL to pre-generated choices/buttons audio
 }
 
 export interface GameState {

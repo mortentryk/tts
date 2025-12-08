@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
 import { getUserEmail } from '@/lib/purchaseVerification';
@@ -77,9 +77,28 @@ function hashText(t: string): string {
 // Cache object URLs so we don't re-fetch the same audio
 const audioCache = new Map<string, string>(); // key -> objectURL
 
+function formatChoicesForNarration(choices?: StoryNode['choices'] | null): string {
+  if (!choices || choices.length === 0) return '';
+  const choicesText = choices
+    .map((choice, index) => `Valg ${index + 1}: ${choice.label}.`)
+    .join(' ');
+  return `Valgmuligheder: ${choicesText} Hvad vælger du?`;
+}
+
+
 // Cloud TTS for web — OpenAI only
-async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTMLAudioElement | null>, onComplete?: () => void, preGeneratedAudioUrl?: string, abortControllerRef?: React.MutableRefObject<AbortController | null>, nodeKey?: string, storyId?: string): Promise<void> {
+async function speakViaCloud(
+  text: string,
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>,
+  onComplete?: () => void,
+  preGeneratedAudioUrl?: string,
+  abortControllerRef?: React.MutableRefObject<AbortController | null>,
+  nodeKey?: string,
+  storyId?: string,
+  options?: { allowGeneration?: boolean }
+): Promise<void> {
   if (!text || !text.trim()) return;
+  const allowGeneration = options?.allowGeneration ?? true;
 
   // Stop any existing audio first
   if (audioRef.current) {
@@ -232,15 +251,25 @@ async function speakViaCloud(text: string, audioRef: React.MutableRefObject<HTML
         } catch {}
         audioCache.delete(key);
         
-        // Handle autoplay policy errors
+        // Handle autoplay policy errors - don't fall through, user needs to interact
         if (playError.name === 'NotAllowedError' || playError.message.includes('autoplay')) {
           console.log('⚠️ Autoplay blocked (non-critical):', playError);
-          return; // Don't throw, just return silently
+          onComplete?.(); // Still call completion so flow continues
+          return;
         }
-        console.log('⚠️ Failed to play cached audio (non-critical):', playError);
-        return; // Don't throw, just return silently
+        // For other errors (like blob not found), fall through to regenerate TTS
+        console.log('⚠️ Failed to play cached audio, will regenerate TTS:', playError);
+        // Don't return - fall through to generate new TTS
       }
     }
+  }
+
+  // If generation is disallowed (e.g., production playback) and no cached audio is found,
+  // abort before calling ElevenLabs to avoid consuming credits.
+  if (!allowGeneration) {
+    const err: any = new Error('Lyden er ikke forberedt endnu. Generér venligst audio i admin først.');
+    err.code = 'PREGENERATED_AUDIO_REQUIRED';
+    throw err;
   }
 
   // Add timeout for mobile networks (30 seconds)
@@ -408,15 +437,20 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const [stats, setStats] = useState<GameStats>({ Evner: 10, Udholdenhed: 18, Held: 10 });
   const [speaking, setSpeaking] = useState(false);
   const [autoRead, setAutoRead] = useState<boolean>(false);
+  const [autoPlay, setAutoPlay] = useState<boolean>(false);
   const [story, setStory] = useState<Record<string, StoryNode>>({});
   const [loading, setLoading] = useState(true);
   const [storyError, setStoryError] = useState<string | null>(null);
+  const [storyMetadata, setStoryMetadata] = useState<{ title?: string; description?: string; cover_image_url?: string } | null>(null);
   
   // Audio management
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isTTSRunningRef = useRef<boolean>(false);
   const lastTTSFinishTimeRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastAutoReadSceneIdRef = useRef<string | null>(null);
+  const autoPlayActionInFlightRef = useRef<boolean>(false);
+  const skipAutoReadCooldownRef = useRef<boolean>(false);
   
   // Dice roll state
   const [pendingDiceRoll, setPendingDiceRoll] = useState<{
@@ -442,12 +476,53 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   } | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentIdRef = useRef<string>(START_ID); // Ref to track current passage ID for stale closure checks
+  
+  // Keep currentIdRef in sync with currentId state
+  useEffect(() => {
+    currentIdRef.current = currentId;
+  }, [currentId]);
   const listeningSessionRef = useRef<number>(0);
   const voiceMatchedRef = useRef<boolean>(false);
   const [showControls, setShowControls] = useState(false);
   
   const router = useRouter();
   const passage = story[currentId];
+
+  const autoReadBlockingReason = useMemo(() => {
+    if (!autoRead) return null;
+    if (pendingDiceRoll) return 'Afventer terningkast';
+    if (listening) return 'Lytter efter stemmekommandoer';
+    if (speaking) return 'Oplæsning i gang';
+    return null;
+  }, [autoRead, pendingDiceRoll, listening, speaking]);
+
+  const autoReadStatusLabel = useMemo(() => {
+    if (!autoRead) return 'Auto-læs: Fra';
+    if (autoReadBlockingReason) {
+      return `Auto-læs pauser – ${autoReadBlockingReason.toLowerCase()}`;
+    }
+    return 'Auto-læs: Aktiv';
+  }, [autoRead, autoReadBlockingReason]);
+
+  const autoPlayBlockingReason = useMemo(() => {
+    if (!autoPlay) return null;
+    if (!autoRead) return 'Auto-læs slået fra';
+    if (pendingDiceRoll) return 'Afventer terningresultat';
+    if (showDiceRollButton && passage?.check) return 'Afventer terningkast';
+    if (speaking) return 'Oplæsning i gang';
+    if (listening) return 'Stemme-lytning aktiv';
+    if (!passage?.choices?.length) return 'Ingen valg i denne scene';
+    return null;
+  }, [autoPlay, autoRead, pendingDiceRoll, showDiceRollButton, passage?.check, passage?.choices?.length, speaking, listening]);
+
+  const autoPlayStatusLabel = useMemo(() => {
+    if (!autoPlay) return 'Auto-play: Fra';
+    if (autoPlayBlockingReason) {
+      return `Auto-play pauser – ${autoPlayBlockingReason.toLowerCase()}`;
+    }
+    return 'Auto-play: Aktiv';
+  }, [autoPlay, autoPlayBlockingReason]);
 
   // Load params
   useEffect(() => {
@@ -497,6 +572,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   }, []);
 
   const startVoiceListening: (timeoutMs?: number) => void = useCallback((timeoutMs: number = 10000) => {
+    // Stop any ongoing narration so auto-read doesn't keep talking while commands are used
+    stopSpeak();
+
     // Clear any existing timeout
     if (voiceTimeoutRef.current) {
       clearTimeout(voiceTimeoutRef.current);
@@ -515,11 +593,76 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       console.log('Voice listening timeout - stopping recognition');
       // Don't automatically re-read choices - let user manually trigger TTS if needed
     }, timeoutMs);
-  }, []);
+  }, [stopSpeak]);
 
-  // Enhanced TTS with voice listening
+  // Simple TTS - just reads the text (for autoplay/audiobook mode)
+  const speakSimple: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
+    console.log('🤖 speakSimple called with text length:', text?.length, 'preview:', text?.substring(0, 100));
+    if (!text || !text.trim()) {
+      console.log('🤖 speakSimple: empty text, returning');
+      return;
+    }
+
+    // Prevent multiple simultaneous TTS calls
+    if (isTTSRunningRef.current) {
+      return;
+    }
+
+    try {
+      isTTSRunningRef.current = true;
+      setSpeaking(true);
+      
+      // Capture passage state at TTS start to prevent stale closure issues
+      const passageIdAtStart = currentId;
+      const audioUrlAtStart = passage?.audio;
+      
+      await speakViaCloud(text, audioRef, () => {
+        // Validate passage hasn't changed during TTS playback - use ref for latest value
+        if (currentIdRef.current !== passageIdAtStart) {
+          console.warn('⚠️ Passage changed during TTS. Current:', currentIdRef.current, 'Started:', passageIdAtStart);
+          setSpeaking(false);
+          isTTSRunningRef.current = false;
+          lastTTSFinishTimeRef.current = Date.now();
+          abortControllerRef.current = null;
+          onDone?.();
+          return;
+        }
+        
+        // Just complete - no button reading for simple/autoplay mode
+        setSpeaking(false);
+        isTTSRunningRef.current = false;
+        lastTTSFinishTimeRef.current = Date.now();
+        abortControllerRef.current = null;
+        onDone?.();
+      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId, { allowGeneration: false });
+    } catch (e: any) {
+      audioRef.current = null;
+      setSpeaking(false);
+      isTTSRunningRef.current = false;
+      abortControllerRef.current = null;
+      
+      // Don't show error if it was aborted or stopped by user
+      if (e?.message?.includes('aborted') || e?.message?.includes('stopped by user') || e?.name === 'AbortError') {
+        return;
+      }
+
+      if (e?.code === 'PREGENERATED_AUDIO_REQUIRED') {
+        console.warn('Audio not pre-generated; skipping playback.');
+        return;
+      }
+      
+      // Log error but don't show alert for autoplay failures
+      console.error('TTS Error (autoplay):', e?.message);
+    }
+  }, [passage?.audio, currentId, storyId]);
+
+  // Enhanced TTS with voice listening and button reading (for manual button clicks)
   const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
-    if (!text || !text.trim()) return;
+    console.log('🔊 speakWithVoiceListening called with text length:', text?.length, 'text preview:', text?.substring(0, 100));
+    if (!text || !text.trim()) {
+      console.log('🔊 speakWithVoiceListening: empty text, returning early');
+      return;
+    }
 
     // Prevent multiple simultaneous TTS calls
     if (isTTSRunningRef.current) {
@@ -534,11 +677,15 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       const passageIdAtStart = currentId;
       const choicesAtStart = passage?.choices ? [...passage.choices] : null;
       const audioUrlAtStart = passage?.audio;
+      const choicesAudioUrlAtStart = passage?.choicesAudio;
       
+      console.log('🔊 speakWithVoiceListening: calling speakViaCloud for main text, audioUrl:', audioUrlAtStart);
+      console.log('🔊 speakWithVoiceListening: choicesAudioUrl:', choicesAudioUrlAtStart);
       await speakViaCloud(text, audioRef, async () => {
-        // Validate passage hasn't changed during TTS playback
-        if (currentId !== passageIdAtStart) {
-          console.warn('⚠️ Passage changed during TTS, skipping button reading');
+        console.log('🔊 speakWithVoiceListening: main text callback fired');
+        // Validate passage hasn't changed during TTS playback - use ref for latest value
+        if (currentIdRef.current !== passageIdAtStart) {
+          console.warn('⚠️ Passage changed during TTS, skipping button reading. Current:', currentIdRef.current, 'Started:', passageIdAtStart);
           setSpeaking(false);
           isTTSRunningRef.current = false;
           lastTTSFinishTimeRef.current = Date.now();
@@ -547,19 +694,19 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           return;
         }
         
-        // After main text finishes, read buttons separately if they exist
+        // After main text finishes, read buttons separately if they exist (only for manual button clicks)
         if (choicesAtStart && choicesAtStart.length > 0) {
-          const choicesText = choicesAtStart
-            .map((c, i) => `Valg ${i + 1}: ${c.label}.`)
-            .join(' ');
-          const buttonsText = `Valgmuligheder: ${choicesText} Hvad vælger du?`;
+          // Use pre-generated choices audio if available, otherwise generate text for fallback
+          const buttonsText = formatChoicesForNarration(choicesAtStart);
+          console.log('🔊 speakWithVoiceListening: reading buttons:', buttonsText?.substring(0, 100));
+          console.log('🔊 speakWithVoiceListening: using pre-generated choices audio:', !!choicesAudioUrlAtStart);
           
           // Read buttons separately after main text
           try {
             await speakViaCloud(buttonsText, audioRef, () => {
-              // Validate passage still hasn't changed during button TTS
-              if (currentId !== passageIdAtStart) {
-                console.warn('⚠️ Passage changed during button TTS');
+              // Validate passage still hasn't changed during button TTS - use ref for latest value
+              if (currentIdRef.current !== passageIdAtStart) {
+                console.warn('⚠️ Passage changed during button TTS. Current:', currentIdRef.current, 'Started:', passageIdAtStart);
                 setSpeaking(false);
                 isTTSRunningRef.current = false;
                 lastTTSFinishTimeRef.current = Date.now();
@@ -577,7 +724,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               // Clear abort controller when TTS completes
               abortControllerRef.current = null;
               onDone?.();
-            }, undefined, abortControllerRef, passageIdAtStart, storyId);
+            }, choicesAudioUrlAtStart, abortControllerRef, undefined, undefined, { allowGeneration: false });
           } catch (buttonError) {
             // If button reading fails, still start voice listening and complete
             console.error('Failed to read buttons:', buttonError);
@@ -596,7 +743,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           abortControllerRef.current = null;
           onDone?.();
         }
-      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId); // Pass pre-generated audio URL, abort controller ref, nodeKey, and storyId
+      }, audioUrlAtStart, abortControllerRef, passageIdAtStart, storyId, { allowGeneration: false }); // Only play pre-generated audio
       // Don't set speaking to false here - let the callback handle it
     } catch (e: any) {
       audioRef.current = null; // Clear ref on error
@@ -606,6 +753,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       
       // Don't show error if it was aborted or stopped by user
       if (e?.message?.includes('aborted') || e?.message?.includes('stopped by user') || e?.name === 'AbortError') {
+        return;
+      }
+
+      if (e?.code === 'PREGENERATED_AUDIO_REQUIRED') {
+        alert("Denne scene har ikke forudindspillet lyd endnu. Gå til admin og generér audio, før du afspiller historien.");
         return;
       }
       
@@ -636,7 +788,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         alert(`TTS Fejl: ${e?.message || "Kunne ikke afspille stemme-fortælling. Prøv venligst igen."}`);
       }
     }
-  }, [passage?.choices, passage?.audio, startVoiceListening, speaking, currentId, storyId]);
+  }, [passage?.choices, passage?.audio, passage?.choicesAudio, startVoiceListening, speaking, currentId, storyId]);
 
   const stopVoiceListening = useCallback(() => {
     setListening(false);
@@ -721,6 +873,18 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         const storyData = await storyResponse.json();
         console.log('✅ Story metadata loaded:', storyData);
         
+        // Store story metadata for SEO and display
+        setStoryMetadata({
+          title: storyData.title,
+          description: storyData.description,
+          cover_image_url: storyData.cover_image_url
+        });
+        
+        // Update document title for SEO
+        if (storyData.title) {
+          document.title = `${storyData.title} - Storific Stories`;
+        }
+        
         // Load first node
         console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
         const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`, {
@@ -768,7 +932,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             image: nodeData.image_url,
             video: nodeData.video_url,
             backgroundImage: undefined,
-            audio: nodeData.audio_url
+            audio: nodeData.audio_url,
+            choicesAudio: nodeData.choices_audio_url
           }
         };
         
@@ -803,11 +968,17 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       const auto = localStorage.getItem("svt_autoread_v1");
+      const autoPlayStored = localStorage.getItem("svt_autoplay_v1");
       // Default to false - TTS should only play when user clicks button
       if (auto !== null) {
         setAutoRead(auto === "1");
       } else {
         setAutoRead(false); // Explicitly set to false if not in localStorage
+      }
+      if (autoPlayStored !== null) {
+        setAutoPlay(autoPlayStored === "1");
+      } else {
+        setAutoPlay(false);
       }
       if (raw) {
         const { storyId: loadedStoryId, id, s }: SaveData = JSON.parse(raw);
@@ -833,6 +1004,12 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       localStorage.setItem("svt_autoread_v1", autoRead ? "1" : "0");
     } catch {}
   }, [autoRead]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("svt_autoplay_v1", autoPlay ? "1" : "0");
+    } catch {}
+  }, [autoPlay]);
 
   // Auto-open controls when speaking starts
   useEffect(() => {
@@ -861,6 +1038,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   const goTo = useCallback(async (id: string) => {
     console.log('🚀 goTo called with ID:', id);
+    const isSameNode = id === currentId;
+    
+    // IMMEDIATELY update the ref to prevent stale closure issues in TTS callbacks
+    currentIdRef.current = id;
+    
     // Stop all audio and voice recognition immediately
     stopSpeak();
     stopVoiceListening();
@@ -908,7 +1090,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         image: nodeData.image_url,
         video: nodeData.video_url,
         backgroundImage: undefined,
-        audio: nodeData.audio_url
+        audio: nodeData.audio_url,
+        choicesAudio: nodeData.choices_audio_url
       };
       
       console.log('📦 New node object:', {
@@ -924,12 +1107,17 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         [nodeData.node_key]: newNode
       }));
       
+      // Always clear lastAutoReadSceneIdRef when navigating to allow auto-read to trigger for new node
+      console.log('🚀 Clearing lastAutoReadSceneIdRef before navigation, was:', lastAutoReadSceneIdRef.current, '-> null');
+      lastAutoReadSceneIdRef.current = null;
       setCurrentId(id);
       console.log('✅ Navigation completed to:', id);
     } catch (error) {
       console.error('Failed to load node:', error);
+    } finally {
+      autoPlayActionInFlightRef.current = false;
     }
-  }, [stopSpeak, stopVoiceListening, storyId]);
+  }, [stopSpeak, stopVoiceListening, storyId, currentId]);
 
   // Handle choice selection
   const handleChoice = useCallback((choice: any) => {
@@ -951,6 +1139,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     setShowDiceRollButton(false);
     
     const { stat, dc, success, fail } = passage.check;
+    const shouldPromptVoiceAfterDice = !passage?.choices?.length;
     const roll = roll2d6();
     const total = roll + (stats[stat] || 0);
     const ok = total >= dc;
@@ -978,13 +1167,21 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     // Create TTS narration for dice roll result
     const diceResultText = `Du kaster terningerne og får ${roll}. Med din ${stat} på ${stats[stat]} bliver det i alt ${total}. ${ok ? 'Det lykkes!' : 'Det mislykkes!'} ${ok ? 'Du kan fortsætte.' : 'Du mister 2 point i ' + stat + '.'}`;
     
+    // Allow the next auto-read to trigger immediately after dice narration
+    skipAutoReadCooldownRef.current = true;
+    
     // Speak the dice result
+    const narrationFn = autoPlay ? speakSimple : speakWithVoiceListening;
     try {
-      await speakWithVoiceListening(diceResultText);
+      await narrationFn(diceResultText, () => {
+        if (!autoPlay && shouldPromptVoiceAfterDice) {
+          startVoiceListening(10000);
+        }
+      });
     } catch (error) {
       console.error('Failed to speak dice result:', error);
     }
-  }, [passage, diceRolling, stats, speakWithVoiceListening]);
+  }, [autoPlay, passage, diceRolling, stats, speakSimple, speakWithVoiceListening, startVoiceListening]);
 
   const handleDiceRollContinue = useCallback(() => {
     if (!pendingDiceRoll) return;
@@ -1000,13 +1197,22 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
 
   // Build narration string - main text only (buttons will be read separately)
   const getNarrationText = useCallback(() => {
-    if (!passage?.text) return '';
+    if (!passage?.text) {
+      console.log('🔊 getNarrationText: passage.text is empty or undefined, passage:', passage);
+      return '';
+    }
+    console.log('🔊 getNarrationText: returning text length:', passage.text.length);
     return passage.text;
   }, [passage]);
 
+
   const speakCloudThrottled = useCallback(async () => {
     const narration = getNarrationText();
-    if (!narration) return;
+    console.log('🔊 speakCloudThrottled: narration length:', narration?.length, 'preview:', narration?.substring(0, 100));
+    if (!narration) {
+      console.log('🔊 speakCloudThrottled: no narration, returning');
+      return;
+    }
     
     // Prevent multiple simultaneous calls
     if (isTTSRunningRef.current) {
@@ -1029,6 +1235,47 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     await speakWithVoiceListening(narration);
   }, [getNarrationText, speakWithVoiceListening, stopVoiceListening, passage?.audio]);
 
+  const runAutoPlayNarration = useCallback(async () => {
+    const narration = getNarrationText();
+    console.log('🤖 runAutoPlayNarration: narration length:', narration?.length, 'preview:', narration?.substring(0, 100));
+    if (!narration) {
+      console.log('🤖 runAutoPlayNarration: no narration, returning false');
+      return false;
+    }
+    try {
+      stopVoiceListening();
+      console.log('🤖 runAutoPlayNarration: calling speakSimple with narration');
+      await speakSimple(narration);
+      console.log('🤖 runAutoPlayNarration: speakSimple completed');
+      return true;
+    } catch (error) {
+      console.error('Auto-play narration failed:', error);
+      return false;
+    }
+  }, [getNarrationText, speakSimple, stopVoiceListening]);
+
+  const activateAutoReadIfPossible = useCallback(() => {
+    lastAutoReadSceneIdRef.current = null;
+    const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
+    if (timeSinceLastTTS < 3000) {
+      return;
+    }
+    if (passage?.text && !pendingDiceRoll && !speaking && !isTTSRunningRef.current && !listening) {
+      if (autoPlay) {
+        runAutoPlayNarration();
+      } else {
+        speakCloudThrottled();
+      }
+    }
+  }, [autoPlay, passage?.text, pendingDiceRoll, speaking, listening, speakCloudThrottled, runAutoPlayNarration]);
+
+  const handleManualSpeak = useCallback(() => {
+    if (autoRead) {
+      lastAutoReadSceneIdRef.current = currentId;
+    }
+    speakCloudThrottled();
+  }, [autoRead, currentId, speakCloudThrottled]);
+
   // Auto-read new scenes when enabled
   useEffect(() => {
     if (!autoRead) return;
@@ -1036,16 +1283,170 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     if (pendingDiceRoll) return; // hold during dice overlays
     if (speaking) return; // don't start TTS if already speaking
     if (isTTSRunningRef.current) return; // don't start if TTS is already running
-    if (listening) return; // don't start TTS if voice listening is active
+    // Don't wait for voice listening to stop if AutoPlay is on - AutoPlay ignores voice commands
+    if (!autoPlay && listening) return; // don't start TTS if voice listening is active (unless AutoPlay)
     
-    // Add a delay after TTS finishes to allow voice commands to work
-    const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
-    if (timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
+    // Prevent duplicate triggers - only read each scene once
+    if (lastAutoReadSceneIdRef.current === currentId) {
       return;
     }
     
-    speakCloudThrottled();
-  }, [autoRead, currentId, passage, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
+    // Add a delay after TTS finishes to allow voice commands to work (skip for AutoPlay)
+    const shouldSkipCooldown = skipAutoReadCooldownRef.current || autoPlay;
+    const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
+    if (!shouldSkipCooldown && timeSinceLastTTS < 3000) { // 3 second delay after TTS finishes
+      return;
+    }
+    
+    if (shouldSkipCooldown) {
+      skipAutoReadCooldownRef.current = false;
+    }
+    
+    const passageIdAtReadStart = currentId;
+    // Mark as "in progress" to prevent duplicate triggers, but don't set lastAutoReadSceneIdRef yet
+    // That will be set AFTER narration completes successfully
+    const shouldAutoRollAfterNarration = !!(passage?.check && showDiceRollButton);
+    let cancelled = false;
+    
+    const runAutoRead = async () => {
+      try {
+        let completed = false;
+        if (autoPlay) {
+          console.log('🤖 AutoPlay: starting narration for scene:', passageIdAtReadStart);
+          completed = await runAutoPlayNarration();
+        } else {
+          await speakCloudThrottled();
+          completed = true;
+        }
+        if (!completed) {
+          return;
+        }
+        
+        // Only mark scene as read AFTER narration completes successfully
+        if (!cancelled && passageIdAtReadStart === currentId) {
+          lastAutoReadSceneIdRef.current = passageIdAtReadStart;
+          console.log('🤖 AutoPlay: narration completed, scene marked as read:', passageIdAtReadStart);
+        }
+      } catch (error) {
+        console.error('Auto-read TTS failed:', error);
+        return;
+      }
+      
+      if (cancelled) {
+        return;
+      }
+      if (!autoRead) return;
+      if (!shouldAutoRollAfterNarration) return;
+      if (passageIdAtReadStart !== currentId) {
+        return; // user navigated away
+      }
+      
+      await handleDiceRoll();
+    };
+    
+    // Set a temporary marker to prevent duplicate effect runs
+    lastAutoReadSceneIdRef.current = passageIdAtReadStart;
+    runAutoRead();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [autoRead, autoPlay, currentId, passage, pendingDiceRoll, speaking, listening, runAutoPlayNarration, speakCloudThrottled, handleDiceRoll, showDiceRollButton]);
+
+  // AutoPlay: Stop voice listening when AutoPlay is enabled
+  useEffect(() => {
+    if (autoPlay && listening) {
+      console.log('🤖 AutoPlay: stopping voice listening (AutoPlay is on)');
+      stopVoiceListening();
+    }
+  }, [autoPlay, listening, stopVoiceListening]);
+
+  // AutoPlay: Auto-select a random choice after narration completes
+  useEffect(() => {
+    // Debug: log all conditions
+    console.log('🤖 AutoPlay effect check:', {
+      autoPlay,
+      autoRead,
+      autoPlayActionInFlight: autoPlayActionInFlightRef.current,
+      speaking,
+      isTTSRunning: isTTSRunningRef.current,
+      pendingDiceRoll: !!pendingDiceRoll,
+      showDiceRollButton,
+      hasCheck: !!passage?.check,
+      choicesCount: passage?.choices?.length || 0,
+      lastAutoReadSceneId: lastAutoReadSceneIdRef.current,
+      currentId
+    });
+    
+    if (!autoPlay) { console.log('🤖 AutoPlay: skipping - autoPlay is false'); return; }
+    if (!autoRead) { console.log('🤖 AutoPlay: skipping - autoRead is false'); return; }
+    if (autoPlayActionInFlightRef.current) { console.log('🤖 AutoPlay: skipping - action in flight'); return; }
+    if (speaking) { console.log('🤖 AutoPlay: skipping - speaking'); return; }
+    if (isTTSRunningRef.current) { console.log('🤖 AutoPlay: skipping - TTS running'); return; }
+    if (pendingDiceRoll) { console.log('🤖 AutoPlay: skipping - pending dice roll'); return; }
+    if (showDiceRollButton && passage?.check) { console.log('🤖 AutoPlay: skipping - dice roll button showing'); return; }
+    const choices = passage?.choices;
+    if (!choices || choices.length === 0) { console.log('🤖 AutoPlay: skipping - no choices'); return; }
+    if (lastAutoReadSceneIdRef.current !== currentId) { 
+      console.log('🤖 AutoPlay: skipping - scene not marked as read yet', { lastAutoReadSceneId: lastAutoReadSceneIdRef.current, currentId }); 
+      return; 
+    }
+
+    console.log('🤖 AutoPlay: ALL CONDITIONS MET - scheduling choice selection');
+    let actionTriggered = false;
+    autoPlayActionInFlightRef.current = true;
+    // Use 1000ms delay to ensure TTS has truly finished and give a natural pause
+    const timeout = setTimeout(() => {
+      // Double-check conditions before triggering
+      if (speaking || isTTSRunningRef.current) {
+        console.log('🤖 AutoPlay: timeout fired but TTS still running, aborting');
+        autoPlayActionInFlightRef.current = false;
+        return;
+      }
+      actionTriggered = true;
+      const randomChoice = choices[Math.floor(Math.random() * choices.length)];
+      console.log('🤖 AutoPlay: CHOOSING:', randomChoice.label, '-> goto:', randomChoice.goto);
+      handleChoice(randomChoice);
+    }, 1000);
+
+    return () => {
+      clearTimeout(timeout);
+      if (!actionTriggered) {
+        autoPlayActionInFlightRef.current = false;
+      }
+    };
+  }, [
+    autoPlay,
+    autoRead,
+    speaking,
+    pendingDiceRoll,
+    showDiceRollButton,
+    passage?.check,
+    passage?.choices,
+    currentId,
+    handleChoice
+  ]);
+
+  useEffect(() => {
+    if (!autoPlay) return;
+    if (!pendingDiceRoll) return;
+    if (speaking || diceRolling || listening) return;
+    if (autoPlayActionInFlightRef.current) return;
+
+    let actionTriggered = false;
+    autoPlayActionInFlightRef.current = true;
+    const timeout = setTimeout(() => {
+      actionTriggered = true;
+      handleDiceRollContinue();
+    }, 900);
+
+    return () => {
+      clearTimeout(timeout);
+      if (!actionTriggered) {
+        autoPlayActionInFlightRef.current = false;
+      }
+    };
+  }, [autoPlay, pendingDiceRoll, speaking, diceRolling, listening, handleDiceRollContinue]);
 
   // --- Speech Recognition ---
   useEffect(() => {
@@ -1088,6 +1489,32 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       // Only process final results for navigation
       if (!isFinal) {
         return; // Wait for final result
+      }
+
+      if (pendingDiceRoll) {
+        const continueKeywords = [
+          'fortsæt',
+          'fortsaet',
+          'fortsætter',
+          'continue',
+          'videre',
+          'næste',
+          'naeste',
+          'next',
+          'go on',
+          'gå videre',
+          'ga videre'
+        ];
+        const buttonMatch = transcript.match(/(knap|button)\s*(1|en|et)/);
+        const wantsContinue =
+          continueKeywords.some(keyword => transcript.includes(keyword)) || !!buttonMatch || transcript.includes('forts');
+
+        if (wantsContinue) {
+          showVoiceNotification(`🎤 "${transcript}" → Fortsæt`, 'success');
+          stopVoiceListening();
+          handleDiceRollContinue();
+          return;
+        }
       }
 
       // Parse voice commands
@@ -1268,12 +1695,24 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         speechRecognitionRef.current = null;
       }
     };
-  }, [listening, passage?.choices, goTo]);
+  }, [
+    listening,
+    passage?.choices,
+    goTo,
+    showVoiceNotification,
+    stopVoiceListening,
+    handleDiceRoll,
+    handleDiceRollContinue,
+    pendingDiceRoll,
+    showDiceRollButton
+  ]);
 
   const resetGame = useCallback(() => {
     localStorage.removeItem(SAVE_KEY);
     setCurrentId(START_ID);
     setStats({ Evner: 10, Udholdenhed: 18, Held: 10 });
+    // Clear the last auto-read scene ID so autoplay can read from the start
+    lastAutoReadSceneIdRef.current = null;
   }, []);
 
   // Handle auto-read toggle with timing check
@@ -1281,21 +1720,31 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
     const newAutoRead = !autoRead;
     setAutoRead(newAutoRead);
     
-    // If turning on auto-read, check if we should start immediately
     if (newAutoRead) {
-      const timeSinceLastTTS = Date.now() - lastTTSFinishTimeRef.current;
-      if (timeSinceLastTTS < 3000) {
-        console.log('🎯 Auto-read enabled but delayed, TTS finished recently:', timeSinceLastTTS + 'ms ago');
-        return;
-      }
-      
-      // Start reading immediately if conditions are met
-      if (passage?.text && !pendingDiceRoll && !speaking && !isTTSRunningRef.current && !listening) {
-        console.log('🎯 Auto-read enabled, starting TTS immediately');
-        speakCloudThrottled();
-      }
+      activateAutoReadIfPossible();
+    } else if (autoPlay) {
+      setAutoPlay(false);
     }
-  }, [autoRead, passage?.text, pendingDiceRoll, speaking, listening, speakCloudThrottled]);
+  }, [activateAutoReadIfPossible, autoPlay, autoRead]);
+
+  const handleAutoPlayToggle = useCallback(() => {
+    const newAutoPlay = !autoPlay;
+    setAutoPlay(newAutoPlay);
+    autoPlayActionInFlightRef.current = false;
+    
+    if (newAutoPlay) {
+      // Stop any existing TTS (might be auto-read style with button reading)
+      // so we can restart with AutoPlay style (no buttons)
+      stopSpeak();
+      stopVoiceListening();
+      if (!autoRead) {
+        setAutoRead(true);
+      }
+      // Clear the marker to allow the useEffect to trigger narration with correct state
+      // The useEffect will run with the NEW autoPlay=true state and call runAutoPlayNarration()
+      lastAutoReadSceneIdRef.current = null;
+    }
+  }, [autoPlay, autoRead, stopSpeak, stopVoiceListening]);
 
   const goBackToStories = useCallback(() => {
     // Stop all audio and voice recognition when leaving story
@@ -1405,7 +1854,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="border-b border-dungeon-border p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex-1">
-            <h1 className="text-lg sm:text-xl font-bold text-white">Sword & Sorcery (MVP)</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-white">
+              {storyMetadata?.title || 'Interactive Story'}
+            </h1>
             <p className="text-dungeon-text mt-1.5 text-sm sm:text-base">
               Evner {stats.Evner}  •  HP {stats.Udholdenhed}  •  Held {stats.Held}
             </p>
@@ -1445,6 +1896,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             
             // Check for video - prioritize video over image
             if (passage?.video && typeof passage.video === 'string' && passage.video.trim() !== '') {
+              // Create descriptive alt text for video
+              const videoAlt = passage.text 
+                ? `${storyMetadata?.title || 'Story'} - ${passage.text.substring(0, 100).replace(/\n/g, ' ')}`
+                : `${storyMetadata?.title || 'Story'} scene video`;
+              
               return (
                 <div className="mb-4 sm:mb-6 flex justify-center">
                   <video 
@@ -1454,6 +1910,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                     playsInline
                     loop
                     controls
+                    aria-label={videoAlt}
                     className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
                     onError={(e) => {
                       console.error('❌ Failed to load video:', passage.video);
@@ -1471,11 +1928,16 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
             
             // Fallback to image if no video
             if (passage?.image && typeof passage.image === 'string' && passage.image.trim() !== '') {
+              // Create descriptive alt text for SEO
+              const imageAlt = passage.text 
+                ? `${storyMetadata?.title || 'Story'} - ${passage.text.substring(0, 100).replace(/\n/g, ' ')}`
+                : `${storyMetadata?.title || 'Story'} scene image`;
+              
               return (
                 <div className="mb-4 sm:mb-6 flex justify-center">
                   <img 
                     src={passage.image} 
-                    alt="Scenebillede"
+                    alt={imageAlt}
                     className="max-w-full h-auto max-h-64 sm:max-h-96 rounded-lg shadow-lg border-2 border-dungeon-accent"
                     onError={(e) => {
                       console.error('Failed to load image:', passage.image);
@@ -1584,15 +2046,23 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       <div className="border-t border-dungeon-border p-3">
         {/* Collapsible Controls Dropdown */}
         <div className="space-y-3">
-          {/* Toggle Button */}
-          <button
-            onClick={() => setShowControls(!showControls)}
-            className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-center font-semibold text-white transition-colors flex items-center justify-center gap-2"
-            aria-expanded={showControls}
-          >
-            <span className="text-lg">{showControls ? '▼' : '▲'}</span>
-            <span>Kontroller</span>
-          </button>
+          {/* Toggle Button + Auto-read status */}
+          <div className="space-y-2">
+            <button
+              onClick={() => setShowControls(!showControls)}
+              className="w-full bg-gray-700 hover:bg-gray-600 p-3 rounded-lg text-center font-semibold text-white transition-colors flex items-center justify-center gap-2"
+              aria-expanded={showControls}
+            >
+              <span className="text-lg">{showControls ? '▼' : '▲'}</span>
+              <span>Kontroller</span>
+            </button>
+            <div 
+              className={`text-xs text-center ${autoRead ? 'text-purple-200' : 'text-gray-400'}`}
+              aria-live="polite"
+            >
+              {autoReadStatusLabel}
+            </div>
+          </div>
 
           {/* Controls Panel - Always visible when speaking, otherwise toggleable */}
           {(showControls || speaking) && (
@@ -1603,7 +2073,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
                   className={`flex-1 bg-green-600 p-3 rounded-lg text-center font-semibold text-white hover:bg-green-700 transition-colors text-sm sm:text-base ${
                     speaking ? 'bg-green-700' : ''
                   }`}
-                  onClick={speakCloudThrottled}
+                  onClick={handleManualSpeak}
                   disabled={speaking}
                 >
                   {speaking ? "🎙️ Afspiller..." : "🎙️ Læs Historie"}
@@ -1619,18 +2089,60 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
               </div>
 
               {/* Auto Read Toggle */}
-              <div className="flex gap-2 sm:gap-2.5">
+              <div className="flex flex-col gap-1 sm:gap-1.5">
                 <button
-                  className={`flex-1 p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
+                  className={`p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
                     autoRead ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'
-                  }`}
+                  } ${autoRead && autoReadBlockingReason ? 'border border-yellow-400/60' : ''}`}
                   onClick={handleAutoReadToggle}
                   aria-pressed={autoRead}
                   aria-label={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
-                  title={autoRead ? 'Deaktiver auto-læs' : 'Aktiver auto-læs'}
+                  title={
+                    autoRead && autoReadBlockingReason
+                      ? `Auto-læs pauser: ${autoReadBlockingReason}`
+                      : autoRead
+                        ? 'Deaktiver auto-læs'
+                        : 'Aktiver auto-læs'
+                  }
                 >
                   {autoRead ? '🔁 Auto-læs: Til' : '🔁 Auto-læs: Fra'}
                 </button>
+                {autoRead && autoReadBlockingReason && (
+                  <span className="text-xs text-yellow-200 text-center" aria-live="polite">
+                    Auto-læs venter: {autoReadBlockingReason.toLowerCase()}
+                  </span>
+                )}
+              </div>
+
+              {/* Auto Play Toggle */}
+              <div className="flex flex-col gap-1 sm:gap-1.5">
+                <button
+                  className={`p-3 rounded-lg text-center font-semibold text-white transition-colors text-sm sm:text-base ${
+                    autoPlay ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-600 hover:bg-gray-700'
+                  } ${autoPlay && autoPlayBlockingReason ? 'border border-yellow-400/60' : ''}`}
+                  onClick={handleAutoPlayToggle}
+                  aria-pressed={autoPlay}
+                  aria-label={autoPlay ? 'Deaktiver auto-play' : 'Aktiver auto-play'}
+                  title={
+                    autoPlay && autoPlayBlockingReason
+                      ? `Auto-play pauser: ${autoPlayBlockingReason}`
+                      : autoPlay
+                        ? 'Deaktiver auto-play'
+                        : 'Aktiver auto-play'
+                  }
+                >
+                  {autoPlay ? '🤖 Auto-play: Til' : '🤖 Auto-play: Fra'}
+                </button>
+                <span
+                  className={`text-xs text-center ${
+                    autoPlay
+                      ? (autoPlayBlockingReason ? 'text-yellow-200' : 'text-indigo-100')
+                      : 'text-gray-400'
+                  }`}
+                  aria-live="polite"
+                >
+                  {autoPlayStatusLabel}
+                </span>
               </div>
 
               {/* Voice Commands */}

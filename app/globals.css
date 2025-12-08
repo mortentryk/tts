@@ -76,6 +76,11 @@
   75% { transform: translateY(-15px) translateX(3px); }
 }
 
+@keyframes progressFill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.8s ease-out;
 }

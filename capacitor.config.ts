@@ -1,20 +1,25 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
+const serverUrl = process.env.CAPACITOR_SERVER_URL;
+
 const config: CapacitorConfig = {
   appId: 'com.yourcompany.tts',
   appName: 'Storific Stories',
-  // For Next.js static export, use 'out' directory
-  // For production builds, this will be populated after 'npm run build:android'
+  // By default we expect a static export in 'out'. When providing a remote URL
+  // (CAPACITOR_SERVER_URL), Capacitor will load from that instead.
   webDir: process.env.CAPACITOR_WEB_DIR || 'out',
-  server: {
-    androidScheme: 'https',
-    iosScheme: 'https',
-    // For development, uncomment to use local dev server
-    // url: 'http://localhost:3000',
-    // cleartext: true
-    // For production, uncomment to use deployed URL
-    // url: 'https://your-vercel-deployment.vercel.app',
-  },
+  server: serverUrl
+    ? {
+        url: serverUrl,
+        cleartext: serverUrl.startsWith('http://'),
+      }
+    : {
+        androidScheme: 'https',
+        iosScheme: 'https',
+        // For development, uncomment to use local dev server
+        // url: 'http://localhost:3000',
+        // cleartext: true
+      },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,

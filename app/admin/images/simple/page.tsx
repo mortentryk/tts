@@ -10,6 +10,7 @@ interface Story {
   description?: string;
   is_published: boolean;
   node_count: number;
+  cover_image_url?: string | null;
 }
 
 interface StoryNode {
@@ -72,13 +73,21 @@ export default function SimpleImageManager() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [generatingVideo, setGeneratingVideo] = useState<string | null>(null);
   const [generatingAudio, setGeneratingAudio] = useState<string | null>(null);
+  const [clearingAudio, setClearingAudio] = useState<string | null>(null);
   const [expandedText, setExpandedText] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [characterAssignments, setCharacterAssignments] = useState<CharacterAssignment[]>([]);
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [assignForm, setAssignForm] = useState({ characterId: '', emotion: '', action: '' });
+  const [tempAssignments, setTempAssignments] = useState<Array<{
+    characterId: string;
+    emotion: string;
+    action: string;
+  }>>([]);
   const [customPromptNode, setCustomPromptNode] = useState<string | null>(null);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [coverSavingNode, setCoverSavingNode] = useState<string | null>(null);
+  const [clearingCover, setClearingCover] = useState(false);
 
   // Check if user is logged in via server session
   useEffect(() => {
@@ -117,6 +126,23 @@ export default function SimpleImageManager() {
       setCharacterAssignments([]);
     }
   }, [selectedStory]);
+
+  // Initialize tempAssignments when editing a node
+  useEffect(() => {
+    if (editingNode) {
+      const nodeChars = characterAssignments.filter(a => a.node_key === editingNode);
+      const currentAssignments = nodeChars.length > 0
+        ? nodeChars.map(a => ({
+            characterId: a.character_id,
+            emotion: a.emotion || '',
+            action: a.action || '',
+          }))
+        : [{ characterId: '', emotion: '', action: '' }];
+      setTempAssignments(currentAssignments);
+    } else {
+      setTempAssignments([]);
+    }
+  }, [editingNode, characterAssignments]);
 
   const loadStories = async () => {
     try {
@@ -436,6 +462,44 @@ export default function SimpleImageManager() {
     }
   };
 
+  const clearAudio = async (nodeKey: string) => {
+    if (!selectedStory) return;
+    const confirmed = confirm('Delete the generated audio for this node? This cannot be undone.');
+    if (!confirmed) return;
+
+    setClearingAudio(nodeKey);
+    try {
+      const response = await fetch(`/api/stories/${selectedStory}/nodes/${nodeKey}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          audio_url: null,
+          text_hash: null,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to delete audio');
+      }
+
+      setImageRows(prev => prev.map(row =>
+        row.node_key === nodeKey
+          ? { ...row, audio_url: '' }
+          : row
+      ));
+      alert('✅ Audio deleted. Generate a new clip when ready.');
+    } catch (error) {
+      console.error('Clear audio error:', error);
+      alert(`❌ Failed to delete audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setClearingAudio(null);
+    }
+  };
+
   const deleteImage = async (nodeKey: string) => {
     if (!confirm('Are you sure you want to delete this image?')) return;
     
@@ -500,6 +564,88 @@ export default function SimpleImageManager() {
     }
   };
 
+  const setCoverImageFromNode = async (nodeKey: string, imageUrl: string) => {
+    if (!selectedStory) {
+      alert('Please select a story first');
+      return;
+    }
+
+    if (!imageUrl) {
+      alert('Generate an image before setting it as the cover');
+      return;
+    }
+
+    setCoverSavingNode(nodeKey);
+
+    try {
+      const response = await fetch(`/api/admin/stories/${selectedStory}/cover`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          nodeKey,
+          coverImageUrl: imageUrl,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update cover image');
+      }
+
+      setStories(prev =>
+        prev.map(story =>
+          story.slug === selectedStory ? { ...story, cover_image_url: data.cover_image_url } : story
+        )
+      );
+
+      alert('✅ Cover image updated');
+    } catch (error) {
+      console.error('Set cover image error:', error);
+      alert(error instanceof Error ? `❌ ${error.message}` : '❌ Failed to set cover image');
+    } finally {
+      setCoverSavingNode(null);
+    }
+  };
+
+  const clearCoverImage = async () => {
+    if (!selectedStory) return;
+    if (!confirm('Remove the custom cover image and fall back to the first scene image?')) return;
+
+    setClearingCover(true);
+
+    try {
+      const response = await fetch(`/api/admin/stories/${selectedStory}/cover`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'clear',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to clear cover image');
+      }
+
+      setStories(prev =>
+        prev.map(story =>
+          story.slug === selectedStory ? { ...story, cover_image_url: data.cover_image_url } : story
+        )
+      );
+
+      alert('✅ Cover image cleared. The first story image will be used.');
+    } catch (error) {
+      console.error('Clear cover image error:', error);
+      alert(error instanceof Error ? `❌ ${error.message}` : '❌ Failed to clear cover image');
+    } finally {
+      setClearingCover(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await fetch('/api/admin/logout', {
@@ -516,8 +662,15 @@ export default function SimpleImageManager() {
   };
 
   const assignCharacterToNode = async (nodeKey: string) => {
-    if (!selectedStory || !assignForm.characterId) {
-      alert('Please select a character');
+    if (!selectedStory) {
+      alert('Please select a story');
+      return;
+    }
+
+    // Filter out empty assignments
+    const validAssignments = tempAssignments.filter(a => a.characterId);
+    if (validAssignments.length === 0) {
+      alert('Please add at least one character');
       return;
     }
 
@@ -529,12 +682,12 @@ export default function SimpleImageManager() {
         body: JSON.stringify({
           storySlug: selectedStory,
           nodeKey: nodeKey,
-          assignments: [{
-            characterId: assignForm.characterId,
-            emotion: assignForm.emotion || null,
-            action: assignForm.action || null,
+          assignments: validAssignments.map(a => ({
+            characterId: a.characterId,
+            emotion: a.emotion || null,
+            action: a.action || null,
             role: 'main',
-          }],
+          })),
         }),
       });
 
@@ -542,13 +695,14 @@ export default function SimpleImageManager() {
         // Reload assignments
         await loadCharacterAssignments();
         setEditingNode(null);
+        setTempAssignments([]);
         setAssignForm({ characterId: '', emotion: '', action: '' });
       } else {
-        alert('❌ Failed to assign character');
+        alert('❌ Failed to assign characters');
       }
     } catch (error) {
       console.error('Assign character error:', error);
-      alert('❌ Failed to assign character');
+      alert('❌ Failed to assign characters');
     }
   };
 
@@ -617,6 +771,29 @@ export default function SimpleImageManager() {
                           {selectedStoryData.node_count} nodes • {selectedStoryData.is_published ? 'Published' : 'Draft'}
                           {characters.length > 0 && ` • ${characters.length} character${characters.length > 1 ? 's' : ''}`}
                         </p>
+                        {selectedStoryData.cover_image_url ? (
+                          <div className="mt-4 flex items-center space-x-3">
+                            <img
+                              src={selectedStoryData.cover_image_url}
+                              alt={`${selectedStoryData.title} cover preview`}
+                              className="w-16 h-16 object-cover rounded border border-blue-200 shadow-sm"
+                            />
+                            <div>
+                              <p className="text-sm text-blue-900 font-semibold">Current cover image</p>
+                              <button
+                                onClick={clearCoverImage}
+                                disabled={clearingCover}
+                                className="mt-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 disabled:opacity-60"
+                              >
+                                {clearingCover ? 'Removing...' : 'Remove cover'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-sm text-blue-700">
+                            No cover image set. The front page will fall back to the first scene image.
+                          </p>
+                        )}
                       </div>
                       <button
                         onClick={() => router.push('/admin/characters')}
@@ -680,33 +857,79 @@ export default function SimpleImageManager() {
                                 if (editingNode === row.node_key) {
                                   return (
                                     <div className="space-y-2">
-                                      <select
-                                        value={assignForm.characterId}
-                                        onChange={(e) => setAssignForm({...assignForm, characterId: e.target.value})}
-                                        className="w-full text-xs px-2 py-1 border rounded"
+                                      {tempAssignments.map((assignment, idx) => (
+                                        <div key={idx} className="border border-gray-300 p-2 rounded space-y-1 bg-gray-50">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-semibold text-gray-700">Character {idx + 1}</span>
+                                            {tempAssignments.length > 1 && (
+                                              <button
+                                                onClick={() => {
+                                                  setTempAssignments(tempAssignments.filter((_, i) => i !== idx));
+                                                }}
+                                                className="text-xs text-red-600 hover:text-red-800 font-bold"
+                                                title="Remove this character"
+                                              >
+                                                ✕
+                                              </button>
+                                            )}
+                                          </div>
+                                          <select
+                                            value={assignment.characterId}
+                                            onChange={(e) => {
+                                              const updated = [...tempAssignments];
+                                              updated[idx].characterId = e.target.value;
+                                              setTempAssignments(updated);
+                                            }}
+                                            className="w-full text-xs px-2 py-1 border rounded"
+                                          >
+                                            <option value="">Select character...</option>
+                                            {characters.map(char => (
+                                              <option key={char.id} value={char.id}>{char.name}</option>
+                                            ))}
+                                          </select>
+                                          <input
+                                            type="text"
+                                            placeholder="Emotion (e.g. happy)"
+                                            value={assignment.emotion}
+                                            onChange={(e) => {
+                                              const updated = [...tempAssignments];
+                                              updated[idx].emotion = e.target.value;
+                                              setTempAssignments(updated);
+                                            }}
+                                            className="w-full text-xs px-2 py-1 border rounded"
+                                          />
+                                          <input
+                                            type="text"
+                                            placeholder="Action (e.g. standing)"
+                                            value={assignment.action}
+                                            onChange={(e) => {
+                                              const updated = [...tempAssignments];
+                                              updated[idx].action = e.target.value;
+                                              setTempAssignments(updated);
+                                            }}
+                                            className="w-full text-xs px-2 py-1 border rounded"
+                                          />
+                                        </div>
+                                      ))}
+                                      <button
+                                        onClick={() => {
+                                          setTempAssignments([...tempAssignments, { characterId: '', emotion: '', action: '' }]);
+                                        }}
+                                        className="w-full text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
                                       >
-                                        <option value="">Select character...</option>
-                                        {characters.map(char => (
-                                          <option key={char.id} value={char.id}>{char.name}</option>
-                                        ))}
-                                      </select>
-                                      <input
-                                        type="text"
-                                        placeholder="Emotion (e.g. happy)"
-                                        value={assignForm.emotion}
-                                        onChange={(e) => setAssignForm({...assignForm, emotion: e.target.value})}
-                                        className="w-full text-xs px-2 py-1 border rounded"
-                                      />
+                                        ➕ Add Another Character
+                                      </button>
                                       <div className="flex space-x-1">
                                         <button
                                           onClick={() => assignCharacterToNode(row.node_key)}
                                           className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
                                         >
-                                          ✓ Save
+                                          ✓ Save All
                                         </button>
                                         <button
                                           onClick={() => {
                                             setEditingNode(null);
+                                            setTempAssignments([]);
                                             setAssignForm({ characterId: '', emotion: '', action: '' });
                                           }}
                                           className="text-xs bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500"
@@ -731,7 +954,10 @@ export default function SimpleImageManager() {
                                       <div className="text-gray-600 text-xs">No characters</div>
                                     )}
                                     <button
-                                      onClick={() => setEditingNode(row.node_key)}
+                                      onClick={() => {
+                                        setEditingNode(row.node_key);
+                                        setTempAssignments([]); // Reset when opening
+                                      }}
                                       className="mt-1 text-xs text-purple-600 hover:text-purple-800 hover:underline"
                                     >
                                       {nodeChars.length > 0 ? '✏️ Edit' : '➕ Add Character'}
@@ -755,9 +981,6 @@ export default function SimpleImageManager() {
                                         />
                                         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
                                           <span className="text-white text-2xl">▶️</span>
-                                        </div>
-                                        <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-1 py-0.5 rounded">
-                                          🎬
                                         </div>
                                       </div>
                                       <div className="flex flex-col space-y-1">
@@ -787,9 +1010,6 @@ export default function SimpleImageManager() {
                                           alt={`Node ${row.node_key}`}
                                           className="w-20 h-20 object-cover rounded-lg border-2 border-blue-300 shadow-md"
                                         />
-                                        <div className="absolute top-1 right-1 bg-blue-600 text-white text-xs px-1 py-0.5 rounded">
-                                          🖼️
-                                        </div>
                                       </div>
                                       <div className="flex flex-col space-y-1">
                                         <button
@@ -836,18 +1056,27 @@ export default function SimpleImageManager() {
                             </td>
                             <td className="border border-gray-300 px-4 py-2">
                               {row.audio_url ? (
-                                <div className="flex items-center space-x-2">
-                                  <audio
-                                    src={row.audio_url}
-                                    controls
-                                    className="h-8"
-                                    style={{ maxWidth: '150px' }}
-                                  />
+                                <div className="space-y-2">
+                                  <div className="flex items-center space-x-2">
+                                    <audio
+                                      src={row.audio_url}
+                                      controls
+                                      className="h-8"
+                                      style={{ maxWidth: '150px' }}
+                                    />
+                                    <button
+                                      onClick={() => window.open(row.audio_url, '_blank')}
+                                      className="text-blue-600 hover:text-blue-800 text-sm"
+                                    >
+                                      🔊 Open
+                                    </button>
+                                  </div>
                                   <button
-                                    onClick={() => window.open(row.audio_url, '_blank')}
-                                    className="text-blue-600 hover:text-blue-800 text-sm"
+                                    onClick={() => clearAudio(row.node_key)}
+                                    disabled={clearingAudio === row.node_key}
+                                    className="text-xs text-red-600 hover:text-red-800"
                                   >
-                                    🔊 Open
+                                    {clearingAudio === row.node_key ? '🗑️ Deleting...' : '🗑️ Delete audio'}
                                   </button>
                                 </div>
                               ) : (
@@ -902,6 +1131,15 @@ export default function SimpleImageManager() {
                                     >
                                       ✏️ Custom
                                     </button>
+                                    {row.image_url && (
+                                      <button
+                                        onClick={() => setCoverImageFromNode(row.node_key, row.image_url)}
+                                        disabled={coverSavingNode === row.node_key}
+                                        className={`text-sm px-3 py-1 rounded text-white ${row.image_url === selectedStoryData?.cover_image_url ? 'bg-yellow-500' : 'bg-orange-500'} hover:opacity-90 disabled:bg-gray-400`}
+                                      >
+                                        {coverSavingNode === row.node_key ? '🏠 Saving...' : row.image_url === selectedStoryData?.cover_image_url ? '🏠 Cover ✓' : '🏠 Make Cover'}
+                                      </button>
+                                    )}
                                     {!row.video_url && (
                                       <button
                                         onClick={() => generateVideo(row.node_key)}
