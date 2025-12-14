@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/react'
+import { SITE_URL } from '@/lib/env'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -15,9 +16,28 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Storific Stories - vælg din egen historie',
+  metadataBase: new URL(SITE_URL || 'https://storific.app'),
+  title: {
+    default: 'Storific Stories',
+    template: '%s | Storific Stories',
+  },
   description: 'Interaktive historier med stemme-fortælling til børn',
   manifest: '/manifest.webmanifest',
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'Storific Stories',
+    description: 'Interaktive historier med stemme-fortælling til børn',
+    url: '/',
+    siteName: 'Storific Stories',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Storific Stories',
+    description: 'Interaktive historier med stemme-fortælling til børn',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',

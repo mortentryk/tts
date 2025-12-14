@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { supabaseAdmin } from '@/lib/supabase';
+import { SITE_URL } from '@/lib/env';
 
 export async function generateMetadata(
   { params }: { params: Promise<{ storyId: string }> }
@@ -57,7 +58,7 @@ export async function generateMetadata(
     if (storyBySlug) {
       const title = storyBySlug.title || 'Interactive Story';
       const description = storyBySlug.description || 'An interactive story adventure';
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://storific.dk';
+      const siteUrl = SITE_URL || 'https://storific.app';
       
       // Build image URL
       const imageUrl = storyBySlug.cover_image_url 
@@ -66,24 +67,27 @@ export async function generateMetadata(
             : `${siteUrl}${storyBySlug.cover_image_url}`)
         : undefined;
 
+      const canonicalUrl = `${siteUrl}/story/${storyBySlug.slug || storyId}`;
+
       return {
-        title: `${title} - Storific Stories`,
-        description: description,
+        title,
+        description,
         openGraph: {
-          title: title,
-          description: description,
+          title,
+          description,
           images: imageUrl ? [{ url: imageUrl }] : [],
           type: 'website',
-          url: `${siteUrl}/story/${storyBySlug.slug || storyId}`,
+          url: canonicalUrl,
+          siteName: 'Storific Stories',
         },
         twitter: {
           card: 'summary_large_image',
-          title: title,
-          description: description,
+          title,
+          description,
           images: imageUrl ? [imageUrl] : [],
         },
         alternates: {
-          canonical: `${siteUrl}/story/${storyBySlug.slug || storyId}`,
+          canonical: canonicalUrl,
         },
       };
     }
@@ -93,8 +97,19 @@ export async function generateMetadata(
   
   // Fallback metadata
   return {
-    title: 'Story - Storific Stories',
+    title: 'Story',
     description: 'Interactive story adventure with voice narration for kids',
+    openGraph: {
+      title: 'Story',
+      description: 'Interactive story adventure with voice narration for kids',
+      type: 'website',
+      siteName: 'Storific Stories',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'Story',
+      description: 'Interactive story adventure with voice narration for kids',
+    },
   };
 }
 

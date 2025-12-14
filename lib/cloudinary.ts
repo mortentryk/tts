@@ -156,11 +156,42 @@ export function getCloudinaryUrl(
 }
 
 /**
- * Delete an asset from Cloudinary
+ * Extract public ID from Cloudinary URL
  */
-export async function deleteCloudinaryAsset(publicId: string): Promise<boolean> {
+export function extractPublicIdFromUrl(url: string): string | null {
   try {
-    const result = await cloudinary.uploader.destroy(publicId);
+    if (!url || typeof url !== 'string') return null;
+    
+    // Cloudinary URLs format: 
+    // https://res.cloudinary.com/{cloud_name}/{resource_type}/upload/{version}/{public_id}.{format}
+    // or: https://res.cloudinary.com/{cloud_name}/{resource_type}/upload/{public_id}.{format}
+    
+    // Match the public_id part after /upload/ (with optional version prefix)
+    const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
+    if (match && match[1]) {
+      // Remove any query parameters
+      const publicId = match[1].split('?')[0];
+      return publicId;
+    }
+    return null;
+  } catch (error) {
+    console.error('❌ Error extracting public ID from URL:', error);
+    return null;
+  }
+}
+
+/**
+ * Delete an asset from Cloudinary (supports image, video, and audio)
+ */
+export async function deleteCloudinaryAsset(
+  publicId: string, 
+  resourceType: 'image' | 'video' | 'auto' = 'auto'
+): Promise<boolean> {
+  try {
+    // For audio files, Cloudinary uses 'video' resource type
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType === 'auto' ? 'auto' : resourceType,
+    });
     return result.result === 'ok';
   } catch (error) {
     console.error('❌ Cloudinary delete error:', error);

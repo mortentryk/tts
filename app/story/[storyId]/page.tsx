@@ -880,11 +880,6 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           cover_image_url: storyData.cover_image_url
         });
         
-        // Update document title for SEO
-        if (storyData.title) {
-          document.title = `${storyData.title} - Storific Stories`;
-        }
-        
         // Load first node
         console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
         const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`, {

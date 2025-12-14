@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 
 type ChangeFrequency = NonNullable<MetadataRoute.Sitemap[number]['changeFrequency']>;
 
-const BASE_URL = (SITE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const BASE_URL = (SITE_URL || 'https://storific.app').replace(/\/+$/, '');
 
 const STATIC_ROUTES: Array<{
   path: string;

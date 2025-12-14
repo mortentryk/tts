@@ -3,6 +3,20 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Servicevilkår - TTS Historie Platform',
   description: 'Servicevilkår for vores interaktive TTS historie platform',
+  alternates: {
+    canonical: '/terms',
+  },
+  openGraph: {
+    title: 'Servicevilkår - TTS Historie Platform',
+    description: 'Servicevilkår for vores interaktive TTS historie platform',
+    url: '/terms',
+    type: 'article',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Servicevilkår - TTS Historie Platform',
+    description: 'Servicevilkår for vores interaktive TTS historie platform',
+  },
 };
 
 export default function TermsPage() {

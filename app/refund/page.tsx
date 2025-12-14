@@ -3,6 +3,20 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Refusionspolitik - TTS Historie Platform',
   description: 'Refusionspolitik for vores interaktive TTS historie platform',
+  alternates: {
+    canonical: '/refund',
+  },
+  openGraph: {
+    title: 'Refusionspolitik - TTS Historie Platform',
+    description: 'Refusionspolitik for vores interaktive TTS historie platform',
+    url: '/refund',
+    type: 'article',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Refusionspolitik - TTS Historie Platform',
+    description: 'Refusionspolitik for vores interaktive TTS historie platform',
+  },
 };
 
 export default function RefundPage() {

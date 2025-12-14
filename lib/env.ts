@@ -102,7 +102,7 @@ export const INGEST_TOKEN = getEnvVar('INGEST_TOKEN', false);
 export const STRIPE_SECRET_KEY = getEnvVar('STRIPE_SECRET_KEY', false);
 export const STRIPE_PUBLISHABLE_KEY = getEnvVar('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', false);
 export const STRIPE_WEBHOOK_SECRET = getEnvVar('STRIPE_WEBHOOK_SECRET', false);
-export const SITE_URL = getEnvVar('NEXT_PUBLIC_SITE_URL', false, 'http://localhost:3000');
+export const SITE_URL = getEnvVar('NEXT_PUBLIC_SITE_URL', false, 'https://storific.app');
 
 // JWT Secret for admin sessions
 // Generate a stable fallback if not set (but log a warning - should be set in production)

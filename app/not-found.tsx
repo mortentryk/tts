@@ -4,6 +4,24 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: '404 - Page Not Found',
   description: 'The page you are looking for could not be found.',
+  alternates: {
+    canonical: '/not-found',
+  },
+  robots: {
+    index: false,
+    follow: false,
+  },
+  openGraph: {
+    title: '404 - Page Not Found',
+    description: 'The page you are looking for could not be found.',
+    url: '/not-found',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: '404 - Page Not Found',
+    description: 'The page you are looking for could not be found.',
+  },
 };
 
 export default function NotFound() {
