@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import PurchasePageClient from './page.client'
 
 export async function generateMetadata(
-  { params }: { params: { storyId: string } }
+  { params }: { params: Promise<{ storyId: string }> }
 ): Promise<Metadata> {
-  const storyId = params?.storyId
+  const { storyId } = await params;
   const canonicalPath = storyId ? `/purchase/${encodeURIComponent(storyId)}` : '/purchase'
 
   return {

@@ -128,10 +128,58 @@ function LoginPageContent() {
               />
             </div>
 
-          ...
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium mb-2">
+                Adgangskode
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full px-4 py-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                placeholder="••••••••"
+              />
+            </div>
 
+            <button
+              type="submit"
+              disabled={loading || !email || !password}
+              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Logger ind...' : mode === 'signup' ? 'Opret konto' : 'Log ind'}
+            </button>
+          </form>
+        )}
 
+        <div className="mt-6 text-center space-y-2">
+          <button
+            onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+            className="text-yellow-400 hover:text-yellow-300 text-sm"
+          >
+            {mode === 'signin' ? 'Har du ikke en konto? Opret en' : 'Har du allerede en konto? Log ind'}
+          </button>
+          <div>
+            <button
+              onClick={() => setMode('magic')}
+              className="text-yellow-400 hover:text-yellow-300 text-sm"
+            >
+              Login med email-link
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
 
 

@@ -102,7 +102,20 @@ export const INGEST_TOKEN = getEnvVar('INGEST_TOKEN', false);
 export const STRIPE_SECRET_KEY = getEnvVar('STRIPE_SECRET_KEY', false);
 export const STRIPE_PUBLISHABLE_KEY = getEnvVar('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', false);
 export const STRIPE_WEBHOOK_SECRET = getEnvVar('STRIPE_WEBHOOK_SECRET', false);
-export const SITE_URL = getEnvVar('NEXT_PUBLIC_SITE_URL', false, 'https://storific.app');
+
+// Helper function to ensure URL has protocol
+function ensureUrlProtocol(url: string): string {
+  if (!url) return 'https://storific.app';
+  // If URL already has protocol, return as is
+  if (url.match(/^https?:\/\//)) {
+    return url;
+  }
+  // Otherwise, add https://
+  return `https://${url}`;
+}
+
+const rawSiteUrl = getEnvVar('NEXT_PUBLIC_SITE_URL', false, 'https://storific.app');
+export const SITE_URL = ensureUrlProtocol(rawSiteUrl);
 
 // JWT Secret for admin sessions
 // Generate a stable fallback if not set (but log a warning - should be set in production)
