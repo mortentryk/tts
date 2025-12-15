@@ -1339,8 +1339,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       await handleDiceRoll();
     };
     
-    // Don't set the ref here - it will be set after narration completes (line 1322)
-    // This prevents race conditions when navigating during narration
+    // Set a temporary marker to prevent duplicate effect runs
+    lastAutoReadSceneIdRef.current = passageIdAtReadStart;
     runAutoRead();
     
     return () => {
