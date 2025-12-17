@@ -1,0 +1,172 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { SocialPost } from '@/types/social';
+import { shareContent } from '@/lib/share';
+
+type SocialPostCardProps = {
+  post: SocialPost;
+  onLike?: (id: string, delta: number) => Promise<void> | void;
+  onShareUrl?: (url: string) => Promise<void> | void;
+};
+
+export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostCardProps) {
+  const [liked, setLiked] = useState(false);
+  const [localLikes, setLocalLikes] = useState(post.likes || 0);
+  const [showComments, setShowComments] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [comments, setComments] = useState<string[]>([]);
+
+  const storyHref = useMemo(
+    () => (post.story_slug ? `/story/${post.story_slug}` : undefined),
+    [post.story_slug],
+  );
+
+  const handleLike = async () => {
+    const delta = liked ? -1 : 1;
+    setLiked((prev) => !prev);
+    setLocalLikes((prev) => Math.max(0, prev + delta));
+    try {
+      await onLike?.(post.id, delta);
+    } catch (err) {
+      // rollback if API fails
+      setLiked((prev) => !prev);
+      setLocalLikes((prev) => Math.max(0, prev - delta));
+      console.error('Failed to like post', err);
+    }
+  };
+
+  const handleShare = async () => {
+    const url = typeof window !== 'undefined' ? window.location.origin + '/feed' : '/feed';
+    const shared = await shareContent({
+      title: post.title,
+      text: post.caption,
+      url,
+    });
+    if (!shared && onShareUrl) {
+      await onShareUrl(url);
+    }
+  };
+
+  const submitComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+    setComments((prev) => [...prev, commentText.trim()]);
+    setCommentText('');
+  };
+
+  return (
+    <article className="bg-white/10 border border-white/10 rounded-2xl shadow-lg backdrop-blur p-4 sm:p-6 flex flex-col gap-4 transition-transform hover:-translate-y-1">
+      <div className="flex items-center gap-3">
+        <div className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-200 rounded-full border border-yellow-500/30">
+          Reel
+        </div>
+        <span className="text-sm text-gray-300">{new Date(post.created_at).toLocaleString()}</span>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
+        {post.media_type === 'video' ? (
+          <video
+            className="w-full aspect-[4/5] object-cover"
+            src={post.media_url}
+            controls
+            muted
+            loop
+            playsInline
+          />
+        ) : (
+          <img
+            className="w-full aspect-[4/5] object-cover"
+            src={post.media_url}
+            alt={post.title}
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-xl font-bold">{post.title}</h3>
+        <p className="text-gray-200 line-clamp-3">{post.caption}</p>
+        {storyHref && (
+          <Link
+            href={storyHref}
+            className="inline-flex items-center gap-2 text-sm text-yellow-200 hover:text-yellow-100 underline"
+          >
+            Gå til historien
+          </Link>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleLike}
+          aria-label={liked ? 'Fjern like' : 'Synes godt om'}
+          className={`flex items-center gap-2 px-3 py-2 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+            liked
+              ? 'bg-yellow-500/20 border-yellow-400 text-yellow-200'
+              : 'bg-white/5 border-white/10 hover:border-white/20'
+          }`}
+        >
+          <span>{liked ? '❤️' : '🤍'}</span>
+          <span className="text-sm">{localLikes}</span>
+        </button>
+
+        <button
+          onClick={handleShare}
+          aria-label="Del reel"
+          className="flex items-center gap-2 px-3 py-2 rounded-full border bg-white/5 border-white/10 hover:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
+        >
+          <span>🔗</span>
+          <span className="text-sm">Del</span>
+        </button>
+
+        <button
+          onClick={() => setShowComments((prev) => !prev)}
+          aria-expanded={showComments}
+          aria-controls={`comments-${post.id}`}
+          className="ml-auto text-sm text-gray-200 underline hover:text-white focus:outline-none focus:ring-2 focus:ring-yellow-400 rounded"
+        >
+          Kommentarer ({comments.length})
+        </button>
+      </div>
+
+      {showComments && (
+        <div id={`comments-${post.id}`} className="border-t border-white/10 pt-3 space-y-3">
+          {comments.length === 0 ? (
+            <p className="text-sm text-gray-400">Ingen kommentarer endnu.</p>
+          ) : (
+            <ul className="space-y-2 text-sm text-gray-200">
+              {comments.map((c, idx) => (
+                <li key={`${post.id}-comment-${idx}`} className="bg-white/5 rounded px-3 py-2">
+                  {c}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form onSubmit={submitComment} className="space-y-2">
+            <textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              placeholder="Skriv en kommentar..."
+              rows={2}
+            />
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                className="px-3 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors disabled:opacity-60"
+                disabled={!commentText.trim()}
+              >
+                Tilføj
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </article>
+  );
+}

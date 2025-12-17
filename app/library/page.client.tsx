@@ -111,6 +111,12 @@ export default function LibraryPageClient() {
           </div>
           <div className="flex gap-4">
             <button
+              onClick={() => router.push('/feed')}
+              className="bg-white/10 border border-white/20 text-white px-6 py-2 rounded-lg font-semibold transition-colors hover:border-yellow-400"
+            >
+              🎬 Se Reels
+            </button>
+            <button
               onClick={() => router.push('/')}
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors"
             >
@@ -192,6 +198,7 @@ export default function LibraryPageClient() {
     </div>
   );
 }
+
 
 
 

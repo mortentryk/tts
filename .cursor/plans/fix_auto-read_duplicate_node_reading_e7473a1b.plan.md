@@ -1,9 +1,3 @@
----
-name: Fix auto-read duplicate node reading
-overview: The auto-read feature re-reads the same node after voice navigation because `lastAutoReadSceneIdRef` is set immediately when the effect runs (line 1343), before async narration starts. This creates a race condition where the ref can be incorrectly set or cleared during navigation. The fix is to remove the premature ref assignment and only set it after narration completes successfully.
-todos: []
----
-
 # Fix Auto-Read Duplicate Node Reading
 
 ## Problem

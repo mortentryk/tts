@@ -348,6 +348,13 @@ export default function HomePageClient() {
               </button>
             )}
             
+            <button
+              onClick={() => router.push('/feed')}
+              className="bg-white/10 border border-white/20 text-white px-6 py-4 rounded-lg font-semibold transition-all hover:border-yellow-400"
+            >
+              🎬 Se Reels
+            </button>
+            
             {userPurchases.hasActiveSubscription && (
               <div className="bg-green-600 px-6 py-4 rounded-lg font-semibold">
                 ✅ Aktivt Abonnement - Fuld Adgang
@@ -628,6 +635,7 @@ export default function HomePageClient() {
     </div>
   );
 }
+
 
 
 
