@@ -102,6 +102,7 @@ export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostC
             </Link>
           )}
         </div>
+      </div>
 
       <div className="w-full max-w-md mx-auto px-4 pb-6 flex items-center gap-3">
         <button
