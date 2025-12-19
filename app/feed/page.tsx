@@ -1,6 +1,4 @@
-import dynamic from 'next/dynamic';
-
-const FeedPageClient = dynamic(() => import('./page.client'), { ssr: false });
+import FeedPageClient from './page.client';
 
 export const metadata = {
   title: 'Reels',
