@@ -4,6 +4,15 @@ type SharePayload = {
   url?: string;
 };
 
+export function getNodeUrl(storyId: string, nodeKey?: string): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  const baseUrl = window.location.origin;
+  const node = nodeKey || '1';
+  return `${baseUrl}/story/${encodeURIComponent(storyId)}/${encodeURIComponent(node)}`;
+}
+
 export async function shareContent(payload: SharePayload): Promise<boolean> {
   const { title, text, url } = payload;
 

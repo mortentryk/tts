@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { GameStats, StoryNode, SaveData } from '../../../types/game';
 import { getUserEmail } from '@/lib/purchaseVerification';
 // import { loadStoryById } from '../../../lib/supabaseStoryManager';
@@ -431,7 +431,7 @@ async function speakViaCloud(
   });
 }
 
-export default function Game({ params }: { params: Promise<{ storyId: string }> }) {
+export default function Game({ params }: { params: Promise<{ storyId: string; nodeKey?: string }> }) {
   const [storyId, setStoryId] = useState<string>('');
   const [currentId, setCurrentId] = useState(START_ID);
   const [stats, setStats] = useState<GameStats>({ Evner: 10, Udholdenhed: 18, Held: 10 });
@@ -487,6 +487,26 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
   const [showControls, setShowControls] = useState(false);
   
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Get nodeKey from params (if in nested route) or from URL path/query
+  const [nodeKeyFromParams, setNodeKeyFromParams] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const loadNodeKey = async () => {
+      const resolvedParams = await params;
+      if (resolvedParams.nodeKey) {
+        setNodeKeyFromParams(resolvedParams.nodeKey);
+      }
+    };
+    loadNodeKey();
+  }, [params]);
+  
+  // Check for nodeKey in URL path (e.g., /story/my-story/5) or from params
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const pathParts = pathname.split('/').filter(Boolean);
+  const nodeKeyFromPath = pathParts.length >= 3 && pathParts[0] === 'story' ? pathParts[2] : null;
+  // Priority: params > path > query param > default
+  const nodeKeyFromUrl = nodeKeyFromParams || nodeKeyFromPath || searchParams?.get('node') || '1';
   const passage = story[currentId];
 
   const autoReadBlockingReason = useMemo(() => {
@@ -880,9 +900,10 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
           cover_image_url: storyData.cover_image_url
         });
         
-        // Load first node
-        console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/1`);
-        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/1`, {
+        // Load node from URL or default to "1"
+        const nodeKey = nodeKeyFromUrl;
+        console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/${nodeKey}`);
+        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
           headers: userEmail ? { 'user-email': userEmail } : {}
         });
         
@@ -941,6 +962,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
         });
         
         setStory(story as Record<string, StoryNode>);
+        setCurrentId(nodeData.node_key);
         setLoading(false);
       } catch (error: any) {
         console.error('Failed to load story:', error);
@@ -950,7 +972,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       }
     };
     loadStory();
-  }, [storyId, stopSpeak, stopVoiceListening, router]);
+  }, [storyId, stopSpeak, stopVoiceListening, router, nodeKeyFromUrl, nodeKeyFromParams]);
 
   // --- Save/Load ---
   const saveGame = useCallback(async (storyId: string, id: string, s: GameStats) => {
@@ -1106,6 +1128,11 @@ export default function Game({ params }: { params: Promise<{ storyId: string }> 
       console.log('🚀 Clearing lastAutoReadSceneIdRef before navigation, was:', lastAutoReadSceneIdRef.current, '-> null');
       lastAutoReadSceneIdRef.current = null;
       setCurrentId(id);
+      
+      // Update URL with path-based node (e.g., /story/my-story/5)
+      const newUrl = `/story/${encodeURIComponent(storyId)}/${encodeURIComponent(id)}`;
+      router.push(newUrl, { scroll: false });
+      
       console.log('✅ Navigation completed to:', id);
     } catch (error) {
       console.error('Failed to load node:', error);
