@@ -90,14 +90,11 @@ export default function FeedPageClient() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900 text-white">
-      <section className="max-w-5xl mx-auto px-4 py-10 space-y-6">
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className="sticky top-0 z-10 bg-gradient-to-b from-purple-900/95 to-transparent backdrop-blur-sm border-b border-white/10 px-4 py-4">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <p className="text-sm text-yellow-200 uppercase tracking-[0.2em]">Reels</p>
-            <h1 className="text-4xl font-bold">Del og opdag bog-reels</h1>
-            <p className="text-gray-200 mt-2">
-              Korte klip og billeder fra historier. Like, del og hop direkte ind i eventyret.
-            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Del og opdag bog-reels</h1>
           </div>
           <button
             onClick={() => setShowEditor(true)}
@@ -105,10 +102,13 @@ export default function FeedPageClient() {
           >
             ➕ Lav opslag
           </button>
-        </header>
+        </div>
+      </header>
+
+      <section className="space-y-0">
 
         {showEditor && (
-          <div className="relative">
+          <div className="max-w-5xl mx-auto px-4 py-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-bold">Lav en reel</h2>
               <button
@@ -122,27 +122,37 @@ export default function FeedPageClient() {
           </div>
         )}
 
-        {error && <div className="text-red-300 text-sm">{error}</div>}
+        {error && (
+          <div className="max-w-5xl mx-auto px-4 py-4">
+            <div className="text-red-300 text-sm">{error}</div>
+          </div>
+        )}
 
-        <div className="grid gap-6">
+        <div className="space-y-0">
           {posts.map((post) => (
             <SocialPostCard key={post.id} post={post} onLike={handleLike} />
           ))}
         </div>
 
         {(loading || loadingMore) && (
-          <div className="flex justify-center py-6 text-gray-300">Indlæser reels...</div>
+          <div className="min-h-screen flex items-center justify-center text-gray-300">
+            Indlæser reels...
+          </div>
         )}
 
         {!loading && posts.length === 0 && (
-          <div className="text-center py-12 text-gray-300">
-            Ingen reels endnu. Vær den første til at dele!
+          <div className="min-h-screen flex items-center justify-center text-gray-300">
+            <div className="text-center">
+              <p className="text-lg">Ingen reels endnu. Vær den første til at dele!</p>
+            </div>
           </div>
         )}
 
         <div ref={sentinelRef} className="h-10" aria-hidden />
         {!hasMore && posts.length > 0 && (
-          <p className="text-center text-sm text-gray-400 pb-6">Det var alle reels for nu.</p>
+          <div className="min-h-screen flex items-center justify-center">
+            <p className="text-center text-sm text-gray-400">Det var alle reels for nu.</p>
+          </div>
         )}
       </section>
     </div>

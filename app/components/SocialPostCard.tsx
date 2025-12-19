@@ -57,54 +57,57 @@ export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostC
   };
 
   return (
-    <article className="bg-white/10 border border-white/10 rounded-2xl shadow-lg backdrop-blur p-4 sm:p-6 flex flex-col gap-4 transition-transform hover:-translate-y-1">
-      <div className="flex items-center gap-3">
-        <div className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-200 rounded-full border border-yellow-500/30">
-          Reel
+    <article className="min-h-screen w-full flex flex-col bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900">
+      <div className="flex-1 flex flex-col px-4 py-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-200 rounded-full border border-yellow-500/30">
+            Reel
+          </div>
+          <span className="text-sm text-gray-300">{new Date(post.created_at).toLocaleDateString()}</span>
         </div>
-        <span className="text-sm text-gray-300">{new Date(post.created_at).toLocaleString()}</span>
-      </div>
 
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
-        {post.media_type === 'video' ? (
-          <video
-            className="w-full aspect-[4/5] object-cover"
-            src={post.media_url}
-            controls
-            muted
-            loop
-            playsInline
-          />
-        ) : (
-          <img
-            className="w-full aspect-[4/5] object-cover"
-            src={post.media_url}
-            alt={post.title}
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-        )}
-      </div>
+        <div className="flex-1 flex items-center justify-center mb-4">
+          <div className="w-full max-w-lg h-full max-h-[60vh] overflow-hidden rounded-xl border border-white/10 bg-black/30">
+            {post.media_type === 'video' ? (
+              <video
+                className="w-full h-full object-cover"
+                src={post.media_url}
+                controls
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <img
+                className="w-full h-full object-cover"
+                src={post.media_url}
+                alt={post.title}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            )}
+          </div>
+        </div>
 
-      <div className="flex flex-col gap-2">
-        <h3 className="text-xl font-bold">{post.title}</h3>
-        <p className="text-gray-200 line-clamp-3">{post.caption}</p>
-        {storyHref && (
-          <Link
-            href={storyHref}
-            className="inline-flex items-center gap-2 text-sm text-yellow-200 hover:text-yellow-100 underline"
-          >
-            Gå til historien
-          </Link>
-        )}
-      </div>
+        <div className="w-full max-w-lg mx-auto flex flex-col gap-2 mb-4">
+          <h3 className="text-2xl font-bold">{post.title}</h3>
+          <p className="text-gray-200">{post.caption}</p>
+          {storyHref && (
+            <Link
+              href={storyHref}
+              className="inline-flex items-center gap-2 text-sm text-yellow-200 hover:text-yellow-100 underline"
+            >
+              Gå til historien
+            </Link>
+          )}
+        </div>
 
-      <div className="flex items-center gap-3">
+      <div className="w-full max-w-md mx-auto px-4 pb-6 flex items-center gap-3">
         <button
           onClick={handleLike}
           aria-label={liked ? 'Fjern like' : 'Synes godt om'}
-          className={`flex items-center gap-2 px-3 py-2 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
             liked
               ? 'bg-yellow-500/20 border-yellow-400 text-yellow-200'
               : 'bg-white/5 border-white/10 hover:border-white/20'
@@ -117,7 +120,7 @@ export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostC
         <button
           onClick={handleShare}
           aria-label="Del reel"
-          className="flex items-center gap-2 px-3 py-2 rounded-full border bg-white/5 border-white/10 hover:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          className="flex items-center gap-2 px-4 py-2 rounded-full border bg-white/5 border-white/10 hover:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
         >
           <span>🔗</span>
           <span className="text-sm">Del</span>
@@ -134,7 +137,7 @@ export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostC
       </div>
 
       {showComments && (
-        <div id={`comments-${post.id}`} className="border-t border-white/10 pt-3 space-y-3">
+        <div id={`comments-${post.id}`} className="w-full max-w-md mx-auto px-4 pb-6 border-t border-white/10 pt-3 space-y-3">
           {comments.length === 0 ? (
             <p className="text-sm text-gray-400">Ingen kommentarer endnu.</p>
           ) : (
