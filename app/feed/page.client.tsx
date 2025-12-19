@@ -88,13 +88,36 @@ export default function FeedPageClient() {
     setShowEditor(false);
   };
 
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/social-posts?id=${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error('Kunne ikke slette opslag');
+      }
+      setPosts((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error('Delete failed', err);
+      throw err;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900 text-white">
-      <header className="sticky top-0 z-10 bg-gradient-to-b from-purple-900/95 to-transparent backdrop-blur-sm border-b border-white/10 px-4 py-4">
+    <div className="min-h-screen bg-indigo-900 text-white">
+      <header className="sticky top-0 z-10 bg-indigo-900/95 backdrop-blur-sm border-b border-white/10 px-4 py-4">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <p className="text-sm text-yellow-200 uppercase tracking-[0.2em]">Reels</p>
-            <h1 className="text-2xl sm:text-3xl font-bold">Del og opdag bog-reels</h1>
+          <div className="flex items-center gap-4">
+            <a
+              href="/"
+              className="text-yellow-200 hover:text-yellow-100 underline text-sm"
+            >
+              ← Tilbage til Storific
+            </a>
+            <div>
+              <p className="text-sm text-yellow-200 uppercase tracking-[0.2em]">Reels</p>
+              <h1 className="text-2xl sm:text-3xl font-bold">Del og opdag bog-reels</h1>
+            </div>
           </div>
           <button
             onClick={() => setShowEditor(true)}
@@ -130,7 +153,7 @@ export default function FeedPageClient() {
 
         <div className="space-y-0">
           {posts.map((post) => (
-            <SocialPostCard key={post.id} post={post} onLike={handleLike} />
+            <SocialPostCard key={post.id} post={post} onLike={handleLike} onDelete={handleDelete} />
           ))}
         </div>
 

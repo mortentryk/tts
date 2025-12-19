@@ -9,9 +9,10 @@ type SocialPostCardProps = {
   post: SocialPost;
   onLike?: (id: string, delta: number) => Promise<void> | void;
   onShareUrl?: (url: string) => Promise<void> | void;
+  onDelete?: (id: string) => Promise<void> | void;
 };
 
-export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostCardProps) {
+export default function SocialPostCard({ post, onLike, onShareUrl, onDelete }: SocialPostCardProps) {
   const [liked, setLiked] = useState(false);
   const [localLikes, setLocalLikes] = useState(post.likes || 0);
   const [showComments, setShowComments] = useState(false);
@@ -56,8 +57,20 @@ export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostC
     setCommentText('');
   };
 
+  const handleDelete = async () => {
+    if (!confirm('Er du sikker på, at du vil slette dette opslag?')) {
+      return;
+    }
+    try {
+      await onDelete?.(post.id);
+    } catch (err) {
+      console.error('Failed to delete post', err);
+      alert('Kunne ikke slette opslag');
+    }
+  };
+
   return (
-    <article className="min-h-screen w-full flex flex-col bg-gradient-to-b from-purple-900 via-blue-900 to-indigo-900">
+    <article className="min-h-screen w-full flex flex-col bg-indigo-900">
       <div className="flex-1 flex flex-col px-4 py-4">
         <div className="flex items-center justify-between mb-4">
           <div className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-200 rounded-full border border-yellow-500/30">
@@ -135,6 +148,16 @@ export default function SocialPostCard({ post, onLike, onShareUrl }: SocialPostC
         >
           Kommentarer ({comments.length})
         </button>
+
+        {onDelete && (
+          <button
+            onClick={handleDelete}
+            aria-label="Slet opslag"
+            className="px-3 py-2 rounded-full border bg-red-500/20 border-red-500/30 hover:border-red-500/50 text-red-200 hover:text-red-100 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400"
+          >
+            🗑️ Slet
+          </button>
+        )}
       </div>
 
       {showComments && (

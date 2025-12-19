@@ -52,14 +52,18 @@ export default function SocialPostEditor({ defaultStorySlug, onCreated }: Props)
     loadStories();
   }, []);
 
-  const isValid = useMemo(
-    () =>
+  const isValid = useMemo(() => {
+    const hasValidMediaUrl =
+      form.media_url.trim().length > 0 &&
+      (form.media_url.startsWith('http://') || form.media_url.startsWith('https://')) &&
+      form.media_url.includes('/tts-books');
+    return (
       form.title.trim().length > 0 &&
       form.caption.trim().length > 0 &&
-      form.media_url.trim().length > 0 &&
-      form.caption.length <= 280,
-    [form],
-  );
+      hasValidMediaUrl &&
+      form.caption.length <= 280
+    );
+  }, [form]);
 
   const handleChange = (key: keyof CreateSocialPostInput, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -68,6 +72,23 @@ export default function SocialPostEditor({ defaultStorySlug, onCreated }: Props)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid || saving) return;
+
+    // Validate media URL
+    if (!form.media_url || !form.media_url.trim()) {
+      setError('Du skal tilføje et billede eller video');
+      return;
+    }
+
+    if (!form.media_url.startsWith('http://') && !form.media_url.startsWith('https://')) {
+      setError('Medie URL skal være en gyldig link (starte med http:// eller https://)');
+      return;
+    }
+
+    if (!form.media_url.includes('/tts-books')) {
+      setError('Medie URL skal indeholde "/tts-books" i stien');
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -128,12 +149,12 @@ export default function SocialPostEditor({ defaultStorySlug, onCreated }: Props)
           </label>
 
           <label className="flex flex-col gap-2 text-sm">
-            <span className="text-gray-200">Medie URL *</span>
+            <span className="text-gray-200">Medie URL * (skal indeholde /tts-books)</span>
             <input
               value={form.media_url}
               onChange={(e) => handleChange('media_url', e.target.value)}
               className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
-              placeholder="https://..."
+              placeholder="https://.../tts-books/..."
               required
             />
           </label>

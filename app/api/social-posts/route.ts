@@ -110,3 +110,20 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json(mockPosts[idx]);
 }
+
+export async function DELETE(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+  }
+
+  const idx = mockPosts.findIndex((p) => p.id === id);
+  if (idx === -1) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  mockPosts = mockPosts.filter((p) => p.id !== id);
+  return NextResponse.json({ success: true });
+}
