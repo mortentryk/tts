@@ -176,7 +176,10 @@ export default async function StoryPage({ params }: StoryPageProps) {
         initialNode={firstNode ? {
           id: firstNode.node_key,
           text: firstNode.text_md || '',
-          choices: firstNode.choices || [],
+          choices: (firstNode.choices || []).map((choice: any) => ({
+            label: choice.label,
+            goto: choice.to_node_key,
+          })),
           image: firstNode.image_url || undefined,
           video: firstNode.video_url || undefined,
         } : undefined}
