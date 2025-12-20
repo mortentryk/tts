@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import SocialPostCard from '@/app/components/SocialPostCard';
 import SocialPostEditor from '@/app/components/SocialPostEditor';
 import { SocialPost } from '@/types/social';
+import { getCurrentUser, onAuthStateChange } from '@/lib/authClient';
 
 type ListResponse = {
   data: SocialPost[];
@@ -11,18 +13,36 @@ type ListResponse = {
 };
 
 export default function FeedPageClient() {
+  const router = useRouter();
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const hasMore = useMemo(() => Boolean(nextCursor), [nextCursor]);
 
   useEffect(() => {
     fetchPosts();
+    
+    const checkAuth = async () => {
+      const user = await getCurrentUser();
+      setIsAuthenticated(user !== null);
+    };
+    checkAuth();
+
+    const subscription = onAuthStateChange((user) => {
+      setIsAuthenticated(user !== null);
+    });
+
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -120,7 +140,13 @@ export default function FeedPageClient() {
             </div>
           </div>
           <button
-            onClick={() => setShowEditor(true)}
+            onClick={() => {
+              if (!isAuthenticated) {
+                router.push('/login?redirect=/feed');
+              } else {
+                setShowEditor(true);
+              }
+            }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/10 hover:border-white/20 transition-colors"
           >
             ➕ Lav opslag

@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SocialPost } from '@/types/social';
 import { shareContent } from '@/lib/share';
+import { getCurrentUser, onAuthStateChange } from '@/lib/authClient';
 
 type SocialPostCardProps = {
   post: SocialPost;
@@ -13,11 +15,33 @@ type SocialPostCardProps = {
 };
 
 export default function SocialPostCard({ post, onLike, onShareUrl, onDelete }: SocialPostCardProps) {
+  const router = useRouter();
   const [liked, setLiked] = useState(false);
   const [localLikes, setLocalLikes] = useState(post.likes || 0);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<string[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const user = await getCurrentUser();
+      setIsAuthenticated(user !== null);
+      setCheckingAuth(false);
+    };
+    checkAuth();
+
+    const subscription = onAuthStateChange((user) => {
+      setIsAuthenticated(user !== null);
+    });
+
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
+  }, []);
 
   const storyHref = useMemo(
     () => (post.story_slug ? `/story/${post.story_slug}` : undefined),
@@ -52,6 +76,10 @@ export default function SocialPostCard({ post, onLike, onShareUrl, onDelete }: S
 
   const submitComment = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthenticated) {
+      router.push('/login?redirect=/feed');
+      return;
+    }
     if (!commentText.trim()) return;
     setComments((prev) => [...prev, commentText.trim()]);
     setCommentText('');
@@ -174,24 +202,36 @@ export default function SocialPostCard({ post, onLike, onShareUrl, onDelete }: S
             </ul>
           )}
 
-          <form onSubmit={submitComment} className="space-y-2">
-            <textarea
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
-              placeholder="Skriv en kommentar..."
-              rows={2}
-            />
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                className="px-3 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors disabled:opacity-60"
-                disabled={!commentText.trim()}
+          {!checkingAuth && !isAuthenticated ? (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-center">
+              <p className="text-sm text-yellow-200 mb-3">Du skal være logget ind for at kommentere</p>
+              <Link
+                href="/login?redirect=/feed"
+                className="inline-block px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg text-sm font-semibold transition-colors"
               >
-                Tilføj
-              </button>
+                Log ind
+              </Link>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={submitComment} className="space-y-2">
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                placeholder="Skriv en kommentar..."
+                rows={2}
+              />
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="px-3 py-2 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors disabled:opacity-60"
+                  disabled={!commentText.trim() || checkingAuth}
+                >
+                  Tilføj
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
     </article>
