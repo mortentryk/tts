@@ -442,6 +442,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
   const [loading, setLoading] = useState(true);
   const [storyError, setStoryError] = useState<string | null>(null);
   const [storyMetadata, setStoryMetadata] = useState<{ title?: string; description?: string; cover_image_url?: string } | null>(null);
+  const [startNodeKey, setStartNodeKey] = useState<string>('1');
   
   // Audio management
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -485,6 +486,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
   const listeningSessionRef = useRef<number>(0);
   const voiceMatchedRef = useRef<boolean>(false);
   const [showControls, setShowControls] = useState(false);
+  const [autoplayPauseReason, setAutoplayPauseReason] = useState<string | null>(null);
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -533,8 +535,9 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
     if (speaking) return 'Oplæsning i gang';
     if (listening) return 'Stemme-lytning aktiv';
     if (!passage?.choices?.length) return 'Ingen valg i denne scene';
+    if (autoplayPauseReason) return autoplayPauseReason;
     return null;
-  }, [autoPlay, autoRead, pendingDiceRoll, showDiceRollButton, passage?.check, passage?.choices?.length, speaking, listening]);
+  }, [autoPlay, autoRead, pendingDiceRoll, showDiceRollButton, passage?.check, passage?.choices?.length, speaking, listening, autoplayPauseReason]);
 
   const autoPlayStatusLabel = useMemo(() => {
     if (!autoPlay) return 'Auto-play: Fra';
@@ -668,13 +671,57 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
 
       if (e?.code === 'PREGENERATED_AUDIO_REQUIRED') {
         console.warn('Audio not pre-generated; skipping playback.');
+        
+        // If autoplay is enabled, handle gracefully
+        if (autoPlay) {
+          const passageIdAtError = currentId;
+          // Clear the ref to allow autoplay to advance
+          if (lastAutoReadSceneIdRef.current === passageIdAtError) {
+            lastAutoReadSceneIdRef.current = null;
+          }
+          setAutoplayPauseReason('Lyd ikke klar for denne scene');
+          
+          // Advance after 3 second delay if still on same scene
+          setTimeout(() => {
+            if (currentIdRef.current === passageIdAtError && autoPlay) {
+              setAutoplayPauseReason(null);
+              // Mark scene as read to allow autoplay to advance
+              lastAutoReadSceneIdRef.current = passageIdAtError;
+            }
+          }, 3000);
+        }
+        return;
+      }
+      
+      // Handle timeout errors
+      if (e?.message?.includes('timeout') || e?.message?.includes('Timeout')) {
+        console.warn('Audio loading timeout; handling gracefully.');
+        
+        // If autoplay is enabled, handle gracefully
+        if (autoPlay) {
+          const passageIdAtError = currentId;
+          // Clear the ref to allow autoplay to advance
+          if (lastAutoReadSceneIdRef.current === passageIdAtError) {
+            lastAutoReadSceneIdRef.current = null;
+          }
+          setAutoplayPauseReason('Lydindlæsning timeout');
+          
+          // Advance after 2 second delay if still on same scene
+          setTimeout(() => {
+            if (currentIdRef.current === passageIdAtError && autoPlay) {
+              setAutoplayPauseReason(null);
+              // Mark scene as read to allow autoplay to advance
+              lastAutoReadSceneIdRef.current = passageIdAtError;
+            }
+          }, 2000);
+        }
         return;
       }
       
       // Log error but don't show alert for autoplay failures
       console.error('TTS Error (autoplay):', e?.message);
     }
-  }, [passage?.audio, currentId, storyId]);
+  }, [passage?.audio, currentId, storyId, autoPlay]);
 
   // Enhanced TTS with voice listening and button reading (for manual button clicks)
   const speakWithVoiceListening: (text: string, onDone?: () => void) => Promise<void> = useCallback(async (text: string, onDone?: () => void) => {
@@ -848,21 +895,30 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
         setSpeaking(false);
         isTTSRunningRef.current = false;
         
-        // Load story metadata
-        console.log('📡 Fetching story metadata from:', `/api/stories/${storyId}`);
+        // Load story metadata and first node in parallel for faster initial load
+        console.log('📡 Fetching story metadata and first node in parallel');
         const userEmail = getUserEmail();
         const headers: HeadersInit = {};
         if (userEmail) {
           headers['user-email'] = userEmail;
         }
-        const storyResponse = await fetch(`/api/stories/${storyId}`, {
-          headers
-        });
         
-        if (!storyResponse.ok) {
+        // Load node from URL or default to "1"
+        const nodeKey = nodeKeyFromUrl;
+        
+        // Fetch metadata and node in parallel
+        const [metadataResponse, nodeResponse] = await Promise.all([
+          fetch(`/api/stories/${storyId}?includeNodes=false`, { headers }),
+          fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
+            headers: userEmail ? { 'user-email': userEmail } : {}
+          })
+        ]);
+        
+        // Handle metadata response
+        if (!metadataResponse.ok) {
           let errorMessage = 'Story not found';
           try {
-            const errorData = await storyResponse.json();
+            const errorData = await metadataResponse.json();
             // Use the message if available, otherwise use error
             if (errorData.message) {
               errorMessage = errorData.message;
@@ -877,36 +933,20 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
             }
           } catch (e) {
             // If we can't parse the error, use status-based message
-            if (storyResponse.status === 404) {
+            if (metadataResponse.status === 404) {
               errorMessage = 'Historie ikke fundet. Den eksisterer muligvis ikke eller er endnu ikke offentliggjort.';
-            } else if (storyResponse.status === 403) {
+            } else if (metadataResponse.status === 403) {
               errorMessage = 'Adgang nægtet. Denne historie kræver muligvis et køb.';
-            } else if (storyResponse.status === 500) {
+            } else if (metadataResponse.status === 500) {
               errorMessage = 'Serverfejl. Prøv venligst igen senere.';
             } else {
-              errorMessage = `Kunne ikke indlæse historie (${storyResponse.status})`;
+              errorMessage = `Kunne ikke indlæse historie (${metadataResponse.status})`;
             }
           }
           throw new Error(errorMessage);
         }
         
-        const storyData = await storyResponse.json();
-        console.log('✅ Story metadata loaded:', storyData);
-        
-        // Store story metadata for SEO and display
-        setStoryMetadata({
-          title: storyData.title,
-          description: storyData.description,
-          cover_image_url: storyData.cover_image_url
-        });
-        
-        // Load node from URL or default to "1"
-        const nodeKey = nodeKeyFromUrl;
-        console.log('📡 Fetching story node from:', `/api/stories/${storyId}/nodes/${nodeKey}`);
-        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
-          headers: userEmail ? { 'user-email': userEmail } : {}
-        });
-        
+        // Handle node response
         if (!nodeResponse.ok) {
           let errorMessage = 'Story content not found';
           try {
@@ -924,8 +964,20 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
           throw new Error(errorMessage);
         }
         
+        // Parse responses
+        const storyData = await metadataResponse.json();
         const nodeData = await nodeResponse.json();
+        
+        console.log('✅ Story metadata loaded:', storyData);
         console.log('✅ Story node loaded:', nodeData);
+        
+        // Store story metadata for SEO and display (can arrive slightly later)
+        setStoryMetadata({
+          title: storyData.title,
+          description: storyData.description,
+          cover_image_url: storyData.cover_image_url
+        });
+        
         console.log('🎬 Node media data:', {
           node_key: nodeData.node_key,
           has_video_url: !!nodeData.video_url,
@@ -963,6 +1015,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
         
         setStory(story as Record<string, StoryNode>);
         setCurrentId(nodeData.node_key);
+        // Store the start node key for reset functionality
+        setStartNodeKey(nodeData.node_key || nodeKeyFromUrl || '1');
         setLoading(false);
       } catch (error: any) {
         console.error('Failed to load story:', error);
@@ -1266,15 +1320,55 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
     }
     try {
       stopVoiceListening();
+      // Clear any previous pause reason
+      setAutoplayPauseReason(null);
       console.log('🤖 runAutoPlayNarration: calling speakSimple with narration');
       await speakSimple(narration);
       console.log('🤖 runAutoPlayNarration: speakSimple completed');
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Auto-play narration failed:', error);
+      
+      // Handle specific error cases
+      if (error?.code === 'PREGENERATED_AUDIO_REQUIRED') {
+        const passageIdAtError = currentId;
+        // Clear the ref to allow retry or advance
+        if (lastAutoReadSceneIdRef.current === passageIdAtError) {
+          lastAutoReadSceneIdRef.current = null;
+        }
+        setAutoplayPauseReason('Lyd ikke klar for denne scene');
+        
+        // Advance after 3 second delay if still on same scene
+        setTimeout(() => {
+          if (currentIdRef.current === passageIdAtError && autoPlay) {
+            setAutoplayPauseReason(null);
+            lastAutoReadSceneIdRef.current = passageIdAtError;
+          }
+        }, 3000);
+        return false;
+      }
+      
+      // Handle timeout
+      if (error?.message?.includes('timeout') || error?.message?.includes('Timeout')) {
+        const passageIdAtError = currentId;
+        if (lastAutoReadSceneIdRef.current === passageIdAtError) {
+          lastAutoReadSceneIdRef.current = null;
+        }
+        setAutoplayPauseReason('Lydindlæsning timeout');
+        
+        // Advance after 2 second delay if still on same scene
+        setTimeout(() => {
+          if (currentIdRef.current === passageIdAtError && autoPlay) {
+            setAutoplayPauseReason(null);
+            lastAutoReadSceneIdRef.current = passageIdAtError;
+          }
+        }, 2000);
+        return false;
+      }
+      
       return false;
     }
-  }, [getNarrationText, speakSimple, stopVoiceListening]);
+  }, [getNarrationText, speakSimple, stopVoiceListening, currentId, autoPlay]);
 
   const activateAutoReadIfPossible = useCallback(() => {
     lastAutoReadSceneIdRef.current = null;
@@ -1731,11 +1825,22 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
 
   const resetGame = useCallback(() => {
     localStorage.removeItem(SAVE_KEY);
-    setCurrentId(START_ID);
-    setStats({ Evner: 10, Udholdenhed: 18, Held: 10 });
-    // Clear the last auto-read scene ID so autoplay can read from the start
+    // Clear all autoplay/autoread refs
     lastAutoReadSceneIdRef.current = null;
-  }, []);
+    autoPlayActionInFlightRef.current = false;
+    skipAutoReadCooldownRef.current = false;
+    // Reset stats to defaults
+    setStats({ Evner: 10, Udholdenhed: 18, Held: 10 });
+    // Clear dice roll state
+    setPendingDiceRoll(null);
+    setShowDiceRollButton(false);
+    setDiceRolling(false);
+    // Clear autoplay pause reason
+    setAutoplayPauseReason(null);
+    // Use goTo to navigate to start node (this handles URL update and node loading)
+    const targetNode = startNodeKey || nodeKeyFromUrl || '1';
+    goTo(targetNode);
+  }, [startNodeKey, nodeKeyFromUrl, goTo]);
 
   // Handle auto-read toggle with timing check
   const handleAutoReadToggle = useCallback(() => {

@@ -149,28 +149,39 @@ export async function GET(
       }
     }
 
-    // Get story nodes
-    const { data: nodes, error: nodesError } = await supabaseAdmin
-      .from('story_nodes')
-      .select('*')
-      .eq('story_id', story.id)
-      .order('sort_index', { ascending: true });
+    // Check if nodes should be included (default: true for backward compatibility)
+    const includeNodes = request.nextUrl.searchParams.get('includeNodes') !== 'false';
+    
+    let nodes: any[] = [];
+    if (includeNodes) {
+      // Get story nodes
+      const { data: nodesData, error: nodesError } = await supabaseAdmin
+        .from('story_nodes')
+        .select('*')
+        .eq('story_id', story.id)
+        .order('sort_index', { ascending: true });
 
-    if (nodesError) {
-      console.error('❌ Nodes fetch error:', nodesError);
-      return NextResponse.json({ 
-        error: 'Failed to fetch nodes',
-        message: nodesError.message || 'Database error while fetching story nodes'
-      }, { status: 500 });
+      if (nodesError) {
+        console.error('❌ Nodes fetch error:', nodesError);
+        return NextResponse.json({ 
+          error: 'Failed to fetch nodes',
+          message: nodesError.message || 'Database error while fetching story nodes'
+        }, { status: 500 });
+      }
+      
+      nodes = nodesData || [];
+      console.log('✅ Story loaded:', story.title, 'with', nodes.length, 'nodes');
+    } else {
+      console.log('✅ Story metadata loaded:', story.title, '(nodes excluded)');
     }
-
-    console.log('✅ Story loaded:', story.title, 'with', nodes?.length || 0, 'nodes');
     
     // Add cache-control headers to prevent stale data
-    return NextResponse.json({
-      ...story,
-      nodes: nodes || []
-    }, {
+    const responseData: any = { ...story };
+    if (includeNodes) {
+      responseData.nodes = nodes;
+    }
+    
+    return NextResponse.json(responseData, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         'Pragma': 'no-cache',
