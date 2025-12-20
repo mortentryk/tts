@@ -875,6 +875,67 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
     }
   }, []);
 
+  // Helper function to add node to cache with size limit
+  const addNodeToCache = useCallback((nodeKey: string, nodeData: StoryNode) => {
+    setStory(prevStory => {
+      const newStory = { ...prevStory, [nodeKey]: nodeData };
+      
+      // If cache too big, remove oldest (keep most recent)
+      const keys = Object.keys(newStory);
+      if (keys.length > MAX_CACHE_SIZE) {
+        // Keep only the most recent nodes
+        const toKeep = keys.slice(-MAX_CACHE_SIZE);
+        const cleaned: Record<string, StoryNode> = {};
+        toKeep.forEach(key => {
+          cleaned[key] = newStory[key];
+        });
+        console.log(`🧹 Cache limit reached, removed ${keys.length - MAX_CACHE_SIZE} old nodes`);
+        return cleaned;
+      }
+      return newStory;
+    });
+  }, []);
+
+  // Helper function to prefetch a node in the background
+  const prefetchNode = useCallback(async (nodeKey: string) => {
+    // Don't prefetch if already cached
+    if (story[nodeKey]) {
+      return;
+    }
+
+    try {
+      const userEmail = getUserEmail();
+      const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
+        headers: userEmail ? { 'user-email': userEmail } : {}
+      });
+      
+      if (nodeResponse.ok) {
+        const nodeData = await nodeResponse.json();
+        const prefetchedNode: StoryNode = {
+          id: nodeData.node_key,
+          text: nodeData.text_md,
+          choices: (nodeData.choices || []).map((choice: any) => ({
+            label: choice.label,
+            goto: choice.to_node_key,
+            match: choice.match
+          })),
+          check: nodeData.dice_check,
+          image: nodeData.image_url,
+          video: nodeData.video_url,
+          backgroundImage: undefined,
+          audio: nodeData.audio_url,
+          choicesAudio: nodeData.choices_audio_url
+        };
+        
+        addNodeToCache(nodeData.node_key, prefetchedNode);
+        console.log('✅ Prefetched node:', nodeKey);
+      }
+    } catch (err) {
+      // Silently fail - prefetch is optional
+      console.log('Prefetch failed for', nodeKey);
+    }
+  }, [storyId, story, addNodeToCache]);
+
   // Load story by ID
   useEffect(() => {
     if (!storyId) {
@@ -1019,6 +1080,18 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
         // Store the start node key for reset functionality
         setStartNodeKey(nodeData.node_key || nodeKeyFromUrl || '1');
         setLoading(false);
+        
+        // Prefetch nodes linked from the first node to make story feel fast from the start
+        if (nodeData.choices && nodeData.choices.length > 0) {
+          console.log('🚀 Prefetching initial nodes for faster navigation...');
+          nodeData.choices.forEach((choice: any) => {
+            const targetNode = choice.to_node_key || choice.goto;
+            if (targetNode) {
+              // Prefetch in background (doesn't block initial load)
+              prefetchNode(targetNode);
+            }
+          });
+        }
       } catch (error: any) {
         console.error('Failed to load story:', error);
         const errorMessage = error?.message || String(error) || 'Ukendt fejl opstod';
@@ -1027,7 +1100,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
       }
     };
     loadStory();
-  }, [storyId, stopSpeak, stopVoiceListening, router, nodeKeyFromUrl, nodeKeyFromParams]);
+  }, [storyId, stopSpeak, stopVoiceListening, router, nodeKeyFromUrl, nodeKeyFromParams, prefetchNode]);
 
   // --- Save/Load ---
   const saveGame = useCallback(async (storyId: string, id: string, s: GameStats) => {
@@ -1107,67 +1180,6 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
     setShowDiceRollButton(true);
     setPendingDiceRoll(null);
   }, [currentId, passage]);
-
-  // Helper function to add node to cache with size limit
-  const addNodeToCache = useCallback((nodeKey: string, nodeData: StoryNode) => {
-    setStory(prevStory => {
-      const newStory = { ...prevStory, [nodeKey]: nodeData };
-      
-      // If cache too big, remove oldest (keep most recent)
-      const keys = Object.keys(newStory);
-      if (keys.length > MAX_CACHE_SIZE) {
-        // Keep only the most recent nodes
-        const toKeep = keys.slice(-MAX_CACHE_SIZE);
-        const cleaned: Record<string, StoryNode> = {};
-        toKeep.forEach(key => {
-          cleaned[key] = newStory[key];
-        });
-        console.log(`🧹 Cache limit reached, removed ${keys.length - MAX_CACHE_SIZE} old nodes`);
-        return cleaned;
-      }
-      return newStory;
-    });
-  }, []);
-
-  // Helper function to prefetch a node in the background
-  const prefetchNode = useCallback(async (nodeKey: string) => {
-    // Don't prefetch if already cached
-    if (story[nodeKey]) {
-      return;
-    }
-
-    try {
-      const userEmail = getUserEmail();
-      const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
-        headers: userEmail ? { 'user-email': userEmail } : {}
-      });
-      
-      if (nodeResponse.ok) {
-        const nodeData = await nodeResponse.json();
-        const prefetchedNode: StoryNode = {
-          id: nodeData.node_key,
-          text: nodeData.text_md,
-          choices: (nodeData.choices || []).map((choice: any) => ({
-            label: choice.label,
-            goto: choice.to_node_key,
-            match: choice.match
-          })),
-          check: nodeData.dice_check,
-          image: nodeData.image_url,
-          video: nodeData.video_url,
-          backgroundImage: undefined,
-          audio: nodeData.audio_url,
-          choicesAudio: nodeData.choices_audio_url
-        };
-        
-        addNodeToCache(nodeData.node_key, prefetchedNode);
-        console.log('✅ Prefetched node:', nodeKey);
-      }
-    } catch (err) {
-      // Silently fail - prefetch is optional
-      console.log('Prefetch failed for', nodeKey);
-    }
-  }, [storyId, story, addNodeToCache]);
 
   const goTo = useCallback(async (id: string) => {
     console.log('🚀 goTo called with ID:', id);
