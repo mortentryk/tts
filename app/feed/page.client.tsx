@@ -12,11 +12,16 @@ type ListResponse = {
   nextCursor: string | null;
 };
 
-export default function FeedPageClient() {
+interface FeedPageClientProps {
+  initialPosts?: SocialPost[];
+  initialNextCursor?: string | null;
+}
+
+export default function FeedPageClient({ initialPosts = [], initialNextCursor = null }: FeedPageClientProps) {
   const router = useRouter();
-  const [posts, setPosts] = useState<SocialPost[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState<SocialPost[]>(initialPosts);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -26,7 +31,10 @@ export default function FeedPageClient() {
   const hasMore = useMemo(() => Boolean(nextCursor), [nextCursor]);
 
   useEffect(() => {
-    fetchPosts();
+    // Only fetch if we don't have initial posts
+    if (initialPosts.length === 0) {
+      fetchPosts();
+    }
     
     const checkAuth = async () => {
       const user = await getCurrentUser();
@@ -43,7 +51,7 @@ export default function FeedPageClient() {
         subscription.unsubscribe();
       }
     };
-  }, []);
+  }, [initialPosts.length]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasMore || loadingMore) return;
