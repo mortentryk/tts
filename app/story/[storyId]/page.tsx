@@ -443,6 +443,7 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
   const [storyError, setStoryError] = useState<string | null>(null);
   const [storyMetadata, setStoryMetadata] = useState<{ title?: string; description?: string; cover_image_url?: string } | null>(null);
   const [startNodeKey, setStartNodeKey] = useState<string>('1');
+  const MAX_CACHE_SIZE = 25; // Limit cache to prevent memory bloat
   
   // Audio management
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -1107,6 +1108,67 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
     setPendingDiceRoll(null);
   }, [currentId, passage]);
 
+  // Helper function to add node to cache with size limit
+  const addNodeToCache = useCallback((nodeKey: string, nodeData: StoryNode) => {
+    setStory(prevStory => {
+      const newStory = { ...prevStory, [nodeKey]: nodeData };
+      
+      // If cache too big, remove oldest (keep most recent)
+      const keys = Object.keys(newStory);
+      if (keys.length > MAX_CACHE_SIZE) {
+        // Keep only the most recent nodes
+        const toKeep = keys.slice(-MAX_CACHE_SIZE);
+        const cleaned: Record<string, StoryNode> = {};
+        toKeep.forEach(key => {
+          cleaned[key] = newStory[key];
+        });
+        console.log(`🧹 Cache limit reached, removed ${keys.length - MAX_CACHE_SIZE} old nodes`);
+        return cleaned;
+      }
+      return newStory;
+    });
+  }, []);
+
+  // Helper function to prefetch a node in the background
+  const prefetchNode = useCallback(async (nodeKey: string) => {
+    // Don't prefetch if already cached
+    if (story[nodeKey]) {
+      return;
+    }
+
+    try {
+      const userEmail = getUserEmail();
+      const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
+        headers: userEmail ? { 'user-email': userEmail } : {}
+      });
+      
+      if (nodeResponse.ok) {
+        const nodeData = await nodeResponse.json();
+        const prefetchedNode: StoryNode = {
+          id: nodeData.node_key,
+          text: nodeData.text_md,
+          choices: (nodeData.choices || []).map((choice: any) => ({
+            label: choice.label,
+            goto: choice.to_node_key,
+            match: choice.match
+          })),
+          check: nodeData.dice_check,
+          image: nodeData.image_url,
+          video: nodeData.video_url,
+          backgroundImage: undefined,
+          audio: nodeData.audio_url,
+          choicesAudio: nodeData.choices_audio_url
+        };
+        
+        addNodeToCache(nodeData.node_key, prefetchedNode);
+        console.log('✅ Prefetched node:', nodeKey);
+      }
+    } catch (err) {
+      // Silently fail - prefetch is optional
+      console.log('Prefetch failed for', nodeKey);
+    }
+  }, [storyId, story, addNodeToCache]);
+
   const goTo = useCallback(async (id: string) => {
     console.log('🚀 goTo called with ID:', id);
     const isSameNode = id === currentId;
@@ -1130,8 +1192,32 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
     isTTSRunningRef.current = false;
     voiceMatchedRef.current = true;
     
+    // ✅ CHECK CACHE FIRST - if node already loaded, use it immediately!
+    if (story[id]) {
+      console.log('✅ Node already cached, using cached version (instant navigation)');
+      lastAutoReadSceneIdRef.current = null;
+      setCurrentId(id);
+      
+      // Update URL
+      const newUrl = `/story/${encodeURIComponent(storyId)}/${encodeURIComponent(id)}`;
+      router.push(newUrl, { scroll: false });
+      
+      // Prefetch next nodes in background (don't await)
+      const cachedNode = story[id];
+      if (cachedNode.choices && cachedNode.choices.length > 0) {
+        cachedNode.choices.forEach((choice: any) => {
+          const targetNode = choice.goto || choice.to_node_key;
+          if (targetNode && !story[targetNode]) {
+            prefetchNode(targetNode);
+          }
+        });
+      }
+      
+      return; // Skip API call - instant navigation!
+    }
+    
     try {
-      // Load the new node from API
+      // Load the new node from API (only if not cached)
       const userEmail = getUserEmail();
       const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${id}`, {
         headers: userEmail ? { 'user-email': userEmail } : {}
@@ -1173,10 +1259,8 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
         image: newNode.image
       });
       
-      setStory(prevStory => ({
-        ...prevStory,
-        [nodeData.node_key]: newNode
-      }));
+      // Add to cache (with size limit)
+      addNodeToCache(nodeData.node_key, newNode);
       
       // Always clear lastAutoReadSceneIdRef when navigating to allow auto-read to trigger for new node
       console.log('🚀 Clearing lastAutoReadSceneIdRef before navigation, was:', lastAutoReadSceneIdRef.current, '-> null');
@@ -1187,13 +1271,24 @@ export default function Game({ params }: { params: Promise<{ storyId: string; no
       const newUrl = `/story/${encodeURIComponent(storyId)}/${encodeURIComponent(id)}`;
       router.push(newUrl, { scroll: false });
       
+      // Prefetch next nodes in background (don't await - non-blocking)
+      if (nodeData.choices && nodeData.choices.length > 0) {
+        nodeData.choices.forEach((choice: any) => {
+          const targetNode = choice.to_node_key || choice.goto;
+          if (targetNode && !story[targetNode]) {
+            // Prefetch in background (doesn't block navigation)
+            prefetchNode(targetNode);
+          }
+        });
+      }
+      
       console.log('✅ Navigation completed to:', id);
     } catch (error) {
       console.error('Failed to load node:', error);
     } finally {
       autoPlayActionInFlightRef.current = false;
     }
-  }, [stopSpeak, stopVoiceListening, storyId, currentId]);
+  }, [stopSpeak, stopVoiceListening, storyId, currentId, story, addNodeToCache, prefetchNode, router]);
 
   // Handle choice selection
   const handleChoice = useCallback((choice: any) => {

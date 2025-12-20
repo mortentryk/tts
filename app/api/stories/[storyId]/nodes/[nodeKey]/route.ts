@@ -42,12 +42,23 @@ export async function GET(
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
-    // Get the story node
-    const { data: node, error: nodeError } = await supabase
+    // Get the story node with choices in a single query (faster than 3 separate queries)
+    const { data: nodeWithChoices, error: nodeError } = await supabase
       .from('story_nodes')
-      .select('*')
+      .select(`
+        *,
+        story_choices (
+          label,
+          to_node_key,
+          conditions,
+          effect,
+          sort_index,
+          match
+        )
+      `)
       .eq('story_id', story.id)
       .eq('node_key', nodeKey)
+      .order('sort_index', { foreignTable: 'story_choices' })
       .single();
 
     if (nodeError) {
@@ -55,21 +66,22 @@ export async function GET(
       return NextResponse.json({ error: 'Node not found' }, { status: 404 });
     }
 
-    // Get choices for this node
-    const { data: choices, error: choicesError } = await supabase
-      .from('story_choices')
-      .select('*')
-      .eq('story_id', story.id)
-      .eq('from_node_key', nodeKey)
-      .order('sort_index');
+    // Extract choices from the joined result
+    const choices = (nodeWithChoices.story_choices || []).map((choice: any) => ({
+      label: choice.label,
+      to_node_key: choice.to_node_key,
+      conditions: choice.conditions,
+      effect: choice.effect,
+      sort_index: choice.sort_index,
+      match: choice.match
+    }));
 
-    if (choicesError) {
-      console.error('❌ Choices fetch error:', choicesError);
-    }
+    // Remove the nested story_choices from the main node object
+    const { story_choices, ...node } = nodeWithChoices;
 
     const result = {
       ...node,
-      choices: choices || []
+      choices: choices
     };
 
     console.log('✅ Node loaded:', nodeKey, 'with', choices?.length || 0, 'choices');
