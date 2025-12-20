@@ -451,7 +451,7 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
   const [story, setStory] = useState<Record<string, StoryNode>>(
     initialNode ? { [initialNode.id]: initialNode } : {}
   );
-  const [loading, setLoading] = useState(!initialNode);
+  const [loading, setLoading] = useState(false);
   const [storyError, setStoryError] = useState<string | null>(null);
   const [storyMetadata, setStoryMetadata] = useState<{ title?: string; description?: string; cover_image_url?: string } | null>(
     initialStoryMetadata || null
@@ -2055,17 +2055,6 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
   }, [stopSpeak, stopVoiceListening]);
 
   // --- UI ---
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-dungeon-text">Indlæser historie...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (storyError) {
     return (
       <div className="min-h-screen bg-dungeon-bg text-white flex items-center justify-center">
