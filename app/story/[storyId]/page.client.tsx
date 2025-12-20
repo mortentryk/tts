@@ -961,7 +961,20 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
     if (initialNode && initialStoryMetadata) {
       console.log('✅ Using initial server-rendered data');
       setLoading(false);
+      // Set the initial node in the story cache
+      if (initialNode) {
+        setStory({ [initialNode.id]: initialNode });
+        setCurrentId(initialNode.id);
+        setStartNodeKey(initialNode.id);
+      }
       return;
+    }
+    
+    // If we have metadata but no node, we still need to fetch the first node
+    if (initialStoryMetadata && !initialNode) {
+      console.log('✅ Using initial metadata, fetching first node');
+      setStoryMetadata(initialStoryMetadata);
+      // Continue to fetch the first node below
     }
     
     const loadStory = async () => {

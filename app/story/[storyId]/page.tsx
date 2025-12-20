@@ -59,34 +59,16 @@ async function getStoryData(storyId: string) {
     return null;
     }
 
-    // Get first node (default to node_key "1")
-    const { data: firstNode, error: nodeError } = await supabaseAdmin
-      .from('story_nodes')
-      .select(`
-        node_key,
-        text_md,
-        image_url,
-        video_url,
-        story_choices (
-          label,
-          to_node_key,
-          sort_index
-        )
-      `)
-      .eq('story_id', storyBySlug.id)
-      .eq('node_key', '1')
-      .order('sort_index', { foreignTable: 'story_choices' })
-      .single();
-
-    if (nodeError || !firstNode) {
-      // If node "1" doesn't exist, try to get the first node by sort_index
-      const { data: firstNodeBySort } = await supabaseAdmin
+    // Get first node - try node_key "1" first, then first by sort_index
+    // Use try-catch to handle any query errors gracefully
+    let firstNodeData = null;
+    
+    try {
+      // Try node_key "1" first
+      const { data: nodeByKey, error: nodeKeyError } = await supabaseAdmin
         .from('story_nodes')
         .select(`
-          node_key,
-          text_md,
-          image_url,
-          video_url,
+          *,
           story_choices (
             label,
             to_node_key,
@@ -94,45 +76,71 @@ async function getStoryData(storyId: string) {
           )
         `)
         .eq('story_id', storyBySlug.id)
-        .order('sort_index', { ascending: true })
+        .eq('node_key', '1')
         .order('sort_index', { foreignTable: 'story_choices', ascending: true })
-        .limit(1)
         .single();
 
-      if (firstNodeBySort) {
-        return {
-          story: storyBySlug,
-          firstNode: {
-            node_key: firstNodeBySort.node_key,
-            text_md: firstNodeBySort.text_md,
-            image_url: firstNodeBySort.image_url,
-            video_url: firstNodeBySort.video_url,
-            choices: (firstNodeBySort.story_choices || []).map((choice: any) => ({
-            label: choice.label,
-              to_node_key: choice.to_node_key,
-            })),
-          },
-        };
+      if (!nodeKeyError && nodeByKey) {
+        firstNodeData = nodeByKey;
+      } else {
+        // If node "1" doesn't exist, get the first node by sort_index
+        const { data: nodesBySort, error: sortError } = await supabaseAdmin
+          .from('story_nodes')
+          .select(`
+            *,
+            story_choices (
+              label,
+              to_node_key,
+              sort_index
+            )
+          `)
+          .eq('story_id', storyBySlug.id)
+          .order('sort_index', { ascending: true })
+          .order('sort_index', { foreignTable: 'story_choices', ascending: true })
+          .limit(1);
+
+        if (!sortError && nodesBySort && nodesBySort.length > 0) {
+          firstNodeData = nodesBySort[0];
+        } else {
+          // Log but don't fail - client will fetch via API
+          console.warn('⚠️ Could not load first node server-side for story:', storyBySlug.id);
+          console.warn('   Node key "1" error:', nodeKeyError?.message);
+          console.warn('   Sort query error:', sortError?.message);
+          console.warn('   Client will fetch via API route');
+        }
       }
-      // Return story metadata even if no nodes found
+    } catch (nodeQueryError) {
+      // Catch any unexpected errors in node query
+      console.warn('⚠️ Error querying nodes (non-fatal):', nodeQueryError);
+      // Continue - client will fetch via API
+    }
+
+    // Build response
+    if (firstNodeData) {
+      // Extract choices from nested structure
+      const choices = (firstNodeData.story_choices || []).map((choice: any) => ({
+        label: choice.label,
+        to_node_key: choice.to_node_key,
+      }));
+
       return {
         story: storyBySlug,
-        firstNode: null,
+        firstNode: {
+          node_key: firstNodeData.node_key,
+          text_md: firstNodeData.text_md || '',
+          image_url: firstNodeData.image_url || null,
+          video_url: firstNodeData.video_url || null,
+          choices: choices,
+        },
       };
     }
 
+    // Return story metadata even if no nodes found
+    // The client component will handle loading the first node via API
+    console.warn('⚠️ No nodes found for story, returning metadata only:', storyBySlug.id);
     return {
       story: storyBySlug,
-      firstNode: {
-        node_key: firstNode.node_key,
-        text_md: firstNode.text_md,
-        image_url: firstNode.image_url,
-        video_url: firstNode.video_url,
-        choices: (firstNode.story_choices || []).map((choice: any) => ({
-          label: choice.label,
-          to_node_key: choice.to_node_key,
-        })),
-      },
+      firstNode: null,
     };
     } catch (error) {
     console.error('Error fetching story data:', error);
