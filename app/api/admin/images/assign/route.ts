@@ -103,13 +103,14 @@ export async function POST(request: NextRequest) {
       assignment,
     });
 
-  } catch (error) {
-    console.error('❌ Image assignment error:', error);
-    return NextResponse.json(
-      { error: `Failed to assign image: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Image assignment error:', error);
+      return NextResponse.json(
+        { error: `Failed to assign image: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // DELETE - Remove image assignment
