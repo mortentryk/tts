@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CreateSocialPostInput, SocialPost } from '@/types/social';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { getServerUser } from '@/lib/authServer';
+import { withRateLimit } from '@/lib/rateLimit';
 
 type ListResponse = {
   data: SocialPost[];
@@ -184,29 +185,34 @@ function getMockPosts(limit: number, cursor: string | null) {
 }
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const limit = Math.min(Number(searchParams.get('limit')) || 6, 30);
-  const cursor = searchParams.get('cursor');
+  // Rate limit: 100 requests per minute
+  return withRateLimit(req, 100, 60000, async () => {
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(Number(searchParams.get('limit')) || 6, 30);
+    const cursor = searchParams.get('cursor');
 
-  // Try Supabase first, fallback to mock
-  const supabaseResult = await getSupabasePosts(limit, cursor);
-  if (supabaseResult) {
-    return NextResponse.json(supabaseResult);
-  }
+    // Try Supabase first, fallback to mock
+    const supabaseResult = await getSupabasePosts(limit, cursor);
+    if (supabaseResult) {
+      return NextResponse.json(supabaseResult);
+    }
 
-  // Initialize mock posts if empty
-  if (mockPosts.length === 0) {
-    const starterPosts = await loadStarterPostsFromStories();
-    mockPosts = starterPosts.length > 0 ? starterPosts : MOCK_DATA;
-  }
+    // Initialize mock posts if empty
+    if (mockPosts.length === 0) {
+      const starterPosts = await loadStarterPostsFromStories();
+      mockPosts = starterPosts.length > 0 ? starterPosts : MOCK_DATA;
+    }
 
-  // Fallback to mock data
-  const mockResult = getMockPosts(limit, cursor);
-  return NextResponse.json(mockResult);
+    // Fallback to mock data
+    const mockResult = getMockPosts(limit, cursor);
+    return NextResponse.json(mockResult);
+  });
 }
 
 export async function POST(req: NextRequest) {
-  const payload = (await req.json()) as Partial<CreateSocialPostInput>;
+  // Rate limit: 20 requests per minute (stricter for write operations)
+  return withRateLimit(req, 20, 60000, async () => {
+    const payload = (await req.json()) as Partial<CreateSocialPostInput>;
 
   if (!payload.title || !payload.caption || !payload.media_url || !payload.media_type) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -275,16 +281,19 @@ export async function POST(req: NextRequest) {
       author: authUser?.email || null,
     };
 
-    mockPosts = [newPost, ...mockPosts];
-    return NextResponse.json(newPost, { status: 201 });
-  }
+      mockPosts = [newPost, ...mockPosts];
+      return NextResponse.json(newPost, { status: 201 });
+    }
+  });
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = (await req.json()) as { id?: string; delta?: number };
-  if (!body.id) {
-    return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-  }
+  // Rate limit: 30 requests per minute
+  return withRateLimit(req, 30, 60000, async () => {
+    const body = (await req.json()) as { id?: string; delta?: number };
+    if (!body.id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
 
   const delta = typeof body.delta === 'number' ? body.delta : 1;
 
@@ -335,20 +344,23 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const nextLikes = Math.max(0, (mockPosts[idx].likes || 0) + delta);
-    mockPosts[idx] = { ...mockPosts[idx], likes: nextLikes };
+      const nextLikes = Math.max(0, (mockPosts[idx].likes || 0) + delta);
+      mockPosts[idx] = { ...mockPosts[idx], likes: nextLikes };
 
-    return NextResponse.json(mockPosts[idx]);
-  }
+      return NextResponse.json(mockPosts[idx]);
+    }
+  });
 }
 
 export async function DELETE(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get('id');
+  // Rate limit: 20 requests per minute (stricter for write operations)
+  return withRateLimit(req, 20, 60000, async () => {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
 
-  if (!id) {
-    return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-  }
+    if (!id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
 
   const authUser = await getServerUser();
 
@@ -391,7 +403,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    mockPosts = mockPosts.filter((p) => p.id !== id);
-    return NextResponse.json({ success: true });
-  }
+      mockPosts = mockPosts.filter((p) => p.id !== id);
+      return NextResponse.json({ success: true });
+    }
+  });
 }

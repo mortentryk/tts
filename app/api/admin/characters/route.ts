@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
+import { characterSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 // GET - List characters for a story
 export async function GET(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { searchParams } = new URL(request.url);
     const storySlug = searchParams.get('storySlug');
 
@@ -44,33 +47,35 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ characters });
 
-  } catch (error) {
-    console.error('❌ Characters fetch error:', error);
-    return NextResponse.json(
-      { error: `Failed to fetch characters: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Characters fetch error:', error);
+      return NextResponse.json(
+        { error: `Failed to fetch characters: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // POST - Create a new character
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
+    
+    // Validate request body
+    const validation = safeValidateBody(characterSchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
+    }
+    
     const { 
       storySlug, 
       name, 
       description, 
       referenceImageUrl, 
       appearancePrompt 
-    } = body;
-
-    if (!storySlug || !name) {
-      return NextResponse.json(
-        { error: 'Missing required fields: storySlug, name' },
-        { status: 400 }
-      );
-    }
+    } = validation.data;
 
     // Get story ID
     const { data: story, error: storyError } = await supabaseAdmin
@@ -111,11 +116,12 @@ export async function POST(request: NextRequest) {
       character,
     });
 
-  } catch (error) {
-    console.error('❌ Character creation error:', error);
-    return NextResponse.json(
-      { error: `Failed to create character: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Character creation error:', error);
+      return NextResponse.json(
+        { error: `Failed to create character: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

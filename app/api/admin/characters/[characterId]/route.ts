@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
 
 // PUT - Update a character
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ characterId: string }> }
 ) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { characterId } = await params;
     const body = await request.json();
     const { 
@@ -49,13 +51,14 @@ export async function PUT(
       character,
     });
 
-  } catch (error) {
-    console.error('❌ Character update error:', error);
-    return NextResponse.json(
-      { error: `Failed to update character: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Character update error:', error);
+      return NextResponse.json(
+        { error: `Failed to update character: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // DELETE - Delete a character
@@ -63,7 +66,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ characterId: string }> }
 ) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { characterId } = await params;
 
     // Delete character (cascades to assignments)
@@ -84,11 +88,12 @@ export async function DELETE(
       message: 'Character deleted successfully',
     });
 
-  } catch (error) {
-    console.error('❌ Character deletion error:', error);
-    return NextResponse.json(
-      { error: `Failed to delete character: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Character deletion error:', error);
+      return NextResponse.json(
+        { error: `Failed to delete character: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

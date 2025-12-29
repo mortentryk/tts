@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { canUserAccessStory } from '@/lib/purchaseVerification';
+import { withRateLimit } from '@/lib/rateLimit';
+import { getCache, setCache } from '@/lib/cache';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ storyId: string }> }
 ) {
-  try {
-    const { storyId: rawStoryId } = await params;
+  // Rate limit: 100 requests per minute
+  return withRateLimit(request, 100, 60000, async () => {
+    try {
+      const { storyId: rawStoryId } = await params;
     // Decode URL-encoded storyId (handles %20 for spaces, etc.)
     let storyId: string;
     try {
@@ -152,6 +156,25 @@ export async function GET(
     // Check if nodes should be included (default: true for backward compatibility)
     const includeNodes = request.nextUrl.searchParams.get('includeNodes') !== 'false';
     
+    // Build cache key based on story ID and whether nodes are included
+    const cacheKey = includeNodes 
+      ? `story:${story.id}:nodes`
+      : `story:${story.id}`;
+    
+    // Try to get from cache first (only for published stories)
+    if (story.is_published) {
+      const cached = await getCache<any>(cacheKey, 'api');
+      if (cached !== null) {
+        console.log('✅ Returning cached story:', story.title);
+        return NextResponse.json(cached, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=120',
+            'X-Cache': 'HIT',
+          }
+        });
+      }
+    }
+    
     let nodes: any[] = [];
     if (includeNodes) {
       // Get story nodes
@@ -175,17 +198,24 @@ export async function GET(
       console.log('✅ Story metadata loaded:', story.title, '(nodes excluded)');
     }
     
-    // Add cache-control headers to prevent stale data
+    // Build response data
     const responseData: any = { ...story };
     if (includeNodes) {
       responseData.nodes = nodes;
     }
     
+    // Cache the result for 10 minutes (longer than story list since individual stories change less frequently)
+    if (story.is_published) {
+      await setCache(cacheKey, responseData, { 
+        ttl: 600, // 10 minutes
+        prefix: 'api' 
+      });
+    }
+    
     return NextResponse.json(responseData, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
+        'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=120',
+        'X-Cache': 'MISS',
       }
     });
 
@@ -207,5 +237,6 @@ export async function GET(
       error: 'Internal server error',
       message: error?.message || 'An unexpected error occurred while loading the story'
     }, { status: 500 });
-  }
+    }
+  });
 }

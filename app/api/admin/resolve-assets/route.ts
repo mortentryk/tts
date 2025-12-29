@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../lib/supabase';
 import { getCloudinaryUrl, parseAssetReference } from '../../../../lib/cloudinary';
+import { withAdminAuth } from '@/lib/middleware';
 
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
     const { storySlug } = body;
 
@@ -110,11 +112,12 @@ export async function POST(request: NextRequest) {
       results,
     });
 
-  } catch (error) {
-    console.error('❌ Asset resolution error:', error);
-    return NextResponse.json(
-      { error: `Asset resolution failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Asset resolution error:', error);
+      return NextResponse.json(
+        { error: `Asset resolution failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

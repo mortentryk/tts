@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
+import { journeySchema, journeyUpdateSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 // GET - List all journey stories or filter by story
 export async function GET(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { searchParams } = new URL(request.url);
     const storySlug = searchParams.get('storySlug');
     const storyId = searchParams.get('storyId');
@@ -47,19 +50,28 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(journeys || []);
-  } catch (error) {
-    console.error('Error in GET /api/admin/journey:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('Error in GET /api/admin/journey:', error);
+      return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // POST - Create a new journey story
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
+    
+    // Validate request body
+    const validation = safeValidateBody(journeySchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
+    }
+    
     const {
       storySlug,
       nodeKey,
@@ -67,14 +79,7 @@ export async function POST(request: NextRequest) {
       journeyText,
       sequenceNumber,
       durationSeconds = 5,
-    } = body;
-
-    if (!storySlug || !nodeKey || !journeyTitle || !journeyText) {
-      return NextResponse.json(
-        { error: 'Missing required fields: storySlug, nodeKey, journeyTitle, journeyText' },
-        { status: 400 }
-      );
-    }
+    } = validation.data;
 
     // If no sequence number provided, find the next available one
     let finalSequenceNumber = sequenceNumber;
@@ -130,18 +135,20 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(journey);
-  } catch (error) {
-    console.error('Error in POST /api/admin/journey:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('Error in POST /api/admin/journey:', error);
+      return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // PATCH - Update an existing journey story
 export async function PATCH(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
     const {
       journeyId,
@@ -197,18 +204,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     return NextResponse.json(journey);
-  } catch (error) {
-    console.error('Error in PATCH /api/admin/journey:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('Error in PATCH /api/admin/journey:', error);
+      return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // DELETE - Delete a journey story
 export async function DELETE(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { searchParams } = new URL(request.url);
     const journeyId = searchParams.get('journeyId');
 
@@ -233,12 +242,13 @@ export async function DELETE(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error in DELETE /api/admin/journey:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('Error in DELETE /api/admin/journey:', error);
+      return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      );
+    }
+  });
 }
 

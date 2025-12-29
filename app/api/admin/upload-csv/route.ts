@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isAssetReference } from '../../../../lib/cloudinary';
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/env';
+import { withAdminAuth } from '@/lib/middleware';
 
 // Initialize Supabase admin client using validated env config
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const formData = await request.formData();
     const file = formData.get('csv') as File;
     const storySlug = formData.get('storySlug') as string;
@@ -666,11 +668,12 @@ export async function POST(request: NextRequest) {
       }
     });
 
-  } catch (error) {
-    console.error('❌ CSV upload error:', error);
-    return NextResponse.json({ 
-      error: 'Failed to process CSV file',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
-  }
+    } catch (error) {
+      console.error('❌ CSV upload error:', error);
+      return NextResponse.json({ 
+        error: 'Failed to process CSV file',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 });
+    }
+  });
 }

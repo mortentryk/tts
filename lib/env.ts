@@ -1,17 +1,12 @@
 /**
- * Environment variable validation with fallback support
+ * Environment variable validation
  * Validates all required environment variables lazily (only when accessed)
  * Supports hydrating NEXT_PUBLIC_* variables from server-side counterparts
+ * SECURITY: No hardcoded secrets - all values must come from environment variables
  */
 
-// Legacy defaults for backward compatibility
-const LEGACY_DEFAULTS = {
-  NEXT_PUBLIC_SUPABASE_URL: 'https://ooyzdksmeglhocjlaouo.supabase.co',
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MzMzODksImV4cCI6MjA3NjIwOTM4OX0.DbgORlJkyBae_VIg0b6Pk-bSuzZ8vmb2hNHVnhE7wI8',
-};
-
-// Default service role key for fallback (matches legacy hardcoded value in admin API routes)
-const DEFAULT_SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDYzMzM4OSwiZXhwIjoyMDc2MjA5Mzg5fQ.97T-OTcCNBk0qrs-kdqoGQbhsFDyWCQ5Z_x4bbPPbTI';
+const isDevelopment = process.env.NODE_ENV === 'development';
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
 
 function getEnvVar(key: string, required: boolean = true, defaultValue?: string, fallbackKey?: string): string {
   // Detect if we're in client-side code (browser environment)
@@ -20,7 +15,6 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string,
   let value = process.env[key];
   
   // NEXT_PUBLIC_* variables are embedded by Next.js at build time
-  // For client-side safety, never throw errors for these - use fallbacks instead
   const isPublicVar = key.startsWith('NEXT_PUBLIC_');
   
   // If value is missing and we have a fallback key, try the fallback (only on server)
@@ -28,37 +22,36 @@ function getEnvVar(key: string, required: boolean = true, defaultValue?: string,
     value = process.env[fallbackKey];
   }
   
-  // If still missing, try legacy defaults for known keys
-  if (!value && LEGACY_DEFAULTS[key as keyof typeof LEGACY_DEFAULTS]) {
-    value = LEGACY_DEFAULTS[key as keyof typeof LEGACY_DEFAULTS];
-  }
-  
   if (required && !value) {
-    // For public variables, return empty string if missing (Next.js will embed the actual value at build time)
-    // This prevents client-side errors when the module is bundled
-    if (isPublicVar) {
+    // For public variables during build, return empty string (Next.js will embed actual value)
+    if (isPublicVar && (isBuildPhase || isClientSide)) {
       return defaultValue || '';
     }
     
     // For server-only variables in client-side code, return empty string (never throw)
-    // Server-only vars should never be accessed in client code, but we need to prevent crashes
     if (isClientSide) {
       return defaultValue || '';
     }
     
-    // For server-only variables, skip validation during build phase
-    const isCollectingPageData = process.env.NEXT_PHASE === 'phase-production-build';
-    
-    if (isCollectingPageData) {
-      // During build phase, return empty string to allow build to complete
+    // During build phase, allow empty for server vars (needed for static generation)
+    if (isBuildPhase) {
       return defaultValue || '';
     }
     
-    // At runtime on server, validate server-only env vars
-    throw new Error(
-      `Missing required environment variable: ${key}\n` +
-      `Please set ${key} in your .env.local file or environment variables.`
-    );
+    // In production, throw error for missing required variables
+    // In development, allow fallback to empty string
+    if (!isDevelopment) {
+      throw new Error(
+        `Missing required environment variable: ${key}\n` +
+        `Please set ${key} in your environment variables.\n` +
+        `This is a security requirement - hardcoded secrets are not allowed.`
+      );
+    }
+    
+    // Development mode: warn but allow empty string
+    if (isDevelopment && !defaultValue) {
+      console.warn(`⚠️  Missing environment variable: ${key} (required in production)`);
+    }
   }
   
   return value || defaultValue || '';
@@ -80,7 +73,7 @@ export const SUPABASE_ANON_KEY = getEnvVar(
   'SUPABASE_ANON_KEY' // Fallback to server-side SUPABASE_ANON_KEY if NEXT_PUBLIC_* is not set
 );
 
-export const SUPABASE_SERVICE_ROLE_KEY = getEnvVar('SUPABASE_SERVICE_ROLE_KEY', false, DEFAULT_SUPABASE_SERVICE_ROLE_KEY);
+export const SUPABASE_SERVICE_ROLE_KEY = getEnvVar('SUPABASE_SERVICE_ROLE_KEY', true);
 
 // Admin Authentication (optional - only required for admin routes)
 export const ADMIN_PASSWORD = getEnvVar('ADMIN_PASSWORD', false);
@@ -137,22 +130,26 @@ export const JWT_SECRET = getEnvVar('JWT_SECRET', false, generateJWTSecret());
  */
 export function validateEnv() {
   try {
-    // This will throw if any required vars are missing
+    // This will throw if any required vars are missing in production
     getEnvVar('NEXT_PUBLIC_SUPABASE_URL');
     getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-    getEnvVar('SUPABASE_SERVICE_ROLE_KEY', false, DEFAULT_SUPABASE_SERVICE_ROLE_KEY);
-    getEnvVar('ADMIN_PASSWORD', false);
+    getEnvVar('SUPABASE_SERVICE_ROLE_KEY');
     getEnvVar('CLOUDINARY_CLOUD_NAME');
     getEnvVar('CLOUDINARY_API_KEY');
     getEnvVar('CLOUDINARY_API_SECRET');
     
+    // Optional variables
+    getEnvVar('ADMIN_PASSWORD', false);
+    
     // JWT_SECRET is optional (has fallback), but warn if not set
     const jwtSecret = getEnvVar('JWT_SECRET', false, generateJWTSecret());
-    if (!process.env.JWT_SECRET) {
+    if (!process.env.JWT_SECRET && !isBuildPhase) {
       console.warn('⚠️  WARNING: JWT_SECRET not set. Using fallback. This should be set in production for security.');
     }
     
-    console.log('✅ All required environment variables are set');
+    if (!isBuildPhase) {
+      console.log('✅ Environment variables validated');
+    }
     return true;
   } catch (error: any) {
     console.error('❌ Environment validation failed:', error.message);

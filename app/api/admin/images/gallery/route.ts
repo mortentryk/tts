@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
+import { imageGallerySchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 // GET - Get image gallery for a story
 export async function GET(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { searchParams } = new URL(request.url);
     const storySlug = searchParams.get('storySlug');
     const search = searchParams.get('search');
@@ -103,19 +106,28 @@ export async function GET(request: NextRequest) {
       characters: characters || [],
     });
 
-  } catch (error) {
-    console.error('❌ Image gallery fetch error:', error);
-    return NextResponse.json(
-      { error: `Failed to fetch image gallery: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Image gallery fetch error:', error);
+      return NextResponse.json(
+        { error: `Failed to fetch image gallery: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // POST - Create new image entry
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
+    
+    // Validate request body
+    const validation = safeValidateBody(imageGallerySchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
+    }
+    
     const {
       storySlug,
       nodeKey,
@@ -129,14 +141,7 @@ export async function POST(request: NextRequest) {
       width,
       height,
       fileSize,
-    } = body;
-
-    if (!storySlug || !imageUrl) {
-      return NextResponse.json(
-        { error: 'Missing required fields: storySlug, imageUrl' },
-        { status: 400 }
-      );
-    }
+    } = validation.data;
 
     // Get story ID
     const { data: story, error: storyError } = await supabase
@@ -180,16 +185,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      image,
-    });
+      return NextResponse.json({
+        success: true,
+        image,
+      });
 
-  } catch (error) {
-    console.error('❌ Image creation error:', error);
-    return NextResponse.json(
-      { error: `Failed to create image: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Image creation error:', error);
+      return NextResponse.json(
+        { error: `Failed to create image: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

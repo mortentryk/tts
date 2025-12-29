@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
+import { characterAssignmentSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 // GET - Get character assignments for a story node
 export async function GET(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { searchParams } = new URL(request.url);
     const storySlug = searchParams.get('storySlug');
     const nodeKey = searchParams.get('nodeKey');
@@ -59,33 +62,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(assignments || []);
+      return NextResponse.json(assignments || []);
 
-  } catch (error) {
-    console.error('❌ Character assignments fetch error:', error);
-    return NextResponse.json(
-      { error: `Failed to fetch character assignments: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Character assignments fetch error:', error);
+      return NextResponse.json(
+        { error: `Failed to fetch character assignments: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }
 
 // POST - Create character assignments
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
+    
+    // Validate request body
+    const validation = safeValidateBody(characterAssignmentSchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
+    }
+    
     const { 
       storySlug, 
       nodeKey, 
       assignments 
-    } = body;
-
-    if (!storySlug || !nodeKey || !assignments) {
-      return NextResponse.json(
-        { error: 'Missing required fields: storySlug, nodeKey, assignments' },
-        { status: 400 }
-      );
-    }
+    } = validation.data;
 
     // Get story ID
     const { data: story, error: storyError } = await supabaseAdmin
@@ -146,11 +151,12 @@ export async function POST(request: NextRequest) {
       assignments: newAssignments,
     });
 
-  } catch (error) {
-    console.error('❌ Character assignment creation error:', error);
-    return NextResponse.json(
-      { error: `Failed to create character assignments: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Character assignment creation error:', error);
+      return NextResponse.json(
+        { error: `Failed to create character assignments: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

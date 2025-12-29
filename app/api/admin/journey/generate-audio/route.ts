@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadAudioToCloudinary } from '../../../../../lib/cloudinary';
 import { supabase } from '../../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
 import crypto from 'crypto';
 
 const ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
@@ -114,7 +115,8 @@ function concatenateAudioBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
 }
 
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const { journeyId } = await request.json();
 
     if (!journeyId) {
@@ -331,12 +333,13 @@ export async function POST(request: NextRequest) {
       }
     });
 
-  } catch (error) {
-    console.error('❌ Generate audio error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Generate audio error:', error);
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Internal server error' },
+        { status: 500 }
+      );
+    }
+  });
 }
 

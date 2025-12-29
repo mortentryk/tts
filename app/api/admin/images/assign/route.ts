@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
+import { imageAssignSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 // POST - Assign image to story node
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
-    const { storySlug, nodeKey, imageId } = body;
-
-    if (!storySlug || !nodeKey || !imageId) {
-      return NextResponse.json(
-        { error: 'Missing required fields: storySlug, nodeKey, imageId' },
-        { status: 400 }
-      );
+    
+    // Validate request body
+    const validation = safeValidateBody(imageAssignSchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
     }
+    
+    const { storySlug, nodeKey, imageId } = validation.data;
 
     // Get story ID
     const { data: story, error: storyError } = await supabase
@@ -177,11 +180,12 @@ export async function DELETE(request: NextRequest) {
       message: 'Image assignment removed',
     });
 
-  } catch (error) {
-    console.error('❌ Image assignment removal error:', error);
-    return NextResponse.json(
-      { error: `Failed to remove image assignment: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Image assignment removal error:', error);
+      return NextResponse.json(
+        { error: `Failed to remove image assignment: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

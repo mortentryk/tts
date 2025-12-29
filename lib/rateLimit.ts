@@ -1,75 +1,57 @@
 /**
- * Simple in-memory rate limiting
- * For production, consider using Redis or Upstash
+ * Redis-based rate limiting for serverless environments
+ * Works across all Vercel serverless instances using Upstash Redis
  */
 
 import { NextRequest } from 'next/server';
-
-interface RateLimitStore {
-  [key: string]: {
-    count: number;
-    resetTime: number;
-  };
-}
-
-const store: RateLimitStore = {};
+import { getRedisClient } from './redis';
 
 /**
- * Simple rate limiter
+ * Rate limiter using Redis
  * @param identifier - Unique identifier (IP address, user ID, etc.)
  * @param limit - Maximum number of requests
  * @param windowMs - Time window in milliseconds
- * @returns true if allowed, false if rate limited
+ * @returns Rate limit result
  */
-export function rateLimit(
+export async function rateLimit(
   identifier: string,
   limit: number,
   windowMs: number
-): { allowed: boolean; remaining: number; resetAt: number } {
-  const now = Date.now();
-  const key = identifier;
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  try {
+    const redis = getRedisClient();
+    const now = Date.now();
+    const windowSeconds = Math.ceil(windowMs / 1000);
+    const key = `ratelimit:${identifier}`;
+    const resetAt = now + windowMs;
 
-  // Clean up expired entries periodically
-  if (Math.random() < 0.01) {
-    // 1% chance to clean up
-    Object.keys(store).forEach((k) => {
-      if (store[k].resetTime < now) {
-        delete store[k];
-      }
-    });
-  }
+    // Use Redis INCR with expiration for atomic rate limiting
+    // This pattern ensures thread-safe rate limiting across all instances
+    const current = await redis.incr(key);
+    
+    // Set expiration on first request (when count is 1)
+    if (current === 1) {
+      await redis.expire(key, windowSeconds);
+    }
 
-  const record = store[key];
+    const remaining = Math.max(0, limit - current);
+    const allowed = current <= limit;
 
-  if (!record || record.resetTime < now) {
-    // New window or expired
-    store[key] = {
-      count: 1,
-      resetTime: now + windowMs,
+    return {
+      allowed,
+      remaining,
+      resetAt,
     };
+  } catch (error) {
+    // If Redis fails, allow the request (fail open)
+    // This prevents Redis outages from breaking the entire app
+    console.error('Rate limit Redis error:', error);
     return {
       allowed: true,
       remaining: limit - 1,
-      resetAt: now + windowMs,
+      resetAt: Date.now() + windowMs,
     };
   }
-
-  if (record.count >= limit) {
-    // Rate limited
-    return {
-      allowed: false,
-      remaining: 0,
-      resetAt: record.resetTime,
-    };
-  }
-
-  // Increment count
-  record.count++;
-  return {
-    allowed: true,
-    remaining: limit - record.count,
-    resetAt: record.resetTime,
-  };
 }
 
 /**
@@ -92,7 +74,7 @@ export async function withRateLimit(
   handler: () => Promise<Response>
 ): Promise<Response> {
   const ip = getClientIP(request);
-  const result = rateLimit(ip, limit, windowMs);
+  const result = await rateLimit(ip, limit, windowMs);
 
   if (!result.allowed) {
     return new Response(

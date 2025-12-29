@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe, getOrCreateCustomer } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase';
+import { oneClickCheckoutSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
+import { withRateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
-  try {
-    const { userEmail, storyId } = await request.json();
-
-    if (!userEmail || !storyId) {
-      return NextResponse.json(
-        { error: 'userEmail and storyId are required' },
-        { status: 400 }
-      );
+  // Rate limit: 10 requests per minute (strict for payment routes)
+  return withRateLimit(request, 10, 60000, async () => {
+    try {
+    const body = await request.json();
+    
+    // Validate request body
+    const validation = safeValidateBody(oneClickCheckoutSchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
     }
+    
+    const { userEmail, storyId } = validation.data;
 
     if (!stripe) {
       return NextResponse.json(
@@ -128,10 +133,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('One-click purchase error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Payment failed' },
-      { status: 500 }
-    );
-  }
+      return NextResponse.json(
+        { error: error.message || 'Payment failed' },
+        { status: 500 }
+      );
+    }
+  });
 }
 

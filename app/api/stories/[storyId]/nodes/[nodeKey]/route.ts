@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase';
 import { deleteCloudinaryAsset, extractPublicIdFromUrl } from '@/lib/cloudinary';
-
-// Initialize Supabase client for public access
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ooyzdksmeglhocjlaouo.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veXpka3NtZWdsaG9jamxhb3VvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2MzMzODksImV4cCI6MjA3NjIwOTM4OX0.DbgORlJkyBae_VIg0b6Pk-bSuzZ8vmb2hNHVnhE7wI8';
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { withRateLimit } from '@/lib/rateLimit';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ storyId: string; nodeKey: string }> }
 ) {
-  try {
+  // Rate limit: 100 requests per minute
+  return withRateLimit(request, 100, 60000, async () => {
+    try {
     const { storyId, nodeKey } = await params;
 
     // Try to get story by slug first
-    let { data: story, error: storyError } = await supabase
+    let { data: story, error: storyError } = await supabaseAdmin
       .from('stories')
       .select('id')
       .eq('slug', storyId)
@@ -26,7 +22,7 @@ export async function GET(
 
     // If not found by slug, try by id (UUID)
     if (storyError || !story) {
-      const result = await supabase
+      const result = await supabaseAdmin
         .from('stories')
         .select('id')
         .eq('id', storyId)
@@ -42,32 +38,50 @@ export async function GET(
       return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
-    // Get the story node with choices in a single query (faster than 3 separate queries)
-    const { data: nodeWithChoices, error: nodeError } = await supabase
+    // Get the story node (fetch separately to avoid relationship schema issues)
+    const { data: nodeData, error: nodeError } = await supabaseAdmin
       .from('story_nodes')
-      .select(`
-        *,
-        story_choices (
-          label,
-          to_node_key,
-          conditions,
-          effect,
-          sort_index,
-          match
-        )
-      `)
+      .select('*')
       .eq('story_id', story.id)
       .eq('node_key', nodeKey)
-      .order('sort_index', { foreignTable: 'story_choices' })
-      .single();
+      .maybeSingle(); // Use maybeSingle() instead of single() to avoid throwing on no rows
 
     if (nodeError) {
-      console.error('❌ Node not found:', nodeError);
-      return NextResponse.json({ error: 'Node not found' }, { status: 404 });
+      console.error('❌ Node query error:', nodeError);
+      console.error('   Story ID:', story.id);
+      console.error('   Node Key:', nodeKey);
+      return NextResponse.json({ error: 'Node not found', details: nodeError.message }, { status: 404 });
+    }
+    
+    if (!nodeData) {
+      console.error('❌ Node not found:', { storyId: story.id, nodeKey });
+      // Check if any nodes exist for this story
+      const { data: anyNodes } = await supabaseAdmin
+        .from('story_nodes')
+        .select('node_key, sort_index')
+        .eq('story_id', story.id)
+        .limit(5);
+      console.error('   Available nodes for this story:', anyNodes?.map(n => `${n.node_key} (sort: ${n.sort_index})`).join(', ') || 'none');
+      return NextResponse.json({ error: 'Node not found', availableNodes: anyNodes?.map(n => n.node_key) || [] }, { status: 404 });
     }
 
-    // Extract choices from the joined result
-    const choices = (nodeWithChoices.story_choices || []).map((choice: any) => ({
+    // Get choices separately (fetch separately to avoid relationship schema issues)
+    const { data: choicesData, error: choicesError } = await supabaseAdmin
+      .from('story_choices')
+      .select('label, to_node_key, conditions, effect, sort_index, match')
+      .eq('story_id', story.id)
+      .eq('from_node_key', nodeKey)
+      .order('sort_index', { ascending: true });
+
+    if (choicesError) {
+      console.error('❌ Choices query error:', choicesError);
+      console.error('   Story ID:', story.id);
+      console.error('   Node Key:', nodeKey);
+      // Continue without choices rather than failing completely
+    }
+
+    // Map choices to the expected format
+    const choices = (choicesData || []).map((choice: any) => ({
       label: choice.label,
       to_node_key: choice.to_node_key,
       conditions: choice.conditions,
@@ -76,8 +90,7 @@ export async function GET(
       match: choice.match
     }));
 
-    // Remove the nested story_choices from the main node object
-    const { story_choices, ...node } = nodeWithChoices;
+    const node = nodeData;
 
     const result = {
       ...node,
@@ -85,12 +98,18 @@ export async function GET(
     };
 
     console.log('✅ Node loaded:', nodeKey, 'with', choices?.length || 0, 'choices');
+    if (choices.length > 0) {
+      console.log('   Choices:', choices.map(c => `${c.label} -> ${c.to_node_key}`).join(', '));
+    } else {
+      console.log('   ⚠️ No choices found for node:', nodeKey);
+    }
     return NextResponse.json(result);
 
-  } catch (error) {
-    console.error('❌ API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+    } catch (error) {
+      console.error('❌ API error:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+  });
 }
 
 export async function PATCH(

@@ -525,6 +525,22 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
   // Priority: params > path > query param > default
   const nodeKeyFromUrl = nodeKeyFromParams || nodeKeyFromPath || searchParams?.get('node') || '1';
   const passage = story[currentId];
+  
+  // Debug: Log passage choices when rendering
+  useEffect(() => {
+    if (passage) {
+      console.log('🔍 Rendering passage:', {
+        id: passage.id,
+        hasChoices: !!passage.choices,
+        choicesCount: passage.choices?.length || 0,
+        choices: passage.choices,
+        hasCheck: !!passage.check,
+        check: passage.check
+      });
+    } else {
+      console.log('⚠️ No passage found for currentId:', currentId, 'Available keys:', Object.keys(story));
+    }
+  }, [passage, currentId, story]);
 
   const autoReadBlockingReason = useMemo(() => {
     if (!autoRead) return null;
@@ -991,24 +1007,16 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
         setSpeaking(false);
         isTTSRunningRef.current = false;
         
-        // Load story metadata and first node in parallel for faster initial load
-        console.log('📡 Fetching story metadata and first node in parallel');
+        // Load story metadata first
+        console.log('📡 Fetching story metadata');
         const userEmail = getUserEmail();
         const headers: HeadersInit = {};
         if (userEmail) {
           headers['user-email'] = userEmail;
         }
         
-        // Load node from URL or default to "1"
-        const nodeKey = nodeKeyFromUrl;
-        
-        // Fetch metadata and node in parallel
-        const [metadataResponse, nodeResponse] = await Promise.all([
-          fetch(`/api/stories/${storyId}?includeNodes=false`, { headers }),
-          fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
-            headers: userEmail ? { 'user-email': userEmail } : {}
-          })
-        ]);
+        // Fetch metadata first
+        const metadataResponse = await fetch(`/api/stories/${storyId}?includeNodes=true`, { headers });
         
         // Handle metadata response
         if (!metadataResponse.ok) {
@@ -1042,37 +1050,176 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
           throw new Error(errorMessage);
         }
         
-        // Handle node response
-        if (!nodeResponse.ok) {
-          let errorMessage = 'Story content not found';
-          try {
-            const errorData = await nodeResponse.json();
-            if (errorData.error) {
-              errorMessage = errorData.error;
-            }
-          } catch (e) {
-            if (nodeResponse.status === 404) {
-              errorMessage = 'Historie-node ikke fundet. Historien mangler muligvis indhold.';
-            } else {
-              errorMessage = `Kunne ikke indlæse historieindhold (${nodeResponse.status})`;
-            }
-          }
-          throw new Error(errorMessage);
-        }
-        
-        // Parse responses
+        // Parse story data
         const storyData = await metadataResponse.json();
-        const nodeData = await nodeResponse.json();
-        
         console.log('✅ Story metadata loaded:', storyData);
-        console.log('✅ Story node loaded:', nodeData);
         
-        // Store story metadata for SEO and display (can arrive slightly later)
+        // Store story metadata
         setStoryMetadata({
           title: storyData.title,
           description: storyData.description,
           cover_image_url: storyData.cover_image_url
         });
+        
+        // Determine which node to load
+        let nodeKey = nodeKeyFromUrl;
+        
+        // If we have nodes in the response, sort them by sort_index to get the actual first node
+        if (storyData.nodes && Array.isArray(storyData.nodes) && storyData.nodes.length > 0) {
+          // Sort nodes by sort_index to ensure we get the actual first node
+          const sortedNodes = [...storyData.nodes].sort((a: any, b: any) => {
+            const aIndex = a.sort_index ?? 999999;
+            const bIndex = b.sort_index ?? 999999;
+            return aIndex - bIndex;
+          });
+          
+          const firstNode = sortedNodes[0];
+          
+          // If trying to load "1" but it doesn't exist, use the first available node by sort_index
+          if (nodeKey === '1' && !storyData.nodes.find((n: any) => n.node_key === '1')) {
+            nodeKey = firstNode.node_key;
+            console.log('⚠️ Node "1" not found, using first node by sort_index:', nodeKey);
+          }
+          
+          // Store sorted nodes for fallback
+          storyData.nodes = sortedNodes;
+        }
+        
+        // Fetch the specific node
+        const nodeResponse = await fetch(`/api/stories/${storyId}/nodes/${nodeKey}`, {
+          headers: userEmail ? { 'user-email': userEmail } : {}
+        });
+        
+        // Handle node response
+        if (!nodeResponse.ok) {
+          // Read error response once (can only be read once)
+          let errorData: any = null;
+          try {
+            errorData = await nodeResponse.json();
+          } catch (e) {
+            // If we can't parse JSON, create a basic error object
+            errorData = { error: 'Unknown error' };
+          }
+          
+          // If node not found and we have nodes in storyData, try each one until we find one that works
+          if (nodeResponse.status === 404 && storyData.nodes && Array.isArray(storyData.nodes) && storyData.nodes.length > 0) {
+            console.log('⚠️ Requested node not found, trying available nodes:', storyData.nodes.map((n: any) => n.node_key));
+            
+            // Try each node in the array until one works
+            for (const node of storyData.nodes) {
+              if (!node.node_key) {
+                console.log(`⚠️ Skipping node without node_key:`, node);
+                continue;
+              }
+              
+              // Skip if it's the same node we already tried
+              if (node.node_key === nodeKey) {
+                console.log(`⚠️ Skipping already-tried node: ${node.node_key}`);
+                continue;
+              }
+              
+              console.log(`🔄 Trying node: ${node.node_key} (sort_index: ${node.sort_index ?? 'N/A'})`);
+              const fallbackResponse = await fetch(`/api/stories/${storyId}/nodes/${node.node_key}`, {
+                headers: userEmail ? { 'user-email': userEmail } : {}
+              });
+              
+              if (fallbackResponse.ok) {
+                const nodeData = await fallbackResponse.json();
+                console.log(`✅ Successfully loaded node: ${nodeData.node_key}`);
+                // Use the fallback node
+                const story = {
+                  [nodeData.node_key]: {
+                    id: nodeData.node_key,
+                    text: nodeData.text_md,
+                    choices: (nodeData.choices || []).map((choice: any) => ({
+                      label: choice.label,
+                      goto: choice.to_node_key,
+                      match: choice.match
+                    })),
+                    check: nodeData.dice_check,
+                    image: nodeData.image_url,
+                    video: nodeData.video_url,
+                    backgroundImage: undefined,
+                    audio: nodeData.audio_url,
+                    choicesAudio: nodeData.choices_audio_url
+                  }
+                };
+                
+                setStory(story as Record<string, StoryNode>);
+                setCurrentId(nodeData.node_key);
+                setStartNodeKey(nodeData.node_key);
+                setLoading(false);
+                return;
+              } else {
+                const errorText = await fallbackResponse.text();
+                console.log(`⚠️ Node ${node.node_key} failed (${fallbackResponse.status}):`, errorText.substring(0, 200));
+              }
+            }
+            
+            // If we've tried all nodes and none worked, check the error response for available nodes
+            console.log('⚠️ All nodes from array failed');
+            
+            // Try to get available nodes from the error response
+            if (errorData?.availableNodes && Array.isArray(errorData.availableNodes) && errorData.availableNodes.length > 0) {
+              console.log('🔄 Trying nodes from error response:', errorData.availableNodes);
+              for (const availableNodeKey of errorData.availableNodes) {
+                // Skip if we already tried this node
+                if (availableNodeKey === nodeKey || storyData.nodes.some((n: any) => n.node_key === availableNodeKey)) {
+                  continue;
+                }
+                
+                console.log(`🔄 Trying available node: ${availableNodeKey}`);
+                const availableNodeResponse = await fetch(`/api/stories/${storyId}/nodes/${availableNodeKey}`, {
+                  headers: userEmail ? { 'user-email': userEmail } : {}
+                });
+                
+                if (availableNodeResponse.ok) {
+                  const nodeData = await availableNodeResponse.json();
+                  console.log(`✅ Successfully loaded available node: ${nodeData.node_key}`);
+                  const story = {
+                    [nodeData.node_key]: {
+                      id: nodeData.node_key,
+                      text: nodeData.text_md,
+                      choices: (nodeData.choices || []).map((choice: any) => ({
+                        label: choice.label,
+                        goto: choice.to_node_key,
+                        match: choice.match
+                      })),
+                      check: nodeData.dice_check,
+                      image: nodeData.image_url,
+                      video: nodeData.video_url,
+                      backgroundImage: undefined,
+                      audio: nodeData.audio_url,
+                      choicesAudio: nodeData.choices_audio_url
+                    }
+                  };
+                  
+                  setStory(story as Record<string, StoryNode>);
+                  setCurrentId(nodeData.node_key);
+                  setStartNodeKey(nodeData.node_key);
+                  setLoading(false);
+                  return;
+                }
+              }
+            }
+          }
+          
+          // Final error message
+          let errorMessage = 'Story content not found';
+          if (errorData?.error) {
+            errorMessage = errorData.error;
+          } else if (nodeResponse.status === 404) {
+            errorMessage = 'Historie-node ikke fundet. Historien mangler muligvis indhold.';
+          } else {
+            errorMessage = `Kunne ikke indlæse historieindhold (${nodeResponse.status})`;
+          }
+          throw new Error(errorMessage);
+        }
+        
+        // Parse node response
+        const nodeData = await nodeResponse.json();
+        console.log('✅ Story node loaded:', nodeData);
+        console.log('   Choices in response:', nodeData.choices?.length || 0, nodeData.choices);
         
         console.log('🎬 Node media data:', {
           node_key: nodeData.node_key,
@@ -1083,15 +1230,19 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
         });
         
         // Convert to the format expected by the component
+        const mappedChoices = (nodeData.choices || []).map((choice: any) => ({
+          label: choice.label,
+          goto: choice.to_node_key,
+          match: choice.match
+        }));
+        
+        console.log('🔄 Mapped choices:', mappedChoices.length, mappedChoices);
+        
         const story = {
           [nodeData.node_key]: {
             id: nodeData.node_key,
             text: nodeData.text_md,
-            choices: (nodeData.choices || []).map((choice: any) => ({
-              label: choice.label,
-              goto: choice.to_node_key,
-              match: choice.match
-            })),
+            choices: mappedChoices,
             check: nodeData.dice_check,
             image: nodeData.image_url,
             video: nodeData.video_url,
@@ -1106,7 +1257,9 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
           has_video: !!story[nodeData.node_key].video,
           video: story[nodeData.node_key].video,
           has_image: !!story[nodeData.node_key].image,
-          image: story[nodeData.node_key].image
+          image: story[nodeData.node_key].image,
+          choices_count: story[nodeData.node_key].choices.length,
+          choices: story[nodeData.node_key].choices
         });
         
         setStory(story as Record<string, StoryNode>);
@@ -2285,7 +2438,7 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
           </div>
         )}
 
-        {(!passage?.check && passage?.choices) && (
+        {(!passage?.check && passage?.choices && passage.choices.length > 0) && (
           <div className="space-y-2 sm:space-y-3">
             {passage.choices.map((choice, i) => (
               <button
@@ -2296,6 +2449,13 @@ export default function Game({ params, initialStoryMetadata, initialNode }: Stor
                 {choice.label}
               </button>
             ))}
+          </div>
+        )}
+        
+        {/* Debug: Show if choices are missing */}
+        {!passage?.check && (!passage?.choices || passage.choices.length === 0) && (
+          <div className="text-yellow-400 text-sm p-2 bg-yellow-900/20 rounded border border-yellow-700">
+            ⚠️ Debug: No choices found for this node. Passage: {JSON.stringify({ id: passage?.id, hasChoices: !!passage?.choices, choicesLength: passage?.choices?.length || 0 })}
           </div>
         )}
       </div>

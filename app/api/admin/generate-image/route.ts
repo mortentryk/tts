@@ -2,30 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
+import { generateImageSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
+    
+    // Validate request body
+    const validation = safeValidateBody(generateImageSchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
+    }
+    
     const { 
       storySlug, 
       nodeId, 
       storyText, 
       storyTitle, 
-      model = 'nano-banana', // Default to nano-banana for Danish support
-      style, // No hard-coded default - use story's visual_style or let createStoryImagePrompt use its default
+      model = 'nano-banana',
+      style,
       size = '1024x1024',
       quality = 'standard',
       referenceImageNodeKey,
-      referenceImageUrl, // Direct URL to reference image
-      useCustomPrompt = false // If true, use storyText as custom prompt but still use story context
-    } = body;
-
-    if (!storySlug || !nodeId || !storyText) {
-      return NextResponse.json(
-        { error: 'Missing required fields: storySlug, nodeId, storyText' },
-        { status: 400 }
-      );
-    }
+      referenceImageUrl,
+      useCustomPrompt = false
+    } = validation.data;
 
     console.log(`🎨 Generating image for story: ${storySlug}, node: ${nodeId}`);
     console.log(`📋 DEBUG: Request parameters - storySlug: ${storySlug}, nodeId: ${nodeId}, model: ${model}, useCustomPrompt: ${useCustomPrompt}`);
@@ -719,11 +722,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-  } catch (error) {
-    console.error('❌ Image generation error:', error);
-    return NextResponse.json(
-      { error: `Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Image generation error:', error);
+      return NextResponse.json(
+        { error: `Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

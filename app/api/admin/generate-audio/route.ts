@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { uploadAudioToCloudinary } from '@/lib/cloudinary';
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/env';
+import { withAdminAuth } from '@/lib/middleware';
 import crypto from 'crypto';
 
 const ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
@@ -210,15 +211,18 @@ function concatenateAudioBuffers(buffers: ArrayBuffer[]): ArrayBuffer {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const { storySlug, nodeId } = await request.json();
-
-    if (!storySlug || !nodeId) {
-      return NextResponse.json(
-        { error: 'Missing storySlug or nodeId' },
-        { status: 400 }
-      );
+  return withAdminAuth(request, async () => {
+    try {
+    const body = await request.json();
+    
+    // Validate request body
+    const { generateAudioSchema, safeValidateBody, validationErrorResponse } = await import('@/lib/validation');
+    const validation = safeValidateBody(generateAudioSchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
     }
+    
+    const { storySlug, nodeId } = validation.data;
 
     // Get story ID from slug
     const { data: story, error: storyError } = await supabase
@@ -417,12 +421,13 @@ export async function POST(request: NextRequest) {
       } : null
     });
 
-  } catch (error) {
-    console.error('❌ Generate audio error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Generate audio error:', error);
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Internal server error' },
+        { status: 500 }
+      );
+    }
+  });
 }
 

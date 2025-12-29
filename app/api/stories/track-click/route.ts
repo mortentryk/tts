@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/env';
+import { withRateLimit } from '@/lib/rateLimit';
 
 // Initialize Supabase admin client using validated env config
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 export async function POST(request: NextRequest) {
-  try {
+  // Rate limit: 100 requests per minute (fire and forget endpoint)
+  return withRateLimit(request, 100, 60000, async () => {
+    try {
     const { storySlug } = await request.json();
 
     if (!storySlug) {
@@ -40,7 +43,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ Click tracking error:', error);
-    // Don't return error to user - this is fire and forget
-    return NextResponse.json({ success: true });
-  }
+      // Don't return error to user - this is fire and forget
+      return NextResponse.json({ success: true });
+    }
+  });
 }

@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateVideoWithReplicate } from '../../../../../lib/aiImageGenerator';
 import { uploadVideoToCloudinary } from '../../../../../lib/cloudinary';
 import { supabase } from '../../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
 
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
     const { journeyId } = body;
 
@@ -125,12 +127,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-  } catch (error) {
-    console.error('❌ Journey video generation error:', error);
-    return NextResponse.json(
-      { error: `Journey video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Journey video generation error:', error);
+      return NextResponse.json(
+        { error: `Journey video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }
 

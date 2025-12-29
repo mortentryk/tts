@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyWebhookSignature } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase';
+import * as Sentry from '@sentry/nextjs';
 
 export const config = {
   api: {
@@ -112,6 +113,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
+    // Capture exception in Sentry
+    Sentry.captureException(error, {
+      tags: {
+        route: '/api/webhooks/stripe',
+      },
+      level: 'error',
+    });
+
     console.error('Webhook error:', error);
 
     // Log error

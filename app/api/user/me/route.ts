@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerUser } from '@/lib/authServer';
 import { getUserPurchases } from '@/lib/purchaseVerification';
+import { withRateLimit } from '@/lib/rateLimit';
 
 /**
  * Get current authenticated user's information and purchases
  */
 export async function GET(request: NextRequest) {
-  try {
+  // Rate limit: 60 requests per minute
+  return withRateLimit(request, 60, 60000, async () => {
+    try {
     const authUser = await getServerUser();
 
     if (!authUser) {
@@ -28,9 +31,10 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching user info:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch user info' },
-      { status: 500 }
-    );
-  }
+        { error: error.message || 'Failed to fetch user info' },
+        { status: 500 }
+      );
+    }
+  });
 }
 

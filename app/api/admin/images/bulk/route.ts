@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
 
 // POST - Bulk operations on images
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
     const { 
       storySlug, 
@@ -168,11 +170,12 @@ export async function POST(request: NextRequest) {
       results,
     });
 
-  } catch (error) {
-    console.error('❌ Bulk operation error:', error);
-    return NextResponse.json(
-      { error: `Bulk operation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Bulk operation error:', error);
+      return NextResponse.json(
+        { error: `Bulk operation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }

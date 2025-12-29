@@ -295,13 +295,16 @@ export async function POST(request: NextRequest) {
         return setCors(errorResponse, request);
       }
 
-      const { text, nodeKey, storyId } = body;
-      const clean = (text || "").toString().trim();
-      
-      if (!clean) {
-        const errorResponse = NextResponse.json({ error: "Missing text" }, { status: 400 });
+      // Validate request body
+      const { safeValidateBody, ttsSchema, validationErrorResponse } = await import('@/lib/validation');
+      const validation = safeValidateBody(ttsSchema, body);
+      if (!validation.success) {
+        const errorResponse = validationErrorResponse(validation.error);
         return setCors(errorResponse, request);
       }
+      
+      const { text, nodeKey, storyId } = validation.data;
+      const clean = text.trim();
 
       // Calculate hash for caching
       const textHash = generateTextHash(clean);
@@ -372,44 +375,63 @@ export async function POST(request: NextRequest) {
         const chunks = chunkText(clean, ELEVENLABS_MAX_CHARS);
         console.log(`📦 Split into ${chunks.length} chunks`);
         
-        const audioBuffers: ArrayBuffer[] = [];
+        // Process chunks in parallel with controlled concurrency
+        // Limit to 3 concurrent requests to avoid overwhelming ElevenLabs API
+        const MAX_CONCURRENT = 3;
+        const audioBuffers: ArrayBuffer[] = new Array(chunks.length);
         
-        // Generate audio for each chunk
-        for (let i = 0; i < chunks.length; i++) {
-          const chunk = chunks[i];
-          console.log(`🎙️ Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)...`);
-          
-          const chunkRequestBody = {
-            text: chunk,
-            model_id: "eleven_multilingual_v2",
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.75,
-              style: 0.0,
-              use_speaker_boost: true
-            }
-          };
+        // Process chunks in batches
+        for (let i = 0; i < chunks.length; i += MAX_CONCURRENT) {
+          const batch = chunks.slice(i, i + MAX_CONCURRENT);
+          const batchPromises = batch.map(async (chunk, batchIndex) => {
+            const chunkIndex = i + batchIndex;
+            console.log(`🎙️ Processing chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} chars)...`);
+            
+            const chunkRequestBody = {
+              text: chunk,
+              model_id: "eleven_multilingual_v2",
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.75,
+                style: 0.0,
+                use_speaker_boost: true
+              }
+            };
 
-          const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "xi-api-key": apiKey
-            },
-            body: JSON.stringify(chunkRequestBody)
+            const audioResponse = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "xi-api-key": apiKey
+              },
+              body: JSON.stringify(chunkRequestBody)
+            });
+
+            if (!audioResponse.ok) {
+              const txt = await audioResponse.text().catch(() => "");
+              throw new Error(`ElevenLabs TTS error (chunk ${chunkIndex + 1}/${chunks.length}): ${txt}`);
+            }
+
+            const chunkBuffer = await audioResponse.arrayBuffer();
+            return { index: chunkIndex, buffer: chunkBuffer };
           });
 
-          if (!audioResponse.ok) {
-            const txt = await audioResponse.text().catch(() => "");
-            console.error(`ElevenLabs TTS error for chunk ${i + 1}:`, audioResponse.status, txt);
+          // Wait for batch to complete
+          try {
+            const batchResults = await Promise.all(batchPromises);
+            
+            // Store results in correct order
+            for (const result of batchResults) {
+              audioBuffers[result.index] = result.buffer;
+            }
+          } catch (batchError: any) {
+            // If any chunk in the batch fails, return error
+            console.error('❌ Batch processing error:', batchError);
             const errorResponse = NextResponse.json({ 
-              error: `ElevenLabs TTS error (chunk ${i + 1}/${chunks.length}): ${txt}` 
-            }, { status: audioResponse.status });
+              error: batchError?.message || 'Failed to generate audio chunks'
+            }, { status: 500 });
             return setCors(errorResponse, request);
           }
-
-          const chunkBuffer = await audioResponse.arrayBuffer();
-          audioBuffers.push(chunkBuffer);
         }
         
         // Concatenate all audio chunks
@@ -475,6 +497,27 @@ export async function POST(request: NextRequest) {
       
       return setCors(response, request);
     } catch (e: any) {
+      // Capture exception in Sentry
+      const { captureException } = await import('@sentry/nextjs');
+      // Get body from outer scope if available
+      let bodyData: any = null;
+      try {
+        bodyData = await request.clone().json().catch(() => null);
+      } catch {
+        // Ignore if body already consumed
+      }
+      
+      captureException(e, {
+        tags: {
+          route: '/api/tts',
+        },
+        extra: {
+          textLength: bodyData?.text?.length,
+          nodeKey: bodyData?.nodeKey,
+          storyId: bodyData?.storyId,
+        },
+      });
+
       console.error("TTS handler error:", e);
       console.error("Error stack:", e?.stack);
       const errorMessage = e?.message || "TTS failed in handler";

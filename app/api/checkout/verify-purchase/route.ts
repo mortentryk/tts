@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCheckoutSession, stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabase';
+import { verifyPurchaseSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
+import { withRateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
-  try {
-    const { sessionId, paymentIntentId } = await request.json();
+  // Rate limit: 10 requests per minute (strict for payment routes)
+  return withRateLimit(request, 10, 60000, async () => {
+    try {
+    const body = await request.json();
+    
+    // Validate request body
+    const validation = safeValidateBody(verifyPurchaseSchema, body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error);
+    }
+    
+    const { sessionId, paymentIntentId } = validation.data as { sessionId?: string; paymentIntentId?: string };
 
     // Handle payment_intent (from one-click purchases)
     if (paymentIntentId) {
@@ -166,10 +178,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Error verifying purchase:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to verify purchase' },
-      { status: 500 }
-    );
-  }
+      return NextResponse.json(
+        { error: error.message || 'Failed to verify purchase' },
+        { status: 500 }
+      );
+    }
+  });
 }
 

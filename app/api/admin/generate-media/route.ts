@@ -3,9 +3,11 @@ import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../
 import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
+import { withAdminAuth } from '@/lib/middleware';
 
 export async function POST(request: NextRequest) {
-  try {
+  return withAdminAuth(request, async () => {
+    try {
     const body = await request.json();
     const { 
       storySlug, 
@@ -386,11 +388,12 @@ export async function POST(request: NextRequest) {
       ...results,
     });
 
-  } catch (error) {
-    console.error('❌ Media generation error:', error);
-    return NextResponse.json(
-      { error: `Media generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('❌ Media generation error:', error);
+      return NextResponse.json(
+        { error: `Media generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
+  });
 }
