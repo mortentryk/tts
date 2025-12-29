@@ -114,71 +114,72 @@ export async function POST(request: NextRequest) {
 
 // DELETE - Remove image assignment
 export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const storySlug = searchParams.get('storySlug');
-    const nodeKey = searchParams.get('nodeKey');
-    const imageId = searchParams.get('imageId');
+  return withAdminAuth(request, async () => {
+    try {
+      const { searchParams } = new URL(request.url);
+      const storySlug = searchParams.get('storySlug');
+      const nodeKey = searchParams.get('nodeKey');
+      const imageId = searchParams.get('imageId');
 
-    if (!storySlug || !nodeKey || !imageId) {
-      return NextResponse.json(
-        { error: 'Missing required parameters: storySlug, nodeKey, imageId' },
-        { status: 400 }
-      );
-    }
+      if (!storySlug || !nodeKey || !imageId) {
+        return NextResponse.json(
+          { error: 'Missing required parameters: storySlug, nodeKey, imageId' },
+          { status: 400 }
+        );
+      }
 
-    // Get story ID
-    const { data: story, error: storyError } = await supabase
-      .from('stories')
-      .select('id')
-      .eq('slug', storySlug)
-      .single();
+      // Get story ID
+      const { data: story, error: storyError } = await supabase
+        .from('stories')
+        .select('id')
+        .eq('slug', storySlug)
+        .single();
 
-    if (storyError || !story) {
-      return NextResponse.json(
-        { error: 'Story not found' },
-        { status: 404 }
-      );
-    }
+      if (storyError || !story) {
+        return NextResponse.json(
+          { error: 'Story not found' },
+          { status: 404 }
+        );
+      }
 
-    // Remove assignment
-    const { error: assignmentError } = await supabase
-      .from('image_assignments')
-      .delete()
-      .eq('story_id', story.id)
-      .eq('node_key', nodeKey)
-      .eq('image_id', imageId);
+      // Remove assignment
+      const { error: assignmentError } = await supabase
+        .from('image_assignments')
+        .delete()
+        .eq('story_id', story.id)
+        .eq('node_key', nodeKey)
+        .eq('image_id', imageId);
 
-    if (assignmentError) {
-      return NextResponse.json(
-        { error: `Failed to remove assignment: ${assignmentError.message}` },
-        { status: 500 }
-      );
-    }
+      if (assignmentError) {
+        return NextResponse.json(
+          { error: `Failed to remove assignment: ${assignmentError.message}` },
+          { status: 500 }
+        );
+      }
 
-    // Update image status to unused
-    await supabase
-      .from('story_images')
-      .update({ 
-        status: 'unused',
-        node_key: null,
-      })
-      .eq('id', imageId);
+      // Update image status to unused
+      await supabase
+        .from('story_images')
+        .update({ 
+          status: 'unused',
+          node_key: null,
+        })
+        .eq('id', imageId);
 
-    // Remove image from story node
-    await supabase
-      .from('story_nodes')
-      .update({ 
-        image_url: null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('story_id', story.id)
-      .eq('node_key', nodeKey);
+      // Remove image from story node
+      await supabase
+        .from('story_nodes')
+        .update({ 
+          image_url: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('story_id', story.id)
+        .eq('node_key', nodeKey);
 
-    return NextResponse.json({
-      success: true,
-      message: 'Image assignment removed',
-    });
+      return NextResponse.json({
+        success: true,
+        message: 'Image assignment removed',
+      });
 
     } catch (error) {
       console.error('❌ Image assignment removal error:', error);
