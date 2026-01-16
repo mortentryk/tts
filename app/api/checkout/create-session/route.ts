@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
         validation = safeValidateBody(createCheckoutSessionSchema, body);
         if (!validation.success) {
           const errorMessage = validation.error.errors
-            .map((e) => `${e.path.join('.')}: ${e.message}`)
+            .map((e: { path: (string | number)[]; message: string }) => `${e.path.join('.')}: ${e.message}`)
             .join(', ');
           return NextResponse.json(
             { error: `Validation failed: ${errorMessage}` },
