@@ -34,7 +34,5 @@ Sentry.init({
   // Set sample rate for profiling
   profilesSampleRate: 1.0,
 
-  // Capture unhandled promise rejections
-  captureUnhandledRejections: true,
 });
 
