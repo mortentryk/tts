@@ -91,7 +91,7 @@ export async function deleteCachePattern(pattern: string): Promise<number> {
       return deleted;
     }
 
-    const keys = await redis.smembers<string>(CACHE_KEY_SET);
+    const keys = await redis.smembers(CACHE_KEY_SET);
     const matcher = new RegExp(
       `^${pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`
     );
