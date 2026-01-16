@@ -275,6 +275,12 @@ export default function AdminDashboard() {
                 🗺️ Journey Map
               </button>
               <button
+                onClick={() => router.push('/admin/seo')}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+              >
+                🔍 SEO
+              </button>
+              <button
                 onClick={() => setShowPricing(!showPricing)}
                 className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700"
               >

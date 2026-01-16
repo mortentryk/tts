@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { supabaseAdmin } from '@/lib/supabase';
-import { SITE_URL } from '@/lib/env';
+import { generateStoryMetadata, type StorySEOData } from '@/lib/seoMetadata';
 
 export async function generateMetadata(
   { params }: { params: Promise<{ storyId: string }> }
@@ -16,10 +16,10 @@ export async function generateMetadata(
       decodedStoryId = storyId;
     }
 
-    // Try to get story by slug first
+    // Try to get story by slug first (with SEO fields)
     let { data: storyBySlug, error: slugError } = await supabaseAdmin
       .from('stories')
-      .select('title, description, cover_image_url, slug')
+      .select('id, title, description, cover_image_url, slug, meta_title, meta_description, meta_keywords, og_image_url, seo_category, age_rating, duration_minutes, language, price, is_free')
       .eq('slug', decodedStoryId)
       .eq('is_published', true)
       .single();
@@ -30,7 +30,7 @@ export async function generateMetadata(
       if (normalizedSlug !== decodedStoryId.toLowerCase()) {
         const { data: normalizedStory } = await supabaseAdmin
           .from('stories')
-          .select('title, description, cover_image_url, slug')
+          .select('id, title, description, cover_image_url, slug, meta_title, meta_description, meta_keywords, og_image_url, seo_category, age_rating, duration_minutes, language, price, is_free')
           .eq('slug', normalizedSlug)
           .eq('is_published', true)
           .single();
@@ -45,7 +45,7 @@ export async function generateMetadata(
     if (!storyBySlug) {
       const { data: storyById } = await supabaseAdmin
         .from('stories')
-        .select('title, description, cover_image_url, slug')
+        .select('id, title, description, cover_image_url, slug, meta_title, meta_description, meta_keywords, og_image_url, seo_category, age_rating, duration_minutes, language, price, is_free')
         .eq('id', decodedStoryId)
         .eq('is_published', true)
         .single();
@@ -56,40 +56,27 @@ export async function generateMetadata(
     }
 
     if (storyBySlug) {
-      const title = storyBySlug.title || 'Interactive Story';
-      const description = storyBySlug.description || 'An interactive story adventure';
-      const siteUrl = SITE_URL || 'https://storific.app';
-      
-      // Build image URL
-      const imageUrl = storyBySlug.cover_image_url 
-        ? (storyBySlug.cover_image_url.startsWith('http') 
-            ? storyBySlug.cover_image_url 
-            : `${siteUrl}${storyBySlug.cover_image_url}`)
-        : undefined;
-
-      const canonicalUrl = `${siteUrl}/story/${storyBySlug.slug || storyId}`;
-
-      return {
-        title,
-        description,
-        openGraph: {
-          title,
-          description,
-          images: imageUrl ? [{ url: imageUrl }] : [],
-          type: 'website',
-          url: canonicalUrl,
-          siteName: 'Storific Stories',
-        },
-        twitter: {
-          card: 'summary_large_image',
-          title,
-          description,
-          images: imageUrl ? [imageUrl] : [],
-        },
-        alternates: {
-          canonical: canonicalUrl,
-        },
+      // Build StorySEOData object
+      const storySEOData: StorySEOData = {
+        id: storyBySlug.id,
+        slug: storyBySlug.slug || storyId,
+        title: storyBySlug.title,
+        description: storyBySlug.description || undefined,
+        cover_image_url: storyBySlug.cover_image_url || undefined,
+        meta_title: storyBySlug.meta_title || undefined,
+        meta_description: storyBySlug.meta_description || undefined,
+        meta_keywords: storyBySlug.meta_keywords || undefined,
+        og_image_url: storyBySlug.og_image_url || undefined,
+        seo_category: storyBySlug.seo_category || undefined,
+        age_rating: storyBySlug.age_rating || undefined,
+        duration_minutes: storyBySlug.duration_minutes || undefined,
+        language: storyBySlug.language || undefined,
+        price: storyBySlug.price ?? undefined,
+        is_free: storyBySlug.is_free !== false,
       };
+
+      // Use SEO utility to generate metadata
+      return generateStoryMetadata(storySEOData);
     }
   } catch (error) {
     console.error('Error generating metadata:', error);

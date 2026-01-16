@@ -23,6 +23,12 @@ const STATIC_ROUTES: Array<{
   { path: '/refund', changeFrequency: 'yearly', priority: 0.2 },
 ];
 
+/**
+ * Get story entries for sitemap
+ * Uses slugs for SEO-friendly URLs, falls back to ID if slug not available
+ * Priority 0.8 indicates stories are important content
+ * Weekly changeFrequency reflects that stories are updated periodically
+ */
 async function getStoryEntries(): Promise<MetadataRoute.Sitemap> {
   try {
     const { data, error } = await supabase
@@ -38,10 +44,11 @@ async function getStoryEntries(): Promise<MetadataRoute.Sitemap> {
     return data
       .filter((story) => story.slug || story.id)
       .map((story) => ({
+        // Prefer slug for SEO-friendly URLs, fallback to ID
         url: `${BASE_URL}/story/${story.slug || story.id}`,
         lastModified: story.updated_at ? new Date(story.updated_at) : undefined,
         changeFrequency: 'weekly' as ChangeFrequency,
-        priority: 0.8,
+        priority: 0.8, // Stories are important content, but less than homepage
       }));
   } catch (error) {
     console.error('[sitemap] Unexpected error loading stories', error);
