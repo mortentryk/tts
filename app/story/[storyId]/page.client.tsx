@@ -431,17 +431,50 @@ async function speakViaCloud(
   });
 }
 
-export default function Game({ params }: { params: Promise<{ storyId: string }> }) {
+interface StoryPageClientProps {
+  params: Promise<{ storyId: string }>;
+  initialStoryMetadata?: {
+    title?: string;
+    description?: string;
+    cover_image_url?: string;
+  };
+  initialNode?: {
+    id: string;
+    text: string;
+    choices?: StoryNode['choices'];
+    image?: string;
+    video?: string;
+  };
+}
+
+export default function Game({
+  params,
+  initialStoryMetadata,
+  initialNode,
+}: StoryPageClientProps) {
   const [storyId, setStoryId] = useState<string>('');
-  const [currentId, setCurrentId] = useState(START_ID);
+  const [currentId, setCurrentId] = useState(() => initialNode?.id || START_ID);
   const [stats, setStats] = useState<GameStats>({ Evner: 10, Udholdenhed: 18, Held: 10 });
   const [speaking, setSpeaking] = useState(false);
   const [autoRead, setAutoRead] = useState<boolean>(false);
   const [autoPlay, setAutoPlay] = useState<boolean>(false);
-  const [story, setStory] = useState<Record<string, StoryNode>>({});
-  const [loading, setLoading] = useState(true);
+  const [story, setStory] = useState<Record<string, StoryNode>>(() => {
+    if (!initialNode) return {};
+    return {
+      [initialNode.id]: {
+        id: initialNode.id,
+        text: initialNode.text,
+        ...(initialNode.choices && { choices: initialNode.choices }),
+        ...(initialNode.image && { image: initialNode.image }),
+        ...(initialNode.video && { video: initialNode.video }),
+      },
+    };
+  });
+  const [loading, setLoading] = useState(() => !initialNode);
   const [storyError, setStoryError] = useState<string | null>(null);
-  const [storyMetadata, setStoryMetadata] = useState<{ title?: string; description?: string; cover_image_url?: string } | null>(null);
+  const [storyMetadata, setStoryMetadata] = useState<{ title?: string; description?: string; cover_image_url?: string } | null>(
+    () => initialStoryMetadata ?? null
+  );
   
   // Audio management
   const audioRef = useRef<HTMLAudioElement | null>(null);
