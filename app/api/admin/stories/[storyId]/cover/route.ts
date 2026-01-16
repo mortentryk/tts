@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 async function findStoryBySlugOrId(identifier: string) {
   // First try slug (string identifiers like "fyrtojet")
@@ -90,6 +91,7 @@ export async function PATCH(
         );
       }
 
+      await invalidateStoryCache(story.id);
       return NextResponse.json(updatedStory);
     } catch (error) {
       console.error('❌ Cover image update error:', error);

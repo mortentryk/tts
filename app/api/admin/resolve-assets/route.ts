@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../lib/supabase';
 import { getCloudinaryUrl, parseAssetReference } from '../../../../lib/cloudinary';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function POST(request: NextRequest) {
   return withAdminAuth(request, async () => {
@@ -101,6 +102,7 @@ export async function POST(request: NextRequest) {
     const successful = results.filter(r => r.status === 'success').length;
     const errors = results.filter(r => r.status === 'error').length;
 
+    await invalidateStoryCache(story.id);
     return NextResponse.json({
       success: true,
       summary: {

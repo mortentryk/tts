@@ -3,6 +3,7 @@ import { generateImage, createStoryImagePrompt, generateVideoWithReplicate } fro
 import { uploadImageToCloudinary, uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function POST(request: NextRequest) {
   return withAdminAuth(request, async () => {
@@ -276,6 +277,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (results.length > 0) {
+      await invalidateStoryCache(story.id);
+    }
     console.log(`🎉 Bulk generation completed: ${results.length} successful, ${errors.length} errors`);
 
     return NextResponse.json({

@@ -3,6 +3,7 @@ import { generateVideoWithReplicate, createStoryVideoPrompt } from '../../../../
 import { uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function POST(request: NextRequest) {
   return withAdminAuth(request, async () => {
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await invalidateStoryCache(story.id);
     console.log('✅ Node updated successfully:', updateData);
 
     return NextResponse.json({

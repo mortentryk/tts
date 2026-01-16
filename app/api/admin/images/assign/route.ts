@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../../lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 import { imageAssignSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 // POST - Assign image to story node
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
         .eq('node_key', nodeKey);
     }
 
+    await invalidateStoryCache(story.id);
     return NextResponse.json({
       success: true,
       assignment,
@@ -177,6 +179,7 @@ export async function DELETE(request: NextRequest) {
         .eq('story_id', story.id)
         .eq('node_key', nodeKey);
 
+      await invalidateStoryCache(story.id);
       return NextResponse.json({
         success: true,
         message: 'Image assignment removed',

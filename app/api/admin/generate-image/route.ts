@@ -3,6 +3,7 @@ import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../
 import { uploadImageToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 import { generateImageSchema, safeValidateBody, validationErrorResponse } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
@@ -709,6 +710,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await invalidateStoryCache(story.id);
     return NextResponse.json({
       success: true,
       image: {

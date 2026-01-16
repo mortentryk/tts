@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function POST(request: NextRequest) {
   return withAdminAuth(request, async () => {
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     // Get current story status
     const { data: story, error: fetchError } = await supabaseAdmin
       .from('stories')
-      .select('is_published')
+      .select('id, is_published')
       .eq('slug', storySlug)
       .single();
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
       .from('stories')
       .update({ is_published: !story.is_published })
       .eq('slug', storySlug)
-      .select('is_published')
+      .select('id, is_published')
       .single();
 
     if (updateError) {
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update story' }, { status: 500 });
     }
 
+    await invalidateStoryCache(story.id);
     console.log(`✅ Story ${storySlug} ${updatedStory.is_published ? 'published' : 'unpublished'}`);
 
       return NextResponse.json({

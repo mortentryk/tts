@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { uploadAudioToCloudinary } from '@/lib/cloudinary';
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/env';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 import crypto from 'crypto';
 
 const ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
@@ -404,6 +405,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Database updated for node ${nodeId}`);
 
+    await invalidateStoryCache(story.id);
     return NextResponse.json({
       audio: {
         url: mainAudioResult?.url,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function PATCH(
   request: NextRequest,
@@ -25,6 +26,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'Failed to update story' }, { status: 500 });
       }
 
+      await invalidateStoryCache(storyId);
       console.log('✅ Story updated:', data);
       return NextResponse.json(data[0]);
     } catch (error) {

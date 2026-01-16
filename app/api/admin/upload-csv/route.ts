@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { isAssetReference } from '../../../../lib/cloudinary';
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '@/lib/env';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 // Initialize Supabase admin client using validated env config
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -652,6 +653,7 @@ export async function POST(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('story_id', storyId);
 
+    await invalidateStoryCache(storyId);
     console.log('✅ CSV upload successful!');
     console.log(`📊 Final verified node count: ${verifiedFinalCount || 0}`);
 

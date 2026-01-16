@@ -4,6 +4,7 @@ import { generateVideoWithReplicate } from '../../../../lib/aiImageGenerator';
 import { uploadImageToCloudinary, uploadVideoToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function POST(request: NextRequest) {
   return withAdminAuth(request, async () => {
@@ -380,6 +381,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await invalidateStoryCache(story.id);
     console.log('✅ Media generation completed successfully');
 
     return NextResponse.json({

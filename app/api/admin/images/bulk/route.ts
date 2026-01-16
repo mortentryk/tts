@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '../../../../../lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 // POST - Bulk operations on images
 export async function POST(request: NextRequest) {
@@ -164,6 +165,7 @@ export async function POST(request: NextRequest) {
         );
     }
 
+    await invalidateStoryCache(story.id);
     return NextResponse.json({
       success: true,
       operation,

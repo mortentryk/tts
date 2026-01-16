@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function DELETE(request: NextRequest) {
   return withAdminAuth(request, async () => {
@@ -9,6 +10,17 @@ export async function DELETE(request: NextRequest) {
 
     if (!storySlug) {
       return NextResponse.json({ error: 'Story slug required' }, { status: 400 });
+    }
+
+    const { data: story, error: fetchError } = await supabaseAdmin
+      .from('stories')
+      .select('id')
+      .eq('slug', storySlug)
+      .single();
+
+    if (fetchError || !story) {
+      console.error('❌ Story fetch error:', fetchError);
+      return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
     // Delete story (cascades to nodes and choices automatically)
@@ -22,6 +34,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to delete story' }, { status: 500 });
     }
 
+    await invalidateStoryCache(story.id);
     console.log(`✅ Story ${storySlug} deleted successfully`);
 
       return NextResponse.json({

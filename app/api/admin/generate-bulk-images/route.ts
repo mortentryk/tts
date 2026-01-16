@@ -3,6 +3,7 @@ import { generateImage, createStoryImagePrompt, analyzeImageStyle } from '../../
 import { uploadImageToCloudinary, generateStoryAssetId } from '../../../../lib/cloudinary';
 import { supabase } from '../../../../lib/supabase';
 import { withAdminAuth } from '@/lib/middleware';
+import { invalidateStoryCache } from '@/lib/cache';
 
 export async function POST(request: NextRequest) {
   return withAdminAuth(request, async () => {
@@ -278,6 +279,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (results.length > 0) {
+      await invalidateStoryCache(story.id);
+    }
     const totalCost = results
       .filter(r => r.status === 'success' && r.cost)
       .reduce((sum, r) => sum + (r.cost || 0), 0);
