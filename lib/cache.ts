@@ -12,6 +12,8 @@ interface CacheOptions {
   prefix?: string; // Key prefix
 }
 
+const CACHE_KEY_SET = 'cache:keys';
+
 /**
  * Generate cache key with optional prefix
  */
@@ -51,6 +53,7 @@ export async function setCache<T>(
     } else {
       await redis.set(cacheKey, value);
     }
+    await redis.sadd(CACHE_KEY_SET, cacheKey);
     return true;
   } catch (error) {
     console.error('Cache set error:', error);
@@ -66,6 +69,7 @@ export async function deleteCache(key: string, prefix?: string): Promise<boolean
     const redis = getRedisClient();
     const cacheKey = getCacheKey(key, prefix);
     await redis.del(cacheKey);
+    await redis.srem(CACHE_KEY_SET, cacheKey);
     return true;
   } catch (error) {
     console.error('Cache delete error:', error);
@@ -79,11 +83,29 @@ export async function deleteCache(key: string, prefix?: string): Promise<boolean
 export async function deleteCachePattern(pattern: string): Promise<number> {
   try {
     const redis = getRedisClient();
-    // Note: Upstash Redis REST API doesn't support KEYS command
-    // We'll need to track keys manually or use a different approach
-    // For now, return 0 and log a warning
-    console.warn('Pattern-based cache deletion not supported with Upstash REST API');
-    return 0;
+    if (!pattern.includes('*')) {
+      const deleted = await redis.del(pattern);
+      if (deleted) {
+        await redis.srem(CACHE_KEY_SET, pattern);
+      }
+      return deleted;
+    }
+
+    const keys = await redis.smembers<string>(CACHE_KEY_SET);
+    const matcher = new RegExp(
+      `^${pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`
+    );
+    const matched = keys.filter((key) => matcher.test(key));
+
+    if (matched.length === 0) {
+      return 0;
+    }
+
+    const deleted = await redis.del(...matched);
+    if (deleted) {
+      await redis.srem(CACHE_KEY_SET, ...matched);
+    }
+    return deleted;
   } catch (error) {
     console.error('Cache pattern delete error:', error);
     return 0;
