@@ -1,7 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import StoryPageClient from './page.client';
 import { notFound } from 'next/navigation';
-import { generateStructuredData, type StorySEOData } from '@/lib/seoMetadata';
 
 interface StoryPageProps {
   params: Promise<{ storyId: string; nodeKey?: string }>;
@@ -17,10 +16,10 @@ async function getStoryData(storyId: string) {
       decodedStoryId = storyId;
     }
 
-    // Try to get story by slug first (with SEO fields)
+    // Try to get story by slug first
     let { data: storyBySlug, error: slugError } = await supabaseAdmin
       .from('stories')
-      .select('id, title, description, cover_image_url, slug, is_published, meta_title, meta_description, meta_keywords, og_image_url, seo_category, age_rating, duration_minutes, language, price, is_free')
+      .select('id, title, description, cover_image_url, slug, is_published')
       .eq('slug', decodedStoryId)
       .eq('is_published', true)
       .single();
@@ -31,7 +30,7 @@ async function getStoryData(storyId: string) {
       if (normalizedSlug !== decodedStoryId.toLowerCase()) {
         const { data: normalizedStory } = await supabaseAdmin
           .from('stories')
-          .select('id, title, description, cover_image_url, slug, is_published, meta_title, meta_description, meta_keywords, og_image_url, seo_category, age_rating, duration_minutes, language, price, is_free')
+          .select('id, title, description, cover_image_url, slug, is_published')
           .eq('slug', normalizedSlug)
           .eq('is_published', true)
           .single();
@@ -46,7 +45,7 @@ async function getStoryData(storyId: string) {
     if (!storyBySlug) {
       const { data: storyById } = await supabaseAdmin
         .from('stories')
-        .select('id, title, description, cover_image_url, slug, is_published, meta_title, meta_description, meta_keywords, og_image_url, seo_category, age_rating, duration_minutes, language, price, is_free')
+        .select('id, title, description, cover_image_url, slug, is_published')
         .eq('id', decodedStoryId)
         .eq('is_published', true)
         .single();
@@ -160,36 +159,8 @@ export default async function StoryPage({ params }: StoryPageProps) {
 
   const { story, firstNode } = storyData;
 
-  // Build StorySEOData for structured data
-  const storySEOData: StorySEOData = {
-    id: story.id,
-    slug: story.slug || storyId,
-    title: story.title,
-    description: story.description || undefined,
-    cover_image_url: story.cover_image_url || undefined,
-    meta_title: story.meta_title || undefined,
-    meta_description: story.meta_description || undefined,
-    meta_keywords: story.meta_keywords || undefined,
-    og_image_url: story.og_image_url || undefined,
-    seo_category: story.seo_category || undefined,
-    age_rating: story.age_rating || undefined,
-    duration_minutes: story.duration_minutes || undefined,
-    language: story.language || undefined,
-    price: story.price ?? undefined,
-    is_free: story.is_free !== false,
-  };
-
-  // Generate structured data
-  const structuredData = generateStructuredData(storySEOData);
-
   return (
     <>
-      {/* JSON-LD Structured Data for SEO */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-      />
-
       {/* Server-rendered content for SEO */}
       <div className="sr-only" aria-hidden="true">
         <h1>{story.title}</h1>
